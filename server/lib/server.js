@@ -11,8 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { CFG } from './config.js';
 import { ensureDir, flushAll } from './store.js';
 import * as A from './auth.js';
-import { getChat, resumeAll, DEF_SETTINGS, toolCatalog, setTools, CF_BLOCK } from './agent.js';
-import { apiFetch, isCfBlock } from './net.js';
+import { getChat, resumeAll, DEF_SETTINGS, toolCatalog, setTools } from './agent.js';
+import { apiFetch, cfBlock, cfMessage } from './net.js';
 import * as X from './ext.js';
 import { putInbox, storeCopy, getFile, dropFiles, userDir, safeName } from './files.js';
 import * as TG from './telegram.js';
@@ -142,15 +142,23 @@ function putSettings(c, b) {
   if (b.vis !== undefined) { s.vis = !!b.vis; c.noVis = 0; }
   c.set.save();
 }
+/* провайдеры, у которых /models открыт всем: по нему не понять, подходит ли ключ */
+const hostIs = (base, re) => { try { return re.test(new URL(base).hostname); } catch { return false; } };
+const isOpenRouter = base => hostIs(base, /(^|\.)openrouter\.ai$/i);
+const isOllamaCloud = base => hostIs(base, /(^|\.)ollama\.com$/i);
 async function models(c, b) {
   const S = c.settings();
   const base = String(b.base || S.base).trim().replace(/\/+$/, '');
   if (!/^https?:\/\//i.test(base)) throw new HttpErr(400, 'неверный адрес API');
   const key = String(b.key || '').trim() || (base === S.base ? S.key : '');
-  const r = await apiFetch(base + '/models', { headers: key ? { Authorization: 'Bearer ' + key } : {}, signal: AbortSignal.timeout(15000) })
+  const auth = key ? { Authorization: 'Bearer ' + key } : {};
+  const r = await apiFetch(base + '/models', { headers: auth, signal: AbortSignal.timeout(15000) })
     .catch(e => { throw new HttpErr(502, 'сервер модели не отвечает: ' + (e.cause?.code || e.message)); });
-  if (r.status === 403 && isCfBlock(403, await r.clone().text().catch(() => ''))) throw new HttpErr(502, CF_BLOCK);
-  if (!r.ok) throw new HttpErr(r.status === 401 || r.status === 403 ? r.status : 502, 'HTTP ' + r.status, { upstream: r.status });
+  if (!r.ok) {
+    const cf = cfBlock(r.status, await r.clone().text().catch(() => ''), r.headers);
+    if (cf) throw new HttpErr(502, cfMessage(cf, base + '/models', r.headers));
+    throw new HttpErr(r.status === 401 || r.status === 403 ? r.status : 502, 'HTTP ' + r.status, { upstream: r.status });
+  }
   const j = await r.json().catch(() => null);
   const arr = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : Array.isArray(j?.models) ? j.models : null;
   if (!arr) throw new HttpErr(502, 'format');
@@ -158,9 +166,17 @@ async function models(c, b) {
   /* агент всегда шлёт инструменты: модели, которые про них не знают (OpenRouter это сообщает), отвечают 404 */
   const tl = arr.filter(m => Array.isArray(m?.supported_parameters) && m.supported_parameters.includes('tools')).map(m => m.id);
   if (tl.length) ids = tl;
+  /* /models отвечает не всё. Пустой запрос к модели (модель не запускается, токены не тратятся): сервер сначала проверяет ключ (401),
+     потом тело (400). Так видно, подходит ли ключ к Ollama Cloud, и не закрыл ли Cloudflare только запросы к модели (так у JustWoker) */
+  const p = await apiFetch(base + '/chat/completions', { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(15000) }).catch(() => null);
+  if (p) {
+    const cf = cfBlock(p.status, await p.text().catch(() => ''), p.headers);
+    if (cf) throw new HttpErr(502, cfMessage(cf, base + '/chat/completions', p.headers));
+    if (key && isOllamaCloud(base) && (p.status === 401 || p.status === 403)) throw new HttpErr(p.status, 'HTTP ' + p.status, { upstream: p.status });
+  }
   /* /models у OpenRouter открыт всем — ключ проверяем отдельно; без купленных кредитов работают только модели «:free» (иначе 402) */
   let free = null;
-  if (key && /(^|\.)openrouter\.ai$/i.test(new URL(base).hostname)) {
+  if (key && isOpenRouter(base)) {
     const k = await apiFetch(base + '/key', { headers: { Authorization: 'Bearer ' + key }, signal: AbortSignal.timeout(15000) }).catch(() => null);
     if (k && (k.status === 401 || k.status === 403)) throw new HttpErr(k.status, 'HTTP ' + k.status, { upstream: k.status });
     const d = k && k.ok ? (await k.json().catch(() => null))?.data : null;
@@ -170,7 +186,7 @@ async function models(c, b) {
       if (fr.length) ids = fr;
     }
   }
-  return { models: ids.slice(0, 2000), free };
+  return { models: ids.slice(0, 2000), free, needKey: !key && (isOpenRouter(base) || isOllamaCloud(base)) };
 }
 
 /* ---------- маршруты ---------- */
