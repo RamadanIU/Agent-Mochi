@@ -769,6 +769,14 @@ function showModels(){const q=mi().value.trim().toLowerCase(),box=$('#ml');
   const l=mdl.filter(x=>x.toLowerCase().includes(q)).slice(0,60);box.innerHTML='';
   for(const x of l){const d=document.createElement('div');d.textContent=x;d.onclick=()=>{mi().value=x;box.hidden=true};box.append(d)}
   box.hidden=!l.length}
+/* OpenRouter: ключ без купленных кредитов (is_free_tier) пускает только к моделям «…:free», остальные отвечают 402 */
+const isOR=b=>{const u=apiUrl(b);return!!u&&/(^|\.)openrouter\.ai$/i.test(u.hostname)};
+const isFree=x=>/:free$/i.test(x);
+const pickModel=l=>l.find(x=>/gemma|deepseek|qwen|llama|gpt-oss/i.test(x))||l[0];
+const freeNote=k=>'Ключ бесплатный: доступны только модели «:free»'+(k.limit?' (до '+k.limit+' запросов в день)':'');
+async function orKey(base,key){if(!isOR(base)||!key)return null;
+  const r=await fetch(base+'/key',apiInit(base,key));if(r.status===401||r.status===403)throw new Error(r.status);if(!r.ok)return null;
+  const d=((await r.json().catch(()=>null))||{}).data||{};return{free:!!d.is_free_tier,limit:d.free_model_daily_requests&&d.free_model_daily_requests.limit}}
 async function loadModels(){
   const base=$('#c-base').value.trim().replace(/\/+$/,''),key=$('#c-key').value.trim(),h=$('#mh'),t=++mt;
   if(!base){h.textContent='';delete h.dataset.s;return}h.textContent='Проверяю связь с моделью…';h.dataset.s='wait';
@@ -777,17 +785,24 @@ async function loadModels(){
     if(!r.ok)throw new Error(r.status);
     const j=await r.json();if(t!==mt)return;
     const arr=Array.isArray(j)?j:Array.isArray(j&&j.data)?j.data:Array.isArray(j&&j.models)?j.models:null;if(!arr)throw new Error('format');
-    const ids=arr.map(m=>typeof m==='string'?m:m&&(m.id||m.name||m.model)).filter(x=>typeof x==='string'&&x);
+    let ids=arr.map(m=>typeof m==='string'?m:m&&(m.id||m.name||m.model)).filter(x=>typeof x==='string'&&x);
+    /* Мочи всегда шлёт инструменты: модели, которые про них не знают (OpenRouter это сообщает), отвечают 404 */
+    const tl=arr.filter(m=>m&&Array.isArray(m.supported_parameters)&&m.supported_parameters.includes('tools')).map(m=>m.id);if(tl.length)ids=tl;
+    /* /models у OpenRouter открыт всем — ключ проверяем отдельно; без купленных кредитов работают только модели «:free» */
+    const ki=await orKey(base,key);if(t!==mt)return;
+    if(ki&&ki.free){const fr=ids.filter(isFree);if(fr.length)ids=fr}
     const f=ids.filter(x=>!/embed|whisper|tts|dall-e|moderation|image|audio|realtime|transcribe/i.test(x));
-    mdl=[...new Set(f.length?f:ids)].sort();h.textContent=mdl.length?'Связь есть, моделей: '+mdl.length+'. нажми на поле, чтобы выбрать':'Связь есть';h.dataset.s='ok';
+    mdl=[...new Set(f.length?f:ids)].sort();h.textContent=(mdl.length?'Связь есть, моделей: '+mdl.length+'. нажми на поле, чтобы выбрать':'Связь есть')+(ki&&ki.free?'. '+freeNote(ki):'');h.dataset.s='ok';
     const cur=mi().value.trim();
-    if(mdl.length&&(!cur||(cur===DEF.model&&!mdl.includes(cur))))mi().value=mdl[0];
+    if(mdl.length&&(!cur||(cur===DEF.model&&!mdl.includes(cur))||(ki&&ki.free&&!isFree(cur))))mi().value=pickModel(mdl);
   }catch(e){if(t!==mt)return;mdl=[];h.dataset.s='err';
+    if(/^40[13]$/.test(e.message)&&!key){h.textContent='Вставь API ключ — после этого загружу список моделей';delete h.dataset.s;return}
     h.textContent=/^40[13]$/.test(e.message)?'Ключ не подошёл (HTTP '+e.message+'). Проверь его':e.message==='format'||e instanceof SyntaxError?'Сервер ответил, но не списком моделей. Модель можно вписать вручную':e instanceof TypeError?'Сервер не отвечает или не пускает браузер (CORS).'+corsHint(base)+' Модель можно вписать вручную':'Список моделей недоступен (HTTP '+e.message+'). Впиши модель вручную'}
 }
 mi().oninput=mi().onfocus=showModels;
 $('#dlg').addEventListener('pointerdown',e=>{if(!e.target.closest('#ml,#c-model'))$('#ml').hidden=true});
-['#c-base','#c-key'].forEach(q=>$(q).onchange=()=>{clearTimeout(md_t);md_t=setTimeout(loadModels,300)});
+/* проверяем заново, как только ключ или адрес вставили/дописали — не дожидаясь ухода фокуса с поля */
+['#c-base','#c-key'].forEach(q=>$(q).oninput=$(q).onchange=()=>{clearTimeout(md_t);md_t=setTimeout(loadModels,500)});
 
 /* BIOS встроен в файл: меньше внешних загрузок */
 const b64=t=>Uint8Array.from(atob(t),c=>c.charCodeAt(0)).buffer;
@@ -1441,6 +1456,7 @@ let lastSent='';
 const sendUI=on=>{const b=$('#send');b.classList.toggle('stop',on);b.setAttribute('aria-label',on?'Остановить':'Отправить');b.title=on?'Остановить (Esc)':''};
 function friendly(e){const s=e.status;let m;
   if(s===401||s===403)m='Ключ API не подошёл (HTTP '+s+'). Проверь его в настройках.';
+  else if(s===402)m='На счёте нет денег для этой модели (HTTP 402). Пополни баланс или выбери бесплатную модель'+(isOR(cfg.base)?' — у OpenRouter это модели с «:free» в конце':'')+'.';
   else if(s===404)m='Не нашла модель или адрес API (HTTP 404). Проверь их в настройках.';
   else if(s===429)m='Слишком много запросов или на счёте кончились деньги (HTTP 429). Подожди минутку и повтори.';
   else if(s>=500)m='У сервера модели что-то сломалось (HTTP '+s+'). Повтори чуть позже.';

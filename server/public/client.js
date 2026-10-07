@@ -322,14 +322,15 @@ loadModels = async function () {
   if (!base) { h.textContent = ''; delete h.dataset.s; return; }
   h.textContent = 'Сервер проверяет связь с моделью…'; h.dataset.s = 'wait';
   try {
-    const ids = (await post('api/models', { base, key })).models; if (t !== mt) return;
+    const { models: ids, free } = await post('api/models', { base, key }); if (t !== mt) return;
     const f = ids.filter(x => !/embed|whisper|tts|dall-e|moderation|image|audio|realtime|transcribe/i.test(x));
     mdl = [...new Set(f.length ? f : ids)].sort();
-    h.textContent = mdl.length ? 'Связь есть, моделей: ' + mdl.length + '. нажми на поле, чтобы выбрать' : 'Связь есть'; h.dataset.s = 'ok';
-    const cur = mi().value.trim(); if (mdl.length && (!cur || (cur === DEF.model && !mdl.includes(cur)))) mi().value = mdl[0];
+    h.textContent = (mdl.length ? 'Связь есть, моделей: ' + mdl.length + '. нажми на поле, чтобы выбрать' : 'Связь есть') + (free ? '. ' + freeNote(free) : ''); h.dataset.s = 'ok';
+    const cur = mi().value.trim(); if (mdl.length && (!cur || (cur === DEF.model && !mdl.includes(cur)) || (free && !isFree(cur)))) mi().value = pickModel(mdl);
   } catch (e) {
     if (t !== mt) return; mdl = []; h.dataset.s = 'err';
     const u = e.j && e.j.upstream;
+    if ((e.status === 401 || e.status === 403 || u === 401 || u === 403) && !key && !(srvSet && srvSet.hasKey && String(srvSet.base || '').replace(/\/+$/, '') === base)) { h.textContent = 'Вставь API ключ — после этого загружу список моделей'; delete h.dataset.s; return; }
     h.textContent = e.status === 401 || e.status === 403 || u === 401 || u === 403 ? 'Ключ не подошёл. Проверь его' : e.message === 'format' ? 'Сервер ответил, но не списком моделей. Модель можно вписать вручную' : 'Список моделей недоступен (' + e.message + '). Впиши модель вручную';
   }
 };
