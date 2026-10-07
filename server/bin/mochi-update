@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Обновление Мочи до свежей версии с GitHub. Работает только от root:
+#   mochi-update service — запускает служба mochi-update (systemd .path), когда в браузере нажали «Обновить»:
+#                          сервер Мочи сам обновиться не может (у него нет прав), он лишь кладёт файл-запрос
+#                          в свои данные; что и откуда ставить, решает только этот скрипт;
+#   mochi-update watch   — то же для OpenRC: раз в 3 секунды смотрит, нет ли запроса;
+#   mochi-update cli     — «sudo mochi update» в терминале (ход виден на экране).
+# Берёт install.sh из того же репозитория и ветки, что при установке (/etc/mochi/install.conf),
+# ровно того коммита, который сейчас последний, и запускает его с --update.
+# Ход работы — в /var/lib/mochi/update: status.json и steps.log читает сервер (группа mochi),
+# полный журнал install.log — только root (там может оказаться код приглашения).
+set -uo pipefail
+umask 022
+
+ETC=${MOCHI_ETC:-/etc/mochi}
+STATE=${MOCHI_STATE:-/var/lib/mochi}
+DIR=$STATE/update
+REQ=$STATE/data/update.request
+APPDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+REPO=RamadanIU/Agent-Mochi
+REF=HEAD
+MODE=${1:-cli}
+ROOT=0; [ "$(id -u)" -eq 0 ] && ROOT=1
+
+case "$MODE" in service|watch|cli) ;; *) echo "Использование: mochi-update service|watch|cli" >&2; exit 2 ;; esac
+[ "$ROOT" = 1 ] || [ -n "${MOCHI_STATE:-}" ] || { echo "Нужны права root: sudo mochi update" >&2; exit 1; }
+
+if [ "$MODE" = watch ]; then
+  # OpenRC: .path-юнитов нет — проверяем запрос сами (один stat раз в 3 секунды)
+  while :; do [ -e "$REQ" ] && "${BASH_SOURCE[0]}" service; sleep 3; done
+fi
+
+# shellcheck disable=SC1091
+[ -r "$ETC/install.conf" ] && . "$ETC/install.conf"
+[[ "$REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || REPO=RamadanIU/Agent-Mochi
+[[ "$REF" =~ ^[A-Za-z0-9._/-]+$ ]] || REF=HEAD
+
+if [ ! -d "$DIR" ]; then mkdir -p "$DIR"; chmod 0750 "$DIR"; [ "$ROOT" = 1 ] && chown root:mochi "$DIR" 2>/dev/null; fi
+STEPS=$DIR/steps.log
+FULL=$DIR/install.log
+BY=web; [ "$MODE" = cli ] && BY=cli
+
+# одно обновление за раз
+exec 9>"$DIR/.lock"
+if command -v flock >/dev/null 2>&1 && ! flock -n 9; then
+  [ "$MODE" = cli ] && { echo "Обновление уже идёт — дождись его (ход виден в настройках Мочи)" >&2; exit 1; }
+  exit 0
+fi
+
+T0=$(date +%s)
+commit_of() { [ -r "$1" ] && sed -n 's/.*"commit": *"\([0-9a-f]\{7,40\}\)".*/\1/p' "$1"; }
+FROM=$(commit_of "$APPDIR/build.json")
+# status СОСТОЯНИЕ [ещё поля JSON] — сервер показывает его в браузере; пишем атомарно
+status() {
+  local tmp="$DIR/.status.$$"
+  printf '{"state":"%s","by":"%s","pid":%s,"started":%s,"from":"%s"%s}\n' "$1" "$BY" "$$" "$T0" "$FROM" "${2:-}" > "$tmp"
+  chmod 0640 "$tmp"; [ "$ROOT" = 1 ] && chown root:mochi "$tmp" 2>/dev/null
+  mv -f "$tmp" "$DIR/status.json"
+}
+step() { printf '%s\n' "$1" >> "$STEPS"; printf '%s\n' "$1" >> "$FULL"; [ "$MODE" = cli ] && printf '%s\n' "$1"; return 0; }
+finish() { # finish КОД
+  if [ "$1" = 0 ]; then status "done" ",\"finished\":$(date +%s),\"code\":0,\"to\":\"$(commit_of "$APPDIR/build.json")\""
+  else status failed ",\"finished\":$(date +%s),\"code\":$1"; fi
+  exit "$1"
+}
+
+: > "$STEPS"; : > "$FULL"
+chmod 0640 "$STEPS"; chmod 0600 "$FULL"; [ "$ROOT" = 1 ] && chown root:mochi "$STEPS" 2>/dev/null
+status running
+# запрос выполняем сейчас — убираем его (уже после статуса: страница не увидит «ни запроса, ни обновления»)
+rm -f "$REQ"
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/mochi-update.XXXXXX")
+trap 'rm -rf "$TMP"' EXIT
+trap 'step "✘ Обновление прервано"; finish 143' TERM INT HUP
+
+step "🐾 Смотрю, что нового на GitHub…"
+if [ -n "${MOCHI_INSTALL_SH:-}" ]; then
+  # свой установщик (проверка локальных правок, тесты)
+  cp "$MOCHI_INSTALL_SH" "$TMP/install.sh" || { step "✘ Нет файла $MOCHI_INSTALL_SH"; finish 1; }
+  SHA=""
+else
+  # точный последний коммит: install.sh и код возьмём из него (raw.githubusercontent по имени ветки кэширует минуты)
+  SHA=$(curl -fsS --proto '=https' --tlsv1.2 --retry 2 --connect-timeout 15 --max-time 30 \
+    -H 'Accept: application/vnd.github.sha' "https://api.github.com/repos/$REPO/commits/$REF" 2>/dev/null | tr -d '[:space:]') || SHA=""
+  [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || SHA=$(git ls-remote "https://github.com/$REPO" "$REF" 2>/dev/null | awk 'NR==1{print $1}') || SHA=""
+  [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || SHA=""
+  if ! curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-delay 2 --connect-timeout 20 --max-time 120 \
+      -o "$TMP/install.sh" "https://raw.githubusercontent.com/$REPO/${SHA:-$REF}/install.sh"; then
+    step "✘ Не скачался установщик с GitHub — проверь интернет на сервере"; finish 1
+  fi
+fi
+first=""; IFS= read -r first < "$TMP/install.sh" || true
+[ "$first" = '#!/usr/bin/env bash' ] || { step "✘ Скачался не установщик Мочи — обновление отменено"; finish 1; }
+
+# установщик печатает шаги строками «🐾 …», «✔ …», «! …», «✘ …» — их и показываем в браузере
+MOCHI_UPDATER=1 MOCHI_COMMIT="$SHA" bash "$TMP/install.sh" --update </dev/null 2>&1 | while IFS= read -r l || [ -n "$l" ]; do
+  printf '%s\n' "$l" >> "$FULL"
+  case "$l" in '🐾'*|'✔'*|'!'*|'✘'*) printf '%s\n' "$l" >> "$STEPS" ;; esac
+  [ "$MODE" = cli ] && printf '%s\n' "$l"
+done
+code=${PIPESTATUS[0]}
+[ "$code" = 0 ] || step "! Подробный журнал: sudo cat $FULL"
+finish "$code"

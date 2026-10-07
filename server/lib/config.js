@@ -6,6 +6,7 @@ const env = process.env;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dev = env.MOCHI_DEV === '1';
 const abs = p => path.resolve(p);
+const web = abs(env.MOCHI_WEB || path.join(here, '..', '..'));
 
 export const CFG = {
   dev,
@@ -16,7 +17,13 @@ export const CFG = {
   /* рабочие папки агента (владелец mochi-agent, группа mochi) */
   work: abs(env.MOCHI_WORK || '/var/lib/mochi/agent'),
   /* корень сайта: index.html, sw.js, manifest, icons */
-  web: abs(env.MOCHI_WEB || path.join(here, '..', '..')),
+  web,
+  /* обновления: build.json (репозиторий, ветка, коммит) кладёт установщик рядом с кодом;
+     в updateDir root-служба mochi-update пишет ход обновления (пусто — обновлять из браузера нельзя) */
+  buildFile: abs(env.MOCHI_BUILD || path.join(web, 'build.json')),
+  updateDir: env.MOCHI_UPDATE_DIR ? abs(env.MOCHI_UPDATE_DIR) : '',
+  updateApi: (env.MOCHI_UPDATE_API || 'https://api.github.com').replace(/\/+$/, ''),
+  updateWeb: (env.MOCHI_UPDATE_WEB || 'https://github.com').replace(/\/+$/, ''),
   publicUrl: (env.MOCHI_PUBLIC_URL || '').replace(/\/+$/, ''),
   /* исполнитель команд и терминал — отдельные службы от имени mochi-agent */
   runnerSock: env.MOCHI_RUNNER_SOCK || (dev ? 'inline' : '/run/mochi-runner/runner.sock'),

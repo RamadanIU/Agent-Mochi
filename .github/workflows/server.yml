@@ -21,4 +21,4 @@ jobs:
         working-directory: server
         run: npm test
       - name: Проверка shell-скриптов
-        run: shellcheck -S warning install.sh server/bin/mochi-shell server/bin/mochi-ttyd
+        run: shellcheck -S warning install.sh server/bin/mochi-shell server/bin/mochi-ttyd server/bin/mochi-update
