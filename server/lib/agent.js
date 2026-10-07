@@ -9,6 +9,7 @@ import { Doc, ensureDir, rid, writeJSONSync, readJSON } from './store.js';
 import { runCmd, agentInfo } from './runner-client.js';
 import { userDir, pullFile, storeFile, sz } from './files.js';
 import { webTools, webCall } from './mcp.js';
+import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, mcpPublic, skillList, tokens } from './ext.js';
 
 export const DEF_SYS = 'Тебя зовут Мочи — ты милый пиксельный зверёк-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. В поле action кратко и по-человечески пиши, что делаешь. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
 export const DEF_SETTINGS = { base: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', sys: DEF_SYS, search: true, vis: true };
@@ -38,6 +39,24 @@ export const TG_TOOLS = [
   { type: 'function', function: { name: 'telegram_disconnect', description: 'Отключить Telegram-бота от Мочи.', parameters: { type: 'object', properties: {} } } },
 ];
 
+/* встроенные инструменты, которые пользователь может выключить (Настройки → Инструменты) */
+const GROUPS = { run_command: 'Сервер', send_file: 'Сервер', mcp_manage: 'Расширения', skills_manage: 'Расширения' };
+const groupOf = n => GROUPS[n] || (n.startsWith('telegram_') ? 'Telegram' : 'Интернет');
+const builtins = () => [RUN_TOOL, SEND_TOOL, ...TG_TOOLS];
+const isOn = (S, n) => (S.tools || {})[n] !== false;
+
+/* что видит пользователь в настройках: все инструменты, их состояние и примерный «вес» в каждом запросе */
+export async function toolCatalog(chat) {
+  const S = chat.settings(), web = S.search ? await webTools() : [];
+  const row = t => ({ name: t.function.name, group: groupOf(t.function.name), desc: t.function.description.split(/(?<=[.!?])\s/)[0].slice(0, 200), on: isOn(S, t.function.name), size: tokens(t) });
+  return { builtin: [...builtins(), ...web, ...MANAGE_TOOLS].map(row), search: S.search !== false, mcp: mcpPublic(chat.u), skills: await skillList(chat.u) };
+}
+export function setTools(chat, m) {
+  const t = chat.set.v.tools ||= {};
+  for (const [n, on] of Object.entries(m || {})) if (/^[\w-]{1,64}$/.test(n)) { if (on) delete t[n]; else t[n] = false; }
+  chat.set.save();
+}
+
 const sleep = (ms, sig) => new Promise(ok => { const t = setTimeout(ok, ms); sig?.addEventListener('abort', () => { clearTimeout(t); ok(); }, { once: true }); });
 const abortErr = () => Object.assign(new Error('остановлено'), { name: 'AbortError' });
 
@@ -50,6 +69,11 @@ function labelFor(n, a) {
   else if (n === 'telegram_connect') s = 'Подключаю Telegram';
   else if (n === 'telegram_send') s = 'Пишу в Telegram';
   else if (n.startsWith('telegram_')) s = 'Настраиваю Telegram';
+  else if (n === 'skill') s = 'Читаю навык: ' + (a.name || '');
+  else if (n === 'mcp_connect') s = 'Подключаю инструменты: ' + (a.server || '');
+  else if (n === 'mcp_manage') s = a.action === 'list' ? 'Смотрю MCP-серверы' : 'Настраиваю MCP' + (a.name ? ': ' + a.name : '');
+  else if (n === 'skills_manage') s = a.action === 'install' ? 'Устанавливаю навык' : a.action === 'list' ? 'Смотрю навыки' : 'Настраиваю навыки' + (a.name ? ': ' + a.name : '');
+  else if (n.includes('__')) { const [srv, ...t] = n.split('__'); s = srv + ' · ' + t.join('__'); }
   else s = n;
   return String(s).slice(0, 80);
 }
@@ -173,7 +197,7 @@ export class Chat extends EventEmitter {
     this.gen++;
     this.ctl?.abort(); this.ctl = null; this.partial = '';
     this.dropParts(this.doc.v.hist);
-    Object.assign(this.doc.v, { hist: [], log: [], run: null, sess: rid(16) });
+    Object.assign(this.doc.v, { hist: [], log: [], run: null, sess: rid(16), act: [] });
     this.doc.save();
     this.emit('reset');
     this.emit('run', this.runState());
@@ -205,19 +229,23 @@ export class Chat extends EventEmitter {
     this.emit('done', { origin: run.origin, text, err, stopped: ctl.signal.aborted && !err, steps: run.steps, ms: Date.now() - run.t });
   }
 
-  async system(webOn) {
-    const S = this.settings(), I = await agentInfo(), dir = userDir(this.u), now = new Date();
-    const tg = hooks.tg?.statusLine(this.u) || 'Telegram не подключён.';
-    const pkg = I.sudo
+  /* подсказка собирается только из того, что сейчас включено: выключенный инструмент не занимает память */
+  async system(names, extra = '', webOn = false) {
+    const S = this.settings(), has = n => names.has(n), dir = userDir(this.u), now = new Date();
+    const run = has('run_command'), I = run ? await agentInfo() : null;
+    const tgOn = TG_TOOLS.some(t => has(t.function.name));
+    const pkg = !run ? '' : I.sudo
       ? `Есть sudo без пароля; пакеты: sudo ${I.pm === 'apt-get' ? 'apt-get install -y' : I.pm === 'apk' ? 'apk add' : I.pm === 'pacman' ? 'pacman -S --noconfirm' : I.pm === 'zypper' ? 'zypper -n install' : (I.pm || 'dnf') + ' install -y'} …`
       : 'Прав root и sudo нет: системные пакеты ставить нельзя. Инструменты ставь к себе: python3 -m venv ~/venv && ~/venv/bin/pip install …, npm install -g … (префикс ~/.local), бинарники — в ~/.local/bin.';
     return S.sys
       + `\nСегодня ${now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}, время сервера ${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}.`
-      + `\nСервер: ${I.os}, ядро ${I.kernel}, ${I.arch}, ${I.cpus || '?'} CPU, ${I.mem || '?'} МБ RAM. Ты работаешь как пользователь ${I.user}. ${pkg} Установлено: ${(I.tools || []).join(', ') || '—'}, node.`
-      + `\nРабочая папка пользователя: ${dir} (inbox/ — файлы от пользователя, outbox/ — для файлов пользователю). Задачи выполняются на сервере в фоне: пользователь может закрыть браузер, работа продолжится, а результат он увидит в чате. Долгие процессы (серверы, длинные загрузки, сборки дольше часа) запускай в фоне: nohup команда > файл.log 2>&1 & — и проверяй позже. Команды, ждущие ввода, не работают (stdin пустой): используй флаги -y и т. п.`
-      + ' Чтобы отдать файл пользователю, создай его (лучше в outbox/) и вызови send_file; не выводи содержимое файлов текстом вместо этого. Имена с пробелами бери в кавычки.'
+      + (run ? `\nСервер: ${I.os}, ядро ${I.kernel}, ${I.arch}, ${I.cpus || '?'} CPU, ${I.mem || '?'} МБ RAM. Ты работаешь как пользователь ${I.user}. ${pkg} Установлено: ${(I.tools || []).join(', ') || '—'}, node.` : '\nИнструмент run_command выключен пользователем: команды на сервере выполнять нельзя.')
+      + `\nРабочая папка пользователя: ${dir} (inbox/ — файлы от пользователя, outbox/ — для файлов пользователю). Задачи выполняются на сервере в фоне: пользователь может закрыть браузер, работа продолжится, а результат он увидит в чате.`
+      + (run ? ' Долгие процессы (серверы, длинные загрузки, сборки дольше часа) запускай в фоне: nohup команда > файл.log 2>&1 & — и проверяй позже. Команды, ждущие ввода, не работают (stdin пустой): используй флаги -y и т. п.' : '')
+      + (has('send_file') ? ' Чтобы отдать файл пользователю, создай его (лучше в outbox/) и вызови send_file; не выводи содержимое файлов текстом вместо этого. Имена с пробелами бери в кавычки.' : '')
       + (webOn ? '\nУ тебя есть поиск в интернете (web_search, web_fetch): используй его для новостей, свежих данных и всего, что могло измениться; на простые вопросы отвечай сразу. Источники называй по имени сайта.' : '')
-      + '\n' + tg + ' Если пользователь хочет управлять тобой из Telegram или получать уведомления: попроси создать бота у @BotFather (команда /newbot) и прислать токен, затем вызови telegram_connect и дай пользователю ссылку из ответа.'
+      + (tgOn ? '\n' + (hooks.tg?.statusLine(this.u) || 'Telegram не подключён.') + ' Если пользователь хочет управлять тобой из Telegram или получать уведомления: попроси создать бота у @BotFather (команда /newbot) и прислать токен, затем вызови telegram_connect и дай пользователю ссылку из ответа.' : '')
+      + extra
       + (this.wire().some(m => Array.isArray(m.content)) ? '\nКартинки и PDF из сообщений пользователя ты видишь напрямую; те же файлы лежат в inbox/, если их нужно обработать.' : '');
   }
 
@@ -228,10 +256,12 @@ export class Chat extends EventEmitter {
     for (;;) {
       if (run.steps >= CFG.maxSteps) throw new Error('Мочи сделала ' + CFG.maxSteps + ' шагов подряд и остановилась, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить.');
       run.steps++;
-      const S = this.settings();
-      const web = S.search ? await webTools() : []; chk();
-      const tools = [RUN_TOOL, SEND_TOOL, ...TG_TOOLS, ...web];
-      const { text, calls } = await this.callModel(await this.system(web.length > 0), tools, sig); chk();
+      const S = this.settings(), on = t => isOn(S, t.function.name);
+      const web = (S.search ? await webTools() : []).filter(on); chk();
+      const X = await agentExt(this, S.tools); chk();
+      const tools = [...builtins().filter(on), ...web, ...X.defs], names = new Set(tools.map(t => t.function.name));
+      const ctx = { web, X, names };
+      const { text, calls } = await this.callModel(await this.system(names, X.prompt, web.length > 0), tools, sig); chk();
       H.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}) });
       this.partial = '';
       if (text) this.push({ kind: 'assistant', text });
@@ -247,7 +277,8 @@ export class Chat extends EventEmitter {
         let out;
         try {
           out = bad ? 'Ошибка: аргументы вызова — невалидный JSON (возможно, обрезаны). Повтори вызов с корректным JSON, длинное содержимое раздели на части.'
-            : await this.tool(nm, a, sig, web, tc);
+            : !ctx.names.has(nm) ? 'Ошибка: инструмента ' + nm + ' сейчас нет (он выключен пользователем или не подключён). Обойдись без него.'
+            : await this.tool(nm, a, sig, ctx);
         } catch (x) { if (sig.aborted || g !== this.gen) throw abortErr(); out = 'Ошибка: ' + x.message; }
         if (g !== this.gen) throw abortErr();
         out = String(out);
@@ -260,7 +291,7 @@ export class Chat extends EventEmitter {
     }
   }
 
-  async tool(nm, a, sig, web) {
+  async tool(nm, a, sig, { web, X }) {
     if (nm === 'run_command') {
       if (!a.command) return 'Ошибка: нет параметра command';
       const r = await runCmd({ cmd: String(a.command), cwd: this.doc.v.cwd || userDir(this.u), timeout: a.timeout }, sig);
@@ -282,6 +313,8 @@ export class Chat extends EventEmitter {
       return await hooks.tg.tool(this, nm, a);
     }
     if (web.some(t => t.function.name === nm)) return await webCall(nm, a, { signal: sig, session: this.doc.v.sess, model: this.settings().model });
+    if (X.route.has(nm)) return await mcpCall(this.u, X.route.get(nm), a, sig);
+    if (EXT_TOOLS.has(nm)) return await extTool(this, nm, a);
     return 'Ошибка: неизвестный инструмент ' + nm;
   }
 
@@ -298,7 +331,7 @@ export class Chat extends EventEmitter {
       const signal = AbortSignal.any([sig, idle.signal]);
       try {
         const r = await fetch(S.base.replace(/\/+$/, '') + '/chat/completions', { method: 'POST', headers: h, signal,
-          body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: sys }, ...msgs], tools, stream: true }) });
+          body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: sys }, ...msgs], ...(tools.length ? { tools } : {}), stream: true }) });
         if (!r.ok) {
           const et = (await r.text().catch(() => '')).slice(0, 300);
           if (hasM && [400, 404, 413, 415, 422].includes(r.status) && this.noVis < 2) {

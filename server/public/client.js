@@ -4,7 +4,7 @@
    • агент работает на сервере в фоне: чат подписан на поток событий и после возвращения
      показывает и прогресс, и итог;
    • вкладка «Терминал» — настоящий терминал сервера (ttyd за авторизацией);
-   • в настройках — вкладка «Сервер»: Telegram, приглашения, пароль, выход.
+   • в настройках — вкладка «Сервер» (Telegram, приглашения, пароль, выход) и «Инструменты» (вкл/выкл, MCP, навыки).
    Используем функции основного скрипта (add, trayAdd, md, think, ask…), а не дублируем их. */
 (() => {
 if (typeof SRV === 'undefined' || !SRV) return;
@@ -404,6 +404,156 @@ const logout = async all => {
 };
 $('#s-out').onclick = () => logout(false);
 $('#s-outall').onclick = () => logout(true);
+
+/* ---------- вкладка «Инструменты»: встроенные инструменты, MCP-серверы, навыки ----------
+   Всё применяется сразу. Выключенное не попадает в запросы к модели — рядом виден примерный «вес» каждого инструмента. */
+const tlTab = document.createElement('button');
+Object.assign(tlTab, { id: 't-tl', textContent: 'Инструменты' }); tlTab.type = 'button';
+tlTab.setAttribute('role', 'tab'); tlTab.dataset.p = 'tl'; tlTab.setAttribute('aria-controls', 'p-tl');
+lxTab.after(tlTab); stabs.push(tlTab);
+tlTab.onclick = () => { stab('tl'); loadTools(); };
+tlTab.onkeydown = e => { const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0; if (!d) return; e.preventDefault(); const n = stabs[(stabs.indexOf(tlTab) + d + stabs.length) % stabs.length]; n.click(); n.focus(); };
+const tl = document.createElement('section');
+tl.className = 'spane'; tl.id = 'p-tl'; tl.hidden = true; tl.setAttribute('role', 'tabpanel'); tl.setAttribute('aria-labelledby', 't-tl');
+$('#dlg .sbody').append(tl);
+css.textContent += `
+#dlg .stabs{gap:6px;padding:14px 10px 0;overflow-x:auto;scrollbar-width:none}#dlg .stabs::-webkit-scrollbar{display:none}#dlg .stabs button{flex:none;padding-left:8px;padding-right:8px}
+#p-tl .xsum{display:block;margin-top:14px;font-size:9px;line-height:1.7;color:var(--mut)}
+#p-tl .xmsg{display:block;margin-top:10px;font-size:9px;line-height:1.7;color:var(--err);word-break:break-word}#p-tl .xmsg:empty{display:none}#p-tl .xmsg[data-s=ok]{color:var(--ok)}
+#p-tl .xg{margin-top:26px;font:8px/1.6 var(--pf);color:var(--acc);text-transform:uppercase}
+#p-tl .xcard{margin:18px 4px 0;padding:4px 12px 12px;background:var(--bg);box-shadow:var(--sh2)}
+#p-tl .xcard .sw{margin-top:12px}
+#p-tl .xt{display:block;margin-top:10px;font:9px/1.5 var(--pf);color:var(--fg);word-break:break-all}
+#p-tl .xs{display:block;margin-top:4px;font-size:9px;line-height:1.6;color:var(--mut);word-break:break-word}#p-tl .xs.bad{color:var(--err)}
+#p-tl .xb{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+#p-tl details{margin-top:14px}
+#p-tl .pbtn.xgo{margin-top:16px}
+`;
+const TL_NAMES = { run_command: 'Команды на сервере', send_file: 'Отправка файлов', web_search: 'Поиск в интернете', web_fetch: 'Чтение страниц',
+  telegram_connect: 'Telegram: подключение', telegram_status: 'Telegram: состояние', telegram_send: 'Telegram: сообщения', telegram_notify_mode: 'Telegram: уведомления', telegram_disconnect: 'Telegram: отключение',
+  mcp_manage: 'Агент подключает MCP', skills_manage: 'Агент ставит навыки' };
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const tok = n => '≈' + n + ' ток.';
+function swRow(title, sub, on, fn) {
+  const l = el('label', 'sw'), s = el('span', null, title), i = el('input');
+  if (sub) s.append(el('small', null, sub));
+  i.type = 'checkbox'; i.setAttribute('role', 'switch'); i.checked = on;
+  i.onchange = async () => { i.disabled = true; try { await fn(i.checked); } catch (e) { i.checked = !i.checked; tlMsg(e.message); } finally { i.disabled = false; } };
+  l.append(s, i); return l;
+}
+const sbtn = (txt, fn) => { const b = el('button', 'pbtn sm'); b.type = 'button'; b.append(el('span', null, txt)); b.onclick = async () => { b.disabled = true; try { await fn(); } catch (e) { tlMsg(e.message); } finally { b.disabled = false; } }; return b; };
+const field = (label, input) => { const l = el('label', 'f', label); l.append(input); return l; };
+const inp = (ph, area) => { const i = el(area ? 'textarea' : 'input'); i.placeholder = ph || ''; i.spellcheck = false; i.setAttribute('autocapitalize', 'off'); i.autocomplete = 'off'; if (area) i.rows = 3; return i; };
+function tlMsg(t, ok) { const m = $('#x-msg'); if (!m) return; m.textContent = t || ''; if (ok) m.dataset.s = 'ok'; else delete m.dataset.s; }
+
+let tlOpen = {};
+async function loadTools() {
+  let c;
+  try { c = await api('api/tools'); } catch (e) { if (e.status === 401) return check(); tl.textContent = 'Не загрузилось: ' + e.message; return; }
+  tl.querySelectorAll('details[data-k]').forEach(d => { tlOpen[d.dataset.k] = d.open; });
+  const keep = $('#x-msg') ? [$('#x-msg').textContent, $('#x-msg').dataset.s] : ['', ''];
+  tl.innerHTML = '';
+  const det = (k, title) => { const d = el('details'); d.dataset.k = k; d.open = !!tlOpen[k]; d.append(el('summary', null, title)); return d; };
+  const act = c.builtin.filter(t => t.on).reduce((a, t) => a + t.size, 0)
+    + c.mcp.filter(s => s.on && !s.lazy).reduce((a, s) => a + s.tools.filter(t => t.on).reduce((x, t) => x + t.size, 0), 0);
+  tl.append(el('small', 'xsum', 'Выключенное Мочи не видит — оно не занимает память модели. Сейчас описания инструментов занимают ' + tok(act) + ' в каждом запросе. Навыки и MCP-серверы «по запросу» — по строчке, пока не понадобятся.'));
+  const msg = el('small', 'xmsg'); msg.id = 'x-msg'; msg.setAttribute('role', 'status'); msg.textContent = keep[0]; if (keep[1]) msg.dataset.s = keep[1]; tl.append(msg);
+
+  /* встроенные */
+  const groups = {};
+  for (const t of c.builtin) (groups[t.group] ||= []).push(t);
+  for (const [g, ts] of Object.entries(groups)) {
+    tl.append(el('div', 'xg', g));
+    for (const t of ts) tl.append(swRow(TL_NAMES[t.name] || t.name, t.name + ' · ' + tok(t.size), t.on, on => api('api/tools', { method: 'PUT', json: { tools: { [t.name]: on } } })));
+  }
+  if (!c.search) tl.append(el('small', 'xs', 'Поиск в интернете выключен на вкладке «Модель».'));
+
+  /* MCP */
+  tl.append(el('div', 'xg', 'MCP-серверы'));
+  if (!c.mcp.length) tl.append(el('small', 'xs', 'Пока нет. Подключи ниже или попроси Мочи в чате: «подключи MCP-сервер …».'));
+  for (const s of c.mcp) {
+    const card = el('div', 'xcard'), on = s.tools.filter(t => t.on);
+    card.append(el('b', 'xt', s.name + (s.server && s.server !== s.name ? ' · ' + s.server : '')));
+    card.append(el('small', 'xs', (s.type === 'http' ? s.url : s.command) + (s.headers.length ? ' · заголовки: ' + s.headers.join(', ') : '') + (s.env.length ? ' · env: ' + s.env.join(', ') : '')));
+    if (s.desc) card.append(el('small', 'xs', s.desc));
+    card.append(el('small', 'xs' + (s.err ? ' bad' : ''), s.err ? 'Ошибка: ' + s.err : s.known ? 'Инструментов: ' + s.tools.length + (on.length < s.tools.length ? ', включено ' + on.length : '') + ' · ' + tok(on.reduce((a, t) => a + t.size, 0)) : 'Ещё не подключался'));
+    card.append(swRow('Включён', null, s.on, v => post('api/mcp/' + s.name, { on: v }).then(loadTools)));
+    card.append(swRow('По запросу', 'Инструменты подключаются, только когда нужны Мочи', s.lazy, v => post('api/mcp/' + s.name, { lazy: v }).then(loadTools)));
+    if (s.tools.length) {
+      const d = det('m:' + s.name, 'Инструменты (' + on.length + '/' + s.tools.length + ')');
+      for (const t of s.tools) d.append(swRow(t.name, (t.desc ? t.desc + ' · ' : '') + tok(t.size), t.on, v => post('api/mcp/' + s.name, { tools: { [t.name]: v } }).then(loadTools)));
+      card.append(d);
+    }
+    const b = el('div', 'xb');
+    b.append(sbtn('Обновить', async () => { const r = await post('api/mcp/' + s.name, { refresh: true }); tlMsg(r.err ? s.name + ': ' + r.err : s.name + ': подключён', !r.err); loadTools(); }));
+    b.append(sbtn('Удалить', async () => { if (!await ask('MCP', 'Удалить сервер «' + s.name + '»?', null, 'Удалить')) return; await api('api/mcp/' + s.name, { method: 'DELETE' }); loadTools(); }));
+    card.append(b); tl.append(card);
+  }
+  {
+    const d = det('mcp-add', 'Подключить MCP-сервер'), n = inp('например: github'), u = inp('https://…/mcp  или  npx -y @modelcontextprotocol/server-memory'),
+      k = inp('Authorization: Bearer …   (для команды — КЛЮЧ=значение)', true), ds = inp('для чего он, коротко');
+    d.append(field('Имя', n), field('Адрес или команда запуска', u), field('Заголовки / переменные окружения · по одной в строке', k), field('Описание', ds));
+    const go = el('button', 'pbtn xgo'); go.type = 'button'; go.append(el('span', null, 'Подключить'));
+    go.onclick = async () => {
+      const v = u.value.trim(), http = /^https?:\/\//i.test(v), body = { name: n.value.trim(), description: ds.value.trim(), [http ? 'url' : 'command']: v };
+      if (k.value.trim()) body[http ? 'headers' : 'env'] = k.value;
+      go.disabled = true; tlMsg('Подключаю…', true);
+      try { const r = await post('api/mcp', body); tlMsg(r.err ? 'Сохранён, но не подключился: ' + r.err : 'Сервер «' + r.name + '» подключён', !r.err); tlOpen['mcp-add'] = false; await loadTools(); }
+      catch (e) { tlMsg(e.message); } finally { go.disabled = false; }
+    };
+    d.append(go, el('small', 'xs', 'Локальные серверы запускаются на сервере от имени агента (как его команды). Ключи хранятся на сервере и в браузер не возвращаются.'));
+    tl.append(d);
+  }
+
+  /* навыки */
+  tl.append(el('div', 'xg', 'Навыки'));
+  if (!c.skills.length) tl.append(el('small', 'xs', 'Пока нет. Навык — инструкция SKILL.md для определённых задач: Мочи помнит только его имя и читает целиком, когда нужно.'));
+  for (const k of c.skills) {
+    const card = el('div', 'xcard');
+    card.append(swRow(k.name + (k.title ? ' · ' + k.title : ''), k.desc ? (k.desc.length > 220 ? k.desc.slice(0, 219) + '…' : k.desc) : 'без описания', k.on, v => post('api/skills/' + k.name, { on: v })));
+    const b = el('div', 'xb');
+    b.append(sbtn('Изменить', async () => { const r = await api('api/skills/' + encodeURIComponent(k.name)); skillForm(k.name, r.raw); }));
+    b.append(sbtn('Удалить', async () => { if (!await ask('Навык', 'Удалить навык «' + k.name + '» вместе с его папкой?', null, 'Удалить')) return; await api('api/skills/' + encodeURIComponent(k.name), { method: 'DELETE' }); loadTools(); }));
+    card.append(b); tl.append(card);
+  }
+  {
+    const d = det('sk-url', 'Установить по ссылке'), u = inp('https://github.com/anthropics/skills/tree/main/skills/pdf'), n = inp('необязательно');
+    d.append(field('Ссылка: папка или репозиторий GitHub, или URL на SKILL.md', u), field('Имя навыка (если в репозитории их несколько)', n));
+    const go = el('button', 'pbtn xgo'); go.type = 'button'; go.append(el('span', null, 'Установить'));
+    go.onclick = async () => {
+      go.disabled = true; tlMsg('Скачиваю…', true);
+      try { const r = await post('api/skill-install', { url: u.value.trim(), name: n.value.trim() }); tlMsg('Установлено: ' + r.names.join(', '), true); tlOpen['sk-url'] = false; await loadTools(); }
+      catch (e) { tlMsg(e.message); } finally { go.disabled = false; }
+    };
+    d.append(go); tl.append(d);
+  }
+  const nd = det('sk-new', 'Новый навык'); nd.id = 'x-skf'; tl.append(nd); skillForm(null, null, nd);
+}
+/* форма навыка: новый — имя, описание, инструкция; правка — весь SKILL.md целиком */
+function skillForm(name, raw, d = $('#x-skf')) {
+  if (!d) return;
+  d.querySelector('summary').textContent = name ? 'Навык «' + name + '»' : 'Новый навык';
+  [...d.children].forEach(x => { if (x.tagName !== 'SUMMARY') x.remove(); });
+  const n = inp('например: weekly-report'), ds = inp('когда применять: «Отчёт за неделю по шаблону компании»'), body = inp(raw != null ? '' : 'Что и как делать, по шагам. Markdown.', true);
+  body.rows = raw != null ? 14 : 6;
+  if (name) { n.value = name; n.readOnly = true; }
+  if (raw != null) body.value = raw;
+  d.append(field('Имя', n));
+  if (raw == null) d.append(field('Когда применять', ds));
+  d.append(field(raw != null ? 'SKILL.md' : 'Инструкция', body));
+  const go = el('button', 'pbtn xgo'); go.type = 'button'; go.append(el('span', null, 'Сохранить навык'));
+  go.onclick = async () => {
+    go.disabled = true;
+    try {
+      const r = await post('api/skills', raw != null ? { name: n.value.trim(), raw: body.value } : { name: n.value.trim(), description: ds.value.trim(), instructions: body.value });
+      tlMsg('Навык «' + r.name + '» сохранён', true); tlOpen['sk-new'] = false; await loadTools();
+    } catch (e) { tlMsg(e.message); } finally { go.disabled = false; }
+  };
+  d.append(go);
+  if (name) { const c = el('button', 'lnk'); c.type = 'button'; c.textContent = 'Отмена'; c.onclick = () => skillForm(null, null, d); d.append(c); }
+  d.open = true;
+  if (name) d.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
 
 /* ---------- терминал: ttyd за авторизацией ---------- */
 let tty = null;

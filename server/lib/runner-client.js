@@ -2,10 +2,10 @@
    В режиме разработки (MOCHI_RUNNER_SOCK=inline) команды выполняются прямо в процессе сервера. */
 import net from 'node:net';
 import { CFG } from './config.js';
-import { execCommand, sysInfo } from './runner.js';
+import { execCommand, spawnProcess, sysInfo } from './runner.js';
 
 let conn = null, buf = '', seq = 0;
-const wait = new Map();
+const wait = new Map(), subs = new Map();
 
 function connect() {
   if (conn) return conn;
@@ -18,6 +18,7 @@ function connect() {
       while ((i = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, i); buf = buf.slice(i + 1);
         let m; try { m = JSON.parse(line); } catch { continue; }
+        if (subs.has(m.id)) { subs.get(m.id)(m); continue; }
         const w = wait.get(m.id); if (w) { wait.delete(m.id); w(m); }
       }
     });
@@ -25,6 +26,7 @@ function connect() {
       conn = null; buf = '';
       no(e || new Error('closed'));
       for (const [id, w] of wait) { wait.delete(id); w({ op: 'lost' }); }
+      for (const s of [...subs.values()]) s({ op: 'exit', code: null, err: 'связь с исполнителем оборвалась' });
     };
     c.on('error', lost); c.on('close', () => lost());
   });
@@ -54,6 +56,19 @@ export async function runCmd(opts, signal) {
   const m = await call({ op: 'exec', ...opts }, signal);
   if (m.op === 'lost') return { out: '[связь с исполнителем оборвалась: служба mochi-runner перезапускалась]', code: -1, cwd: opts.cwd, lost: true };
   return m;
+}
+
+/* долгий процесс от имени агента (stdio-сервер MCP) → {write, kill} */
+export function spawnProc(opts, onLine, onExit) {
+  if (CFG.runnerSock === 'inline') return spawnProcess(opts, onLine, onExit);
+  const id = ++seq;
+  let c = null, dead = false;
+  const end = (code, err) => { if (dead) return; dead = true; subs.delete(id); onExit(code, err); };
+  subs.set(id, m => { if (m.op === 'line') onLine(m.line); else if (m.op === 'exit') end(m.code, m.err); });
+  const ready = connect().then(cc => { c = cc; c.write(JSON.stringify({ ...opts, op: 'spawn', id }) + '\n'); },
+    e => end(null, 'исполнитель команд недоступен (служба mochi-runner не запущена?): ' + (e.code || e.message)));
+  const send = m => ready.then(() => { if (c && !dead) c.write(JSON.stringify({ ...m, id }) + '\n'); });
+  return { write: data => send({ op: 'write', data }), kill: () => send({ op: 'kill' }) };
 }
 
 let info = null;

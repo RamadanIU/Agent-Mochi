@@ -3,6 +3,8 @@
      → {id, op:'exec', cmd, cwd, timeout}   ← {id, op:'done', out, code, cwd, timedOut, killed}
      → {id, op:'kill'}
      → {id, op:'info'}                      ← {id, op:'info', ...}
+     → {id, op:'spawn', cmd, cwd, env}      ← {id, op:'line', line}…  ← {id, op:'exit', code, err}
+     → {id, op:'write', data}               (долгий процесс со stdin/stdout — stdio-серверы MCP)
    Каждая команда — новый bash: текущая папка сохраняется между вызовами (её возвращаем), stdin — /dev/null.
    Прерывание/таймаут убивают всю группу процессов. */
 import { spawn, execFileSync } from 'node:child_process';
@@ -11,6 +13,7 @@ import os from 'node:os';
 import net from 'node:net';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { StringDecoder } from 'node:string_decoder';
 
 const SHELL = ['/bin/bash', '/usr/bin/bash'].find(p => fs.existsSync(p)) || '/bin/sh';
 const SCRIPT = `trap 'pwd >"$MOCHI_CWDF" 2>/dev/null' EXIT
@@ -88,6 +91,41 @@ export function execCommand({ cmd, cwd, timeout }, done) {
   return { kill: () => stop('kill') };
 }
 
+/* долгий процесс (stdio-сервер MCP): stdin — наш, stdout — построчно, stderr — хвост для сообщения об ошибке */
+const MAX_LINE = 16 * 2 ** 20;
+export function spawnProcess({ cmd, cwd, env }, onLine, onExit) {
+  const home = os.homedir();
+  const dir = cwd && fs.existsSync(cwd) ? cwd : home;
+  const extra = {};
+  for (const [k, v] of Object.entries(env && typeof env === 'object' ? env : {})) if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(k) && !/^MOCHI_/.test(k)) extra[k] = String(v);
+  let ch, out = '', err = '', finished = false, killT;
+  const dec = new StringDecoder('utf8');
+  try {
+    ch = spawn(SHELL, ['-c', 'eval "$MOCHI_CMD"'], { cwd: dir, env: { ...agentEnv(home), ...extra, MOCHI_CMD: String(cmd) }, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
+  } catch (e) {
+    setImmediate(() => onExit(-1, 'Ошибка запуска: ' + e.message));
+    return { write() {}, kill() {} };
+  }
+  const group = sig => { try { process.kill(-ch.pid, sig); } catch { try { ch.kill(sig); } catch {} } };
+  const kill = () => { if (finished || killT) return; group('SIGTERM'); killT = setTimeout(() => group('SIGKILL'), 3000); };
+  ch.stdout.on('data', b => {
+    out += dec.write(b);
+    if (out.length > MAX_LINE) { out = ''; err += '\n[слишком длинная строка вывода]'; kill(); return; }
+    let i;
+    while ((i = out.indexOf('\n')) >= 0) { const l = out.slice(0, i).replace(/\r$/, ''); out = out.slice(i + 1); if (l.trim()) onLine(l); }
+  });
+  ch.stderr.on('data', b => { err = (err + b.toString('utf8')).slice(-4000); });
+  ch.stdin.on('error', () => {});
+  ch.on('error', e => { err += '\nОшибка: ' + e.message; });
+  /* stderr дочитываем чуть позже: в нём причина падения */
+  ch.on('exit', (code, signal) => setTimeout(() => {
+    if (finished) return; finished = true; clearTimeout(killT);
+    ch.stdout.destroy(); ch.stderr.destroy();
+    onExit(code ?? (signal ? 128 + (os.constants.signals[signal] || 0) : -1), cleanOut(err).trim().slice(-1500));
+  }, 120));
+  return { write: d => { if (!finished && ch.stdin.writable) ch.stdin.write(String(d)); }, kill };
+}
+
 let infoCache = null;
 export function sysInfo() {
   if (infoCache) return infoCache;
@@ -124,7 +162,10 @@ export function startRunner(sock) {
         let m; try { m = JSON.parse(line); } catch { continue; }
         if (m.op === 'exec' && !jobs.has(m.id)) {
           jobs.set(m.id, execCommand(m, r => { jobs.delete(m.id); send({ id: m.id, op: 'done', ...r }); }));
-        } else if (m.op === 'kill') jobs.get(m.id)?.kill();
+        } else if (m.op === 'spawn' && !jobs.has(m.id)) {
+          jobs.set(m.id, spawnProcess(m, line => send({ id: m.id, op: 'line', line }), (code, err) => { jobs.delete(m.id); send({ id: m.id, op: 'exit', code, err }); }));
+        } else if (m.op === 'write') jobs.get(m.id)?.write?.(m.data);
+        else if (m.op === 'kill') jobs.get(m.id)?.kill();
         else if (m.op === 'info') send({ id: m.id, op: 'info', ...sysInfo() });
       }
     });
