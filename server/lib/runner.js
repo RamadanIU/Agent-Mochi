@@ -16,6 +16,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
 import { fileOp } from './fileops.js';
+import { mirror } from './mirror.js';
 
 const SHELL = ['/bin/bash', '/usr/bin/bash'].find(p => fs.existsSync(p)) || '/bin/sh';
 const SCRIPT = `trap 'pwd >"$MOCHI_CWDF" 2>/dev/null' EXIT
@@ -62,8 +63,11 @@ export function execCommand({ cmd, cwd, timeout }, done) {
     done({ out: 'Ошибка запуска: ' + e.message, code: -1, cwd: dir });
     return { kill() {} };
   }
+  const scr = mirror(cmd, dir); /* показать команду и вывод в терминале (если он открыт) */
+  const dec = new StringDecoder('utf8');
   const onData = b => {
     const s = b.toString('utf8'); total += s.length;
+    scr?.out(dec.write(b));
     if (head.length < MEM) head += s; else { tail += s; if (tail.length > MEM) tail = tail.slice(-MEM / 2); }
   };
   ch.stdout.on('data', onData); ch.stderr.on('data', onData);
@@ -86,7 +90,9 @@ export function execCommand({ cmd, cwd, timeout }, done) {
     let out = cleanOut(head + tail).replace(/\s+$/, '');
     if (out.length > KEEP_HEAD + KEEP_TAIL + 200)
       out = out.slice(0, KEEP_HEAD) + `\n…(пропущено ${out.length - KEEP_HEAD - KEEP_TAIL} символов)…\n` + out.slice(-KEEP_TAIL);
-    done({ out, code: code ?? (signal ? 128 + (os.constants.signals[signal] || 0) : -1), signal, cwd: newCwd, timedOut, killed, ms: Date.now() - t0, bytes: total });
+    const res = { out, code: code ?? (signal ? 128 + (os.constants.signals[signal] || 0) : -1), signal, cwd: newCwd, timedOut, killed, ms: Date.now() - t0, bytes: total };
+    scr?.end(res);
+    done(res);
   };
   ch.on('exit', (code, signal) => setTimeout(() => finish(code, signal), 120));
   ch.on('error', e => { onData(Buffer.from('Ошибка: ' + e.message)); finish(-1); });

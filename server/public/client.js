@@ -618,21 +618,16 @@ function ttyFrame() {
 const xterm = () => { try { return tty && tty.contentWindow && tty.contentWindow.term; } catch (e) { return null; } };
 const fit = () => { const t = xterm(); try { t && t.fit && t.fit(); } catch (e) {} };
 
-/* цвета: #rrggbb → смесь; палитра ANSI — оттенки люминофора, чтобы ls, tmux и PS1 не выбивались из темы */
+/* цвета: #rrggbb → смесь. Палитра ANSI монохромная, как экран браузерной версии (там вывод без цветов):
+   все цвета — люминофор темы; «чёрный» — фон, «ярко-чёрный» — приглушённый люминофор (подсказки, строка tmux) */
 const hex = c => { c = String(c || '').trim().replace('#', ''); if (c.length === 3) c = c.replace(/./g, '$&$&'); const n = parseInt(c, 16); return /^[0-9a-f]{6}$/i.test(c) ? [n >> 16, n >> 8 & 255, n & 255] : null; };
 const mix = (a, b, k) => { const x = hex(a), y = hex(b); if (!x || !y) return a || b; return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, '0')).join(''); };
 function ttyTheme() {
   const cs = getComputedStyle(de), v = n => cs.getPropertyValue(n).trim();
-  const bg = v('--tbg') || '#1b1230', fg = v('--tfg') || '#7dffb0', acc = v('--acc') || '#ff6b9d';
-  const tint = (c, k = .45) => mix(fg, c, k), lit = c => mix(c, '#ffffff', .25);
-  const red = tint('#ff4d6d', .6), yel = tint('#ffd166'), blu = tint('#6fa8ff', .55), mag = tint(acc, .6), cyn = tint('#5ff2ff');
-  return {
-    background: bg, foreground: fg, cursor: fg, cursorAccent: bg,
-    selectionBackground: mix(bg, fg, .3), selectionForeground: fg,
-    black: mix(bg, fg, .14), red, green: fg, yellow: yel, blue: blu, magenta: mag, cyan: cyn, white: mix(fg, '#ffffff', .2),
-    brightBlack: mix(bg, fg, .45), brightRed: lit(red), brightGreen: lit(fg), brightYellow: lit(yel), brightBlue: lit(blu),
-    brightMagenta: lit(mag), brightCyan: lit(cyn), brightWhite: mix(fg, '#ffffff', .6),
-  };
+  const bg = v('--tbg') || '#1b1230', fg = v('--tfg') || '#7dffb0';
+  const th = { background: bg, foreground: fg, cursor: fg, cursorAccent: bg, selectionBackground: mix(bg, fg, .3), selectionForeground: fg, black: bg, brightBlack: mix(bg, fg, .55) };
+  for (const c of ['red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white']) th[c] = th['bright' + c[0].toUpperCase() + c.slice(1)] = fg;
+  return th;
 }
 /* шрифты страницы (VT323 и запасной Handjet встроены в index.html) — копируем их @font-face в iframe */
 const fontCss = () => {
@@ -664,7 +659,7 @@ html,body{background:transparent!important}
   const th = ttyTheme();
   d.documentElement.style.setProperty('--glow', th.foreground + '8c');
   const mono = getComputedStyle(de).getPropertyValue('--mono').trim() || 'VT323, monospace';
-  Object.assign(t.options, { theme: th, fontFamily: mono, fontSize: cfg.tfs || 18, lineHeight: 1.05, cursorBlink: true, cursorStyle: 'block', fontWeight: 'normal', fontWeightBold: 'normal' });
+  Object.assign(t.options, { theme: th, fontFamily: mono, fontSize: cfg.tfs || 18, lineHeight: 1.1, cursorBlink: true, cursorStyle: 'block', fontWeight: 'normal', fontWeightBold: 'normal' });
   /* метрики шрифта меряются при смене fontFamily — дождёмся загрузки VT323, потом подгоним размер */
   (d.fonts && d.fonts.load ? d.fonts.load(`${cfg.tfs || 18}px VT323`).catch(() => {}) : Promise.resolve()).then(() => {
     t.options.fontFamily = mono + ', monospace'; t.options.fontFamily = mono; fit();
