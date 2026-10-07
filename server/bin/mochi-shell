@@ -7,6 +7,11 @@ export TERM=xterm-256color LANG="${LANG:-C.UTF-8}"
 export PATH="$HOME/.local/bin:/opt/mochi/node/bin:$PATH" NPM_CONFIG_PREFIX="$HOME/.local"
 SH=$(command -v bash || echo /bin/sh)
 if command -v tmux >/dev/null 2>&1; then
-  exec tmux -u -f "$DIR/tmux.conf" new-session -A -s mochi "$SH" -l
+  # сокет tmux — не в /tmp: у служб он свой (PrivateTmp), а исполнителю агента нужен доступ к панели
+  # (путь unix-сокета ограничен ~100 байтами — для слишком длинного $HOME берём /tmp)
+  SOCK="$HOME/.local/state/mochi/tmux.sock"
+  [ ${#SOCK} -lt 100 ] || SOCK="${TMUX_TMPDIR:-/tmp}/mochi-tmux-$(id -u).sock"
+  mkdir -p "$HOME/.local/state/mochi" 2>/dev/null
+  MOCHI_SH="$SH" exec tmux -u -S "$SOCK" -f "$DIR/tmux.conf" new-session -A -s mochi "$DIR/mochi-pane"
 fi
 exec "$SH" -l

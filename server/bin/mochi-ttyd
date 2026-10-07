@@ -3,12 +3,13 @@
 #  -i  только unix-сокет (в сеть ttyd не смотрит вообще; сокет доступен группе mochi)
 #  -H  пускать лишь запросы с X-Mochi-User — его ставит сервер Мочи после проверки входа
 #  -O  WebSocket только с того же адреса (защита от подключения с чужого сайта)
+#  шрифт, размер и цвета здесь не задаём: их ставит страница Мочи по теме, а настройки ttyd
+#  приходят после подключения и перетёрли бы их
 #  -W  разрешить ввод;  -m 5  не больше 5 вкладок;  без -a: аргументы из URL не принимаются
 SOCK="${MOCHI_TTYD_SOCK:-/run/mochi-term/ttyd.sock}"
 TTYD="${MOCHI_TTYD_BIN:-/opt/mochi/bin/ttyd}"
 DIR=$(cd "$(dirname "$0")" && pwd)
 rm -f "$SOCK"
 exec "$TTYD" -i "$SOCK" -b /term -W -O -H X-Mochi-User -m 5 -P 20 \
-  -t rendererType=dom -t fontSize=15 -t disableLeaveAlert=true -t disableResizeOverlay=true -t titleFixed=Мочи \
-  -t 'theme={"background":"#1b1230","foreground":"#7dffb0","cursor":"#ff6b9d","cursorAccent":"#1b1230","selectionBackground":"#ff6b9d66"}' \
+  -t rendererType=dom -t disableLeaveAlert=true -t disableResizeOverlay=true -t titleFixed=Мочи \
   "$DIR/mochi-shell"
