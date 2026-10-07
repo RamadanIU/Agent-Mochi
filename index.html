@@ -495,6 +495,17 @@ $('#ask-i').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#ask').close
 $('#ask').addEventListener('click',e=>{if(e.target===$('#ask'))$('#ask').close('')});
 const PRESETS={OpenAI:'https://api.openai.com/v1',OpenRouter:'https://openrouter.ai/api/v1',Ollama:'http://localhost:11434/v1','LM Studio':'http://localhost:1234/v1'};
 const LOCAL=['Ollama','LM Studio'],CUSTOM='Другой',MEMS=[64,128,256,512,1024];
+/* API модели вызывается прямо из браузера, поэтому важен CORS. OpenAI, OpenRouter, Gemini, Groq, DeepSeek, Mistral, xAI, Together
+   отвечают на preflight сами. Anthropic пускает браузер только с особым заголовком. http-адрес в локальной сети (Ollama на другом ПК)
+   Chrome разрешает со страницы https лишь с targetAddressSpace. Ollama и LM Studio по умолчанию чужие сайты не пускают — см. corsHint */
+const apiUrl=b=>{try{return new URL(b)}catch(e){return null}};
+const lanHost=h=>/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(h)||/\.(local|lan|home\.arpa)$/i.test(h);
+const loopHost=h=>/^(localhost|127\.\d+\.\d+\.\d+|\[::1\])$/i.test(h);
+function apiInit(base,key,o){const u=apiUrl(base),h={...(o&&o.headers)};if(key)h.Authorization='Bearer '+key;
+  if(u&&/(^|\.)anthropic\.com$/i.test(u.hostname)){h['anthropic-dangerous-direct-browser-access']='true';h['anthropic-version']='2023-06-01'}
+  const r={...o,headers:h};if(u&&u.protocol==='http:'&&lanHost(u.hostname))r.targetAddressSpace='local';return r}
+function corsHint(base){const u=apiUrl(base);if(!u||!(loopHost(u.hostname)||lanHost(u.hostname)))return'';
+  return' Локальный сервер должен пускать этот сайт: Ollama — запусти с OLLAMA_ORIGINS='+location.origin+' (или *), LM Studio — включи «Enable CORS» в настройках сервера.'}
 const prov=$('#c-prov'),memSel=$('#c-mem');
 for(const k of [...Object.keys(PRESETS),CUSTOM])prov.add(new Option(k,k));
 const F={base:'#c-base',key:'#c-key',model:'#c-model',sys:'#c-sys',img:'#c-img'};
@@ -762,7 +773,7 @@ async function loadModels(){
   const base=$('#c-base').value.trim().replace(/\/+$/,''),key=$('#c-key').value.trim(),h=$('#mh'),t=++mt;
   if(!base){h.textContent='';delete h.dataset.s;return}h.textContent='Проверяю связь с моделью…';h.dataset.s='wait';
   try{
-    const r=await fetch(base+'/models',{headers:key?{Authorization:'Bearer '+key}:{}});
+    const r=await fetch(base+'/models',apiInit(base,key));
     if(!r.ok)throw new Error(r.status);
     const j=await r.json();if(t!==mt)return;
     const arr=Array.isArray(j)?j:Array.isArray(j&&j.data)?j.data:Array.isArray(j&&j.models)?j.models:null;if(!arr)throw new Error('format');
@@ -772,7 +783,7 @@ async function loadModels(){
     const cur=mi().value.trim();
     if(mdl.length&&(!cur||(cur===DEF.model&&!mdl.includes(cur))))mi().value=mdl[0];
   }catch(e){if(t!==mt)return;mdl=[];h.dataset.s='err';
-    h.textContent=/^40[13]$/.test(e.message)?'Ключ не подошёл (HTTP '+e.message+'). Проверь его':e.message==='format'||e instanceof SyntaxError?'Сервер ответил, но не списком моделей. Модель можно вписать вручную':e instanceof TypeError?'Сервер не отвечает или не пускает браузер (CORS). Модель можно вписать вручную':'Список моделей недоступен (HTTP '+e.message+'). Впиши модель вручную'}
+    h.textContent=/^40[13]$/.test(e.message)?'Ключ не подошёл (HTTP '+e.message+'). Проверь его':e.message==='format'||e instanceof SyntaxError?'Сервер ответил, но не списком моделей. Модель можно вписать вручную':e instanceof TypeError?'Сервер не отвечает или не пускает браузер (CORS).'+corsHint(base)+' Модель можно вписать вручную':'Список моделей недоступен (HTTP '+e.message+'). Впиши модель вручную'}
 }
 mi().oninput=mi().onfocus=showModels;
 $('#dlg').addEventListener('pointerdown',e=>{if(!e.target.closest('#ml,#c-model'))$('#ml').hidden=true});
@@ -1347,13 +1358,12 @@ async function loop(sig,g){
   for(let step=0;;step++){
     if(step>=MAXSTEPS)throw new Error('Мочи сделала '+MAXSTEPS+' шагов подряд и остановилась, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить.');
     think(true);const web=cfg.search?await mcpTools():[];chk();think(true);
-    const h={'Content-Type':'application/json'};if(cfg.key)h.Authorization='Bearer '+cfg.key;
     const msgs=wire(),hasM=msgs.some(m=>Array.isArray(m.content));
     const sys=cfg.sys+'\nСегодня '+new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'})+'.'
       +(web.length?'\nУ тебя есть поиск в интернете (web_search, web_fetch): используй его для новостей, свежих данных и всего, что могло измениться; на простые вопросы отвечай сразу. Источники называй по имени сайта, без длинных ссылок.':'')
       +'\n'+netPrompt()+' Файлы пользователя загружаются в /mnt/inbox (точные пути указаны в его сообщении). Чтобы отдать файл пользователю, создай его (лучше в /mnt/outbox) и вызови send_file — в чате появится кнопка «Скачать»; не выводи содержимое файлов текстом вместо этого. Несколько файлов упаковывай в архив. Имена с пробелами бери в кавычки.'+(hasM?'\nКартинки и PDF из сообщений пользователя ты видишь напрямую, без инструментов; те же файлы лежат в Linux (/mnt/inbox), если их нужно обработать.':'');
-    const r=await fetch(cfg.base+'/chat/completions',{method:'POST',headers:h,signal:sig,
-      body:JSON.stringify({model:cfg.model,messages:[{role:'system',content:sys},...msgs],tools:[RUN_TOOL,SEND_TOOL,...web],stream:true})});
+    const r=await fetch(cfg.base+'/chat/completions',apiInit(cfg.base,cfg.key,{method:'POST',headers:{'Content-Type':'application/json'},signal:sig,
+      body:JSON.stringify({model:cfg.model,messages:[{role:'system',content:sys},...msgs],tools:[RUN_TOOL,SEND_TOOL,...web],stream:true})}));
     if(!r.ok){const et=(await r.text().catch(()=>'')).slice(0,300);chk();
       if(hasM&&[400,404,413,415,422].includes(r.status)){
         const pdf=msgs.some(m=>Array.isArray(m.content)&&m.content.some(p=>p.type==='file')),lv=pdf&&(noVis.get(vk())||0)<1?1:2;noVis.set(vk(),lv);
@@ -1434,7 +1444,7 @@ function friendly(e){const s=e.status;let m;
   else if(s===404)m='Не нашла модель или адрес API (HTTP 404). Проверь их в настройках.';
   else if(s===429)m='Слишком много запросов или на счёте кончились деньги (HTTP 429). Подожди минутку и повтори.';
   else if(s>=500)m='У сервера модели что-то сломалось (HTTP '+s+'). Повтори чуть позже.';
-  else if(e instanceof TypeError)m='Не достучалась до модели ('+esc(e.message)+'). Проверь адрес API, ключ и CORS в настройках.';
+  else if(e instanceof TypeError)m='Не достучалась до модели ('+esc(e.message)+'). Проверь адрес API, ключ и CORS в настройках.'+esc(corsHint(cfg.base));
   else m=esc(e.message);
   return m+(e.detail?'<small class="ed">'+esc(String(e.detail).slice(0,220))+'</small>':'')
    +'<div class="ea"><button class="pbtn sm" data-act="retry"><i class="pi"></i><span>Повторить</span></button><button class="pbtn sm" data-act="set"><i class="pi"></i><span>Настройки</span></button></div>'}
