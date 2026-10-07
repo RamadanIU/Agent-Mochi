@@ -2,7 +2,7 @@
 # ┌──────────────────────────────────────────────────────────────────────────┐
 # │  Мочи — облачный агент. Установка на сервер одной командой:              │
 # │                                                                          │
-# │  curl -fsSL https://raw.githubusercontent.com/RamadanIU/Agent-Mochi/main/install.sh | sudo bash
+# │  curl -fsSL https://raw.githubusercontent.com/RamadanIU/Agent-Mochi/HEAD/install.sh | sudo bash
 # │                                                                          │
 # │  Свой домен:   … | sudo bash -s -- --domain mochi.example.com            │
 # │  Без HTTPS (только через SSH-туннель):  … | sudo bash -s -- --no-tls     │
@@ -15,7 +15,7 @@ set -Eeuo pipefail
 umask 022  # всё создаваемое — не доступно на запись чужим (окружение может прийти с umask 000)
 
 REPO="${MOCHI_REPO:-RamadanIU/Agent-Mochi}"
-REF="${MOCHI_REF:-main}"
+REF="${MOCHI_REF:-HEAD}"  # HEAD = основная ветка репозитория, как бы она ни называлась
 PREFIX=/opt/mochi
 STATE=/var/lib/mochi
 ETC=/etc/mochi

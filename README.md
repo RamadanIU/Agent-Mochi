@@ -17,7 +17,7 @@
 ## Установка на сервер — одна команда
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/RamadanIU/Agent-Mochi/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/RamadanIU/Agent-Mochi/HEAD/install.sh | sudo bash
 ```
 
 Установщик сам:
@@ -38,7 +38,7 @@ curl -fsSL https://raw.githubusercontent.com/RamadanIU/Agent-Mochi/main/install.
 ### Параметры
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/RamadanIU/Agent-Mochi/main/install.sh | sudo bash -s -- --domain mochi.example.com --email me@example.com
+curl -fsSL https://raw.githubusercontent.com/RamadanIU/Agent-Mochi/HEAD/install.sh | sudo bash -s -- --domain mochi.example.com --email me@example.com
 ```
 
 | Параметр | Что делает |
