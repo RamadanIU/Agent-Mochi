@@ -3,6 +3,7 @@
 import net from 'node:net';
 import { CFG } from './config.js';
 import { execCommand, spawnProcess, sysInfo } from './runner.js';
+import { fileOp } from './fileops.js';
 
 let conn = null, buf = '', seq = 0;
 const wait = new Map(), subs = new Map();
@@ -55,6 +56,15 @@ export async function runCmd(opts, signal) {
   }
   const m = await call({ op: 'exec', ...opts }, signal);
   if (m.op === 'lost') return { out: '[связь с исполнителем оборвалась: служба mochi-runner перезапускалась]', code: -1, cwd: opts.cwd, lost: true };
+  return m;
+}
+
+/* файловая операция от имени агента → {text | err, real, sig, …} (см. fileops.js) */
+export async function fileCmd(opts, signal) {
+  if (CFG.runnerSock === 'inline') return fileOp(opts);
+  let m;
+  try { m = await call({ ...opts, op: 'file' }, signal); } catch (e) { return { err: e.message }; }
+  if (m.op === 'lost') return { err: 'связь с исполнителем оборвалась (служба mochi-runner перезапускалась) — повтори' };
   return m;
 }
 

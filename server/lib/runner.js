@@ -5,6 +5,7 @@
      → {id, op:'info'}                      ← {id, op:'info', ...}
      → {id, op:'spawn', cmd, cwd, env}      ← {id, op:'line', line}…  ← {id, op:'exit', code, err}
      → {id, op:'write', data}               (долгий процесс со stdin/stdout — stdio-серверы MCP)
+     → {id, op:'file', fop, path, cwd, …}  ← {id, op:'file', text | err, real, sig, …}   (read_file / edit_file / write_file)
    Каждая команда — новый bash: текущая папка сохраняется между вызовами (её возвращаем), stdin — /dev/null.
    Прерывание/таймаут убивают всю группу процессов. */
 import { spawn, execFileSync } from 'node:child_process';
@@ -14,6 +15,7 @@ import net from 'node:net';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
+import { fileOp } from './fileops.js';
 
 const SHELL = ['/bin/bash', '/usr/bin/bash'].find(p => fs.existsSync(p)) || '/bin/sh';
 const SCRIPT = `trap 'pwd >"$MOCHI_CWDF" 2>/dev/null' EXIT
@@ -155,7 +157,7 @@ export function startRunner(sock) {
     const send = o => { if (!conn.destroyed) conn.write(JSON.stringify(o) + '\n'); };
     conn.on('data', d => {
       buf += d.toString('utf8');
-      if (buf.length > 4 * 2 ** 20) { conn.destroy(); return; }
+      if (buf.length > 32 * 2 ** 20) { conn.destroy(); return; }
       let i;
       while ((i = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, i); buf = buf.slice(i + 1);
@@ -164,6 +166,8 @@ export function startRunner(sock) {
           jobs.set(m.id, execCommand(m, r => { jobs.delete(m.id); send({ id: m.id, op: 'done', ...r }); }));
         } else if (m.op === 'spawn' && !jobs.has(m.id)) {
           jobs.set(m.id, spawnProcess(m, line => send({ id: m.id, op: 'line', line }), (code, err) => { jobs.delete(m.id); send({ id: m.id, op: 'exit', code, err }); }));
+        } else if (m.op === 'file') {
+          fileOp(m).then(r => send({ ...r, id: m.id, op: 'file' }), e => send({ id: m.id, op: 'file', err: e.message }));
         } else if (m.op === 'write') jobs.get(m.id)?.write?.(m.data);
         else if (m.op === 'kill') jobs.get(m.id)?.kill();
         else if (m.op === 'info') send({ id: m.id, op: 'info', ...sysInfo() });
