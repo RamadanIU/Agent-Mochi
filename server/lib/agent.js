@@ -10,6 +10,7 @@ import { Doc, ensureDir, rid, writeJSONSync, readJSON } from './store.js';
 import { runCmd, fileCmd, agentInfo } from './runner-client.js';
 import { userDir, pullFile, storeFile, sz } from './files.js';
 import { webTools, webCall } from './mcp.js';
+import { apiFetch, isCfBlock } from './net.js';
 import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens } from './ext.js';
 
 export const DEF_SYS = 'Тебя зовут Мочи — ты милый пиксельный зверёк-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. В поле action кратко и по-человечески пиши, что делаешь. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
@@ -99,8 +100,10 @@ function labelFor(n, a) {
   return String(s).slice(0, 80);
 }
 
+export const CF_BLOCK = 'Это не ключ: Cloudflare перед API модели не пускает запросы с этого сервера (HTTP 403 «Access denied by security policy»). Обычно помогает curl — проверь, что он установлен на сервере (curl --version), и перезапусти Мочи.';
 export function friendly(e) {
   const s = e.status;
+  if (isCfBlock(s, e.detail)) return CF_BLOCK;
   if (s === 401 || s === 403) return 'Ключ API не подошёл (HTTP ' + s + '). Проверь его в настройках.';
   if (s === 402) return 'На счёте нет денег для этой модели (HTTP 402). Пополни баланс или выбери бесплатную модель (у OpenRouter — с «:free» в конце).';
   if (s === 404) return 'Не нашла модель или адрес API (HTTP 404). Проверь их в настройках.';
@@ -418,7 +421,7 @@ export class Chat extends EventEmitter {
       const poke = () => { clearTimeout(it); it = setTimeout(() => idle.abort(), 180000); };
       const signal = AbortSignal.any([sig, idle.signal]);
       try {
-        const r = await fetch(S.base.replace(/\/+$/, '') + '/chat/completions', { method: 'POST', headers: h, signal,
+        const r = await apiFetch(S.base.replace(/\/+$/, '') + '/chat/completions', { method: 'POST', headers: h, signal,
           body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: sys }, ...msgs], ...(tools.length ? { tools } : {}), stream: true }) });
         if (!r.ok) {
           const et = (await r.text().catch(() => '')).slice(0, 300);

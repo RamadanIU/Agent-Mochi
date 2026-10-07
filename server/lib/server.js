@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { CFG } from './config.js';
 import { ensureDir, flushAll } from './store.js';
 import * as A from './auth.js';
-import { getChat, resumeAll, DEF_SETTINGS, toolCatalog, setTools } from './agent.js';
+import { getChat, resumeAll, DEF_SETTINGS, toolCatalog, setTools, CF_BLOCK } from './agent.js';
+import { apiFetch, isCfBlock } from './net.js';
 import * as X from './ext.js';
 import { putInbox, storeCopy, getFile, dropFiles, userDir, safeName } from './files.js';
 import * as TG from './telegram.js';
@@ -146,8 +147,9 @@ async function models(c, b) {
   const base = String(b.base || S.base).trim().replace(/\/+$/, '');
   if (!/^https?:\/\//i.test(base)) throw new HttpErr(400, 'неверный адрес API');
   const key = String(b.key || '').trim() || (base === S.base ? S.key : '');
-  const r = await fetch(base + '/models', { headers: key ? { Authorization: 'Bearer ' + key } : {}, signal: AbortSignal.timeout(15000) })
+  const r = await apiFetch(base + '/models', { headers: key ? { Authorization: 'Bearer ' + key } : {}, signal: AbortSignal.timeout(15000) })
     .catch(e => { throw new HttpErr(502, 'сервер модели не отвечает: ' + (e.cause?.code || e.message)); });
+  if (r.status === 403 && isCfBlock(403, await r.clone().text().catch(() => ''))) throw new HttpErr(502, CF_BLOCK);
   if (!r.ok) throw new HttpErr(r.status === 401 || r.status === 403 ? r.status : 502, 'HTTP ' + r.status, { upstream: r.status });
   const j = await r.json().catch(() => null);
   const arr = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : Array.isArray(j?.models) ? j.models : null;
@@ -159,7 +161,7 @@ async function models(c, b) {
   /* /models у OpenRouter открыт всем — ключ проверяем отдельно; без купленных кредитов работают только модели «:free» (иначе 402) */
   let free = null;
   if (key && /(^|\.)openrouter\.ai$/i.test(new URL(base).hostname)) {
-    const k = await fetch(base + '/key', { headers: { Authorization: 'Bearer ' + key }, signal: AbortSignal.timeout(15000) }).catch(() => null);
+    const k = await apiFetch(base + '/key', { headers: { Authorization: 'Bearer ' + key }, signal: AbortSignal.timeout(15000) }).catch(() => null);
     if (k && (k.status === 401 || k.status === 403)) throw new HttpErr(k.status, 'HTTP ' + k.status, { upstream: k.status });
     const d = k && k.ok ? (await k.json().catch(() => null))?.data : null;
     if (d?.is_free_tier) {
