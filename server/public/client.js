@@ -330,6 +330,7 @@ loadModels = async function () {
   } catch (e) {
     if (t !== mt) return; mdl = []; h.dataset.s = 'err';
     const u = e.j && e.j.upstream;
+    if ((e.status === 401 || e.status === 403 || u === 401 || u === 403) && !key && !(srvSet && srvSet.hasKey && String(srvSet.base || '').replace(/\/+$/, '') === base)) { h.textContent = 'Вставь API ключ — после этого загружу список моделей'; delete h.dataset.s; return; }
     h.textContent = e.status === 401 || e.status === 403 || u === 401 || u === 403 ? 'Ключ не подошёл. Проверь его' : e.message === 'format' ? 'Сервер ответил, но не списком моделей. Модель можно вписать вручную' : 'Список моделей недоступен (' + e.message + '). Впиши модель вручную';
   }
 };

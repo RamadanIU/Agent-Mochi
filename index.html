@@ -796,11 +796,13 @@ async function loadModels(){
     const cur=mi().value.trim();
     if(mdl.length&&(!cur||(cur===DEF.model&&!mdl.includes(cur))||(ki&&ki.free&&!isFree(cur))))mi().value=pickModel(mdl);
   }catch(e){if(t!==mt)return;mdl=[];h.dataset.s='err';
+    if(/^40[13]$/.test(e.message)&&!key){h.textContent='Вставь API ключ — после этого загружу список моделей';delete h.dataset.s;return}
     h.textContent=/^40[13]$/.test(e.message)?'Ключ не подошёл (HTTP '+e.message+'). Проверь его':e.message==='format'||e instanceof SyntaxError?'Сервер ответил, но не списком моделей. Модель можно вписать вручную':e instanceof TypeError?'Сервер не отвечает или не пускает браузер (CORS).'+corsHint(base)+' Модель можно вписать вручную':'Список моделей недоступен (HTTP '+e.message+'). Впиши модель вручную'}
 }
 mi().oninput=mi().onfocus=showModels;
 $('#dlg').addEventListener('pointerdown',e=>{if(!e.target.closest('#ml,#c-model'))$('#ml').hidden=true});
-['#c-base','#c-key'].forEach(q=>$(q).onchange=()=>{clearTimeout(md_t);md_t=setTimeout(loadModels,300)});
+/* проверяем заново, как только ключ или адрес вставили/дописали — не дожидаясь ухода фокуса с поля */
+['#c-base','#c-key'].forEach(q=>$(q).oninput=$(q).onchange=()=>{clearTimeout(md_t);md_t=setTimeout(loadModels,500)});
 
 /* BIOS встроен в файл: меньше внешних загрузок */
 const b64=t=>Uint8Array.from(atob(t),c=>c.charCodeAt(0)).buffer;
