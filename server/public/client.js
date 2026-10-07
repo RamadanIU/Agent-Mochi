@@ -610,7 +610,13 @@ function ttyFrame() {
   if (tty) return tty;
   tty = document.createElement('iframe');
   tty.id = 'tty'; tty.title = 'Терминал сервера'; tty.setAttribute('allow', 'clipboard-read; clipboard-write');
-  tty.addEventListener('load', ttyLook);
+  /* до оформления не показываем (иначе мелькнёт серый xterm); после подключения ttyd присылает свои
+     настройки — оформление повторяем, чтобы оно точно осталось за нами */
+  tty.style.visibility = 'hidden';
+  tty.addEventListener('load', () => {
+    ttyLook(); setTimeout(ttyLook, 1000); setTimeout(ttyLook, 3000);
+    setTimeout(() => { tty.style.visibility = ''; }, 2500); /* xterm так и не появился (например, «Терминал не запущен») */
+  });
   tty.src = 'term/';
   $('#scr').insertBefore(tty, $('#tstat'));
   return tty;
@@ -657,6 +663,7 @@ html,body{background:transparent!important}
     d.head.append(st);
   }
   const th = ttyTheme();
+  tty.style.visibility = '';
   d.documentElement.style.setProperty('--glow', th.foreground + '8c');
   const mono = getComputedStyle(de).getPropertyValue('--mono').trim() || 'VT323, monospace';
   Object.assign(t.options, { theme: th, fontFamily: mono, fontSize: cfg.tfs || 18, lineHeight: 1.1, cursorBlink: true, cursorStyle: 'block', fontWeight: 'normal', fontWeightBold: 'normal' });
