@@ -152,7 +152,23 @@ async function models(c, b) {
   const j = await r.json().catch(() => null);
   const arr = Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : Array.isArray(j?.models) ? j.models : null;
   if (!arr) throw new HttpErr(502, 'format');
-  return arr.map(m => typeof m === 'string' ? m : m && (m.id || m.name || m.model)).filter(x => typeof x === 'string' && x).slice(0, 2000);
+  let ids = arr.map(m => typeof m === 'string' ? m : m && (m.id || m.name || m.model)).filter(x => typeof x === 'string' && x);
+  /* агент всегда шлёт инструменты: модели, которые про них не знают (OpenRouter это сообщает), отвечают 404 */
+  const tl = arr.filter(m => Array.isArray(m?.supported_parameters) && m.supported_parameters.includes('tools')).map(m => m.id);
+  if (tl.length) ids = tl;
+  /* /models у OpenRouter открыт всем — ключ проверяем отдельно; без купленных кредитов работают только модели «:free» (иначе 402) */
+  let free = null;
+  if (key && /(^|\.)openrouter\.ai$/i.test(new URL(base).hostname)) {
+    const k = await fetch(base + '/key', { headers: { Authorization: 'Bearer ' + key }, signal: AbortSignal.timeout(15000) }).catch(() => null);
+    if (k && (k.status === 401 || k.status === 403)) throw new HttpErr(k.status, 'HTTP ' + k.status, { upstream: k.status });
+    const d = k && k.ok ? (await k.json().catch(() => null))?.data : null;
+    if (d?.is_free_tier) {
+      free = { limit: d.free_model_daily_requests?.limit || 0 };
+      const fr = ids.filter(x => /:free$/i.test(x));
+      if (fr.length) ids = fr;
+    }
+  }
+  return { models: ids.slice(0, 2000), free };
 }
 
 /* ---------- маршруты ---------- */
@@ -207,7 +223,7 @@ async function api(req, res, url) {
       if (M === 'GET') return json(res, 200, pubSettings(chat));
       if (M === 'PUT') { putSettings(chat, await jbody(req)); return json(res, 200, pubSettings(chat)); }
       break;
-    case '/api/models': if (M === 'POST') return json(res, 200, { models: await models(chat, await jbody(req)) }); break;
+    case '/api/models': if (M === 'POST') return json(res, 200, await models(chat, await jbody(req))); break;
     case '/api/chat': {
       if (M !== 'POST') break;
       const b = await jbody(req, 40 * 2 ** 20);
