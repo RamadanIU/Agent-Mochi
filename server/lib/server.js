@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { CFG } from './config.js';
 import { ensureDir, flushAll } from './store.js';
 import * as A from './auth.js';
-import { getChat, resumeAll, DEF_SETTINGS } from './agent.js';
+import { getChat, resumeAll, DEF_SETTINGS, toolCatalog, setTools } from './agent.js';
+import * as X from './ext.js';
 import { putInbox, storeCopy, getFile, dropFiles, userDir, safeName } from './files.js';
 import * as TG from './telegram.js';
 import { TERM_PREFIX, proxyHttp, proxyUpgrade } from './term.js';
@@ -238,9 +239,44 @@ async function api(req, res, url) {
       if (M !== 'POST') break;
       if (!u.admin) throw new HttpErr(403, 'только для администратора');
       { const code = A.createInvite(u.name); return json(res, 200, { code, url: (CFG.publicUrl || 'https://' + req.headers.host) + '/?invite=' + code }); }
+    case '/api/tools':
+      if (M === 'GET') return json(res, 200, await toolCatalog(chat));
+      if (M === 'PUT') { const b = await jbody(req); setTools(chat, b.tools); return json(res, 200, await toolCatalog(chat)); }
+      break;
+    case '/api/mcp': {
+      if (M !== 'POST') break;
+      const name = X.mcpPut(u, await jbody(req));
+      let err = null;
+      try { await X.mcpRefresh(u, name); } catch (e) { err = e.message; }
+      return json(res, 200, { name, err });
+    }
+    case '/api/skills':
+      if (M === 'GET') return json(res, 200, { skills: await X.skillList(u), dir: X.skillsRoot(u) });
+      if (M === 'POST') return json(res, 200, { name: await X.skillWrite(u, await jbody(req, 256 * 1024)) });
+      break;
+    case '/api/skill-install':
+      if (M === 'POST') { const b = await jbody(req); return json(res, 200, { names: await X.skillInstall(u, b.url, b.name || undefined) }); }
+      break;
     case '/api/account':
       if (M === 'GET') return json(res, 200, { user: A.publicUser(u), sessions: A.sessionCount(u.id), work: userDir(u), invites: u.admin ? A.inviteCount() : undefined, users: u.admin ? A.listUsers().map(A.publicUser) : undefined });
       break;
+  }
+  const mm = p.match(/^\/api\/mcp\/([a-z0-9_-]{1,24})$/);
+  if (mm) {
+    if (M === 'POST') {
+      const b = await jbody(req);
+      X.mcpPatch(u, mm[1], b);
+      let err = null;
+      if (b.refresh) try { await X.mcpRefresh(u, mm[1]); } catch (e) { err = e.message; }
+      return json(res, 200, { ok: true, err });
+    }
+    if (M === 'DELETE') { X.mcpDel(u, mm[1]); return json(res, 200, { ok: true }); }
+  }
+  const sm = p.match(/^\/api\/skills\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})$/);
+  if (sm) {
+    if (M === 'GET') { const raw = await X.skillRaw(u, sm[1]); if (raw == null) throw new HttpErr(404, 'нет такого навыка'); return json(res, 200, { name: sm[1], raw }); }
+    if (M === 'POST') { await X.skillSet(u, sm[1], !!(await jbody(req)).on); return json(res, 200, { ok: true }); }
+    if (M === 'DELETE') { await X.skillDel(u, sm[1]); return json(res, 200, { ok: true }); }
   }
   const fm = p.match(/^\/api\/files\/([0-9a-f]{24})$/);
   if (fm && (M === 'GET' || M === 'HEAD')) {
@@ -308,7 +344,7 @@ async function admin(cmd) {
     case 'admin': { const u = A.userByName(a[0]); if (!u) throw new Error('нет такого пользователя'); u.admin = a[1] !== 'off'; return { ok: true, admin: u.admin }; }
     case 'deluser': {
       const u = A.userByName(a[0]); if (!u) throw new Error('нет такого пользователя');
-      getChat(u).clear(); TG.disconnect(u); A.deleteUser(u.id);
+      getChat(u).clear(); TG.disconnect(u); X.dropExt(u); A.deleteUser(u.id);
       await fsp.rm(path.join(CFG.data, 'users', u.id), { recursive: true, force: true });
       return { ok: true, note: 'рабочая папка ' + path.join(CFG.work, u.name) + ' оставлена' };
     }

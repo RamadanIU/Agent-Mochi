@@ -79,6 +79,20 @@ export async function pullFile(p, base) {
   } finally { await fh.close(); }
 }
 
+/* прочитать небольшой текстовый файл из рабочей папки (SKILL.md и т. п.) с той же проверкой пути; нет файла — null */
+export async function readWork(abs, max = 256 * 1024) {
+  let fh;
+  try { fh = await fsp.open(abs, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK); } catch { return null; }
+  try {
+    const real = fdPath(fh.fd) || abs, st = await fh.stat();
+    if (!inside(real, work()) || !st.isFile()) return null;
+    const b = Buffer.alloc(Math.min(st.size, max));
+    const { bytesRead } = await fh.read(b, 0, b.length, 0);
+    return b.subarray(0, bytesRead).toString('utf8');
+  } catch { return null; }
+  finally { await fh.close(); }
+}
+
 /* ---------- хранилище отданных/загруженных файлов пользователя ---------- */
 const idx = new Map();
 const index = u => {
