@@ -1,0 +1,24 @@
+name: Server tests
+
+on:
+  push:
+    paths: ['server/**', 'install.sh', 'index.html', 'sw.js', '.github/workflows/server.yml']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Тесты сервера
+        working-directory: server
+        run: npm test
+      - name: Проверка shell-скриптов
+        run: shellcheck -S warning install.sh server/bin/mochi-shell server/bin/mochi-ttyd

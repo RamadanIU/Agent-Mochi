@@ -443,6 +443,8 @@ dialog.ask{margin:auto;width:calc(100% - 32px);max-width:420px}
 
 <script>
 const $=s=>document.querySelector(s);
+/* режим сервера: страницу отдаёт сервер Мочи (server/), агент и Linux живут там — см. server/public/client.js */
+const SRV=!!document.querySelector('meta[name=mochi-server]');
 /* сеть: wisp — полноценный TCP (HTTPS, git); relay — запасной вариант. Порядок = приоритет */
 const DEF_RELAYS='wisps://wisp.mercurywork.shop/v86/\nwss://relay.widgetry.org/';
 const relayList=s=>[...new Set(String(s||'').split(/[\s,;]+/).map(x=>x.trim()).filter(x=>/^(wisps?|wss?):\/\/[^\s\/]+/i.test(x)).map(x=>x.replace(/^[a-z]+:/i,m=>m.toLowerCase())))];
@@ -1408,6 +1410,7 @@ async function loop(sig,g){
 }
 let upBusy=false,gen=0;
 async function submit(){
+  if(SRV)return window.srvSubmit&&srvSubmit();
   if(ctl){ctl.abort();return}
   if(upBusy)return;
   const i=$('#inp'),t=i.value.trim(),fs=staged.slice(),g0=gen;if(!t&&!fs.length)return;let up=[],ps=[];
@@ -1453,7 +1456,7 @@ $('#clr').onclick=async()=>{if((hist.length||ctl)&&!await ask('Очистить 
 
 welcome();tstat();
 new MutationObserver(ms=>ms.forEach(r=>r.addedNodes.forEach(n=>{const c=n.className||'';if(c==='m u')sfx('send');else if(c==='m e')sfx('err');else if(c==='fc')sfx('file')}))).observe($('#msgs'),{childList:true});
-boot();
+if(!SRV)boot();
 </script>
 <script>
 /* ---------- Мочи v8: пиксельный питомец 32×32, процедурная анимация (только наблюдает за UI, логику чата не трогает) ---------- */

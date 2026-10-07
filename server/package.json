@@ -1,0 +1,14 @@
+{
+  "name": "mochi-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Облачный агент Мочи: чат, фоновая работа на сервере, терминал ttyd и Telegram",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "bin": { "mochi": "mochi.js" },
+  "scripts": {
+    "start": "node mochi.js serve",
+    "dev": "MOCHI_DEV=1 MOCHI_DATA=./.dev/data MOCHI_WORK=./.dev/work node mochi.js serve",
+    "test": "node --test test/*.test.js"
+  }
+}

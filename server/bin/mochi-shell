@@ -1,0 +1,11 @@
+#!/bin/sh
+# Оболочка терминала Мочи (её запускает ttyd от имени mochi-agent).
+# tmux держит сессию: закрыл браузер — команды продолжают работать, вернулся — всё на месте.
+cd "$HOME" 2>/dev/null || cd /
+export TERM=xterm-256color LANG="${LANG:-C.UTF-8}"
+export PATH="$HOME/.local/bin:/opt/mochi/node/bin:$PATH" NPM_CONFIG_PREFIX="$HOME/.local"
+SH=$(command -v bash || echo /bin/sh)
+if command -v tmux >/dev/null 2>&1; then
+  exec tmux -u new-session -A -s mochi "$SH" -l
+fi
+exec "$SH" -l

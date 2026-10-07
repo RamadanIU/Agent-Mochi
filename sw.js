@@ -1,6 +1,7 @@
 /* Мочи: офлайн-кэш. Страница — «сначала сеть» (обновления приходят сразу),
-   движок v86 и ядро Linux — «сначала кэш» (качаются один раз). Запросы к модели не трогаем. */
-const V = 'mochi-v1';
+   движок v86 и ядро Linux — «сначала кэш» (качаются один раз). Запросы к модели не трогаем.
+   На сервере Мочи /api/, /term/ и /srv/ не кэшируются вовсе. */
+const V = 'mochi-v2';
 const CORE = ['./', './index.html', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-192.png', './icons/maskable-512.png'];
 const HEAVY = [/^https:\/\/cdn\.jsdelivr\.net\/npm\/v86@/, /^https:\/\/i\.copy\.sh\//];
@@ -20,6 +21,9 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+
+  /* режим сервера: API, поток событий и терминал — всегда напрямую */
+  if (url.origin === location.origin && /\/(api|term|srv)\//.test(url.pathname)) return;
 
   if (url.origin === location.origin) {
     e.respondWith(fetch(req).then(res => {

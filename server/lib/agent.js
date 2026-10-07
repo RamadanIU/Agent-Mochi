@@ -1,0 +1,399 @@
+/* Агент Мочи на сервере. Работа не зависит от браузера: чат только подписывается на события.
+   Состояние чата (история для модели + журнал для экрана) лежит на диске и переживает перезапуск сервера:
+   незаконченная задача после рестарта продолжается сама. */
+import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import path from 'node:path';
+import { CFG } from './config.js';
+import { Doc, ensureDir, rid, writeJSONSync, readJSON } from './store.js';
+import { runCmd, agentInfo } from './runner-client.js';
+import { userDir, pullFile, storeFile, sz } from './files.js';
+import { webTools, webCall } from './mcp.js';
+
+export const DEF_SYS = 'Тебя зовут Мочи — ты милый пиксельный зверёк-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. В поле action кратко и по-человечески пиши, что делаешь. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
+export const DEF_SETTINGS = { base: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', sys: DEF_SYS, search: true, vis: true };
+
+/* к модулю Telegram (он подключается сам, чтобы не было кольцевых импортов) */
+export const hooks = { tg: null };
+
+const RUN_TOOL = { type: 'function', function: { name: 'run_command', description: 'Выполнить shell-команду (bash) на Linux-сервере и получить вывод и код выхода. Каждый вызов — новая оболочка: текущая папка сохраняется, переменные окружения — нет.',
+  parameters: { type: 'object', properties: {
+    action: { type: 'string', description: 'Что ты делаешь сейчас — для пользователя: 2–6 слов на его языке, например «Проверяю версию ядра». Без команд и технических деталей.' },
+    command: { type: 'string', description: 'Команда' },
+    timeout: { type: 'number', description: 'Таймаут, сек (по умолчанию 120, максимум 3600). Для более долгого — запуск в фоне через nohup.' } }, required: ['action', 'command'] } } };
+const SEND_TOOL = { type: 'function', function: { name: 'send_file', description: 'Передать пользователю файл с сервера: в чате появится карточка с кнопкой «Скачать» (и файл придёт в Telegram, если он подключён и пользователь не в чате). Используй, когда результат — файл (документ, архив, картинка, таблица, скрипт), а не текст. Один вызов — один файл; несколько файлов упакуй в архив (tar czf). Файл должен лежать в рабочей папке.',
+  parameters: { type: 'object', properties: {
+    path: { type: 'string', description: 'Путь к файлу (абсолютный или относительно текущей папки), например outbox/report.pdf' },
+    name: { type: 'string', description: 'Имя файла для пользователя (необязательно)' },
+    note: { type: 'string', description: 'Короткая подпись на языке пользователя (необязательно)' } }, required: ['path'] } } };
+export const TG_TOOLS = [
+  { type: 'function', function: { name: 'telegram_connect', description: 'Подключить Telegram-бота для управления Мочи и уведомлений. Нужен токен бота от @BotFather. Возвращает ссылку, по которой пользователь привязывает свой Telegram (её обязательно передай пользователю).',
+    parameters: { type: 'object', properties: { token: { type: 'string', description: 'Токен бота вида 123456789:AA…' } }, required: ['token'] } } },
+  { type: 'function', function: { name: 'telegram_status', description: 'Узнать, подключён ли Telegram: имя бота, привязан ли чат пользователя, режим уведомлений. Может выдать новую ссылку для привязки.',
+    parameters: { type: 'object', properties: { new_link: { type: 'boolean', description: 'true — выдать новую ссылку привязки' } } } } },
+  { type: 'function', function: { name: 'telegram_send', description: 'Отправить пользователю сообщение в Telegram (если бот подключён и привязан). Используй, когда пользователь просил уведомить его или прислать что-то в Telegram.',
+    parameters: { type: 'object', properties: { text: { type: 'string', description: 'Текст сообщения' } }, required: ['text'] } } },
+  { type: 'function', function: { name: 'telegram_notify_mode', description: 'Настроить, когда Мочи пишет в Telegram о завершении задач: away — только если пользователь не смотрит чат, always — всегда, off — никогда.',
+    parameters: { type: 'object', properties: { mode: { type: 'string', enum: ['away', 'always', 'off'] } }, required: ['mode'] } } },
+  { type: 'function', function: { name: 'telegram_disconnect', description: 'Отключить Telegram-бота от Мочи.', parameters: { type: 'object', properties: {} } } },
+];
+
+const sleep = (ms, sig) => new Promise(ok => { const t = setTimeout(ok, ms); sig?.addEventListener('abort', () => { clearTimeout(t); ok(); }, { once: true }); });
+const abortErr = () => Object.assign(new Error('остановлено'), { name: 'AbortError' });
+
+function labelFor(n, a) {
+  let s;
+  if (n === 'run_command') s = a.action || 'Работаю на сервере';
+  else if (n === 'send_file') s = 'Отправляю файл: ' + (a.name || String(a.path || '').split('/').pop());
+  else if (n === 'web_search') { const q = Array.isArray(a.search_queries) ? a.search_queries[0] : a.objective; s = 'Ищу в интернете' + (q ? ': ' + q : ''); }
+  else if (n === 'web_fetch') { let h = ''; try { h = new URL([].concat(a.urls || [])[0]).hostname.replace(/^www\./, ''); } catch {} s = 'Читаю страницу' + (h ? ': ' + h : ''); }
+  else if (n === 'telegram_connect') s = 'Подключаю Telegram';
+  else if (n === 'telegram_send') s = 'Пишу в Telegram';
+  else if (n.startsWith('telegram_')) s = 'Настраиваю Telegram';
+  else s = n;
+  return String(s).slice(0, 80);
+}
+
+export function friendly(e) {
+  const s = e.status;
+  if (s === 401 || s === 403) return 'Ключ API не подошёл (HTTP ' + s + '). Проверь его в настройках.';
+  if (s === 404) return 'Не нашла модель или адрес API (HTTP 404). Проверь их в настройках.';
+  if (s === 429) return 'Слишком много запросов или на счёте кончились деньги (HTTP 429). Подожди минутку и повтори.';
+  if (s >= 500) return 'У сервера модели что-то сломалось (HTTP ' + s + '). Повтори чуть позже.';
+  return e.message || 'ошибка';
+}
+
+const chats = new Map();
+export function getChat(u) {
+  if (!chats.has(u.id)) chats.set(u.id, new Chat(u));
+  return chats.get(u.id);
+}
+export const allChats = () => chats.values();
+
+export class Chat extends EventEmitter {
+  constructor(u) {
+    super();
+    this.setMaxListeners(50);
+    this.u = u;
+    this.dir = path.join(CFG.data, 'users', u.id);
+    ensureDir(this.dir);
+    this.doc = new Doc(path.join(this.dir, 'chat.json'), { hist: [], log: [], seq: 0, run: null, cwd: null, sess: rid(16) });
+    this.set = new Doc(path.join(this.dir, 'settings.json'), () => ({ ...DEF_SETTINGS }));
+    this.clients = new Set();
+    this.ctl = null; this.partial = ''; this.gen = 0; this.noVis = 0;
+  }
+  get running() { return !!this.ctl; }
+  get away() { return this.clients.size === 0; }
+  settings() { return { ...DEF_SETTINGS, ...this.set.v }; }
+  runState() {
+    const r = this.doc.v.run;
+    return { running: this.running, ...(r ? { origin: r.origin, t: r.t, steps: r.steps } : {}) };
+  }
+  snapshot() { return { log: this.doc.v.log, seq: this.doc.v.seq, partial: this.partial, ...this.runState() }; }
+
+  /* ---------- журнал для экрана ---------- */
+  push(e) {
+    const L = this.doc.v.log;
+    e = { ...e, seq: ++this.doc.v.seq, t: Date.now() };
+    L.push(e);
+    if (L.length > 400) L.splice(0, L.length - 400);
+    this.doc.save();
+    this.emit('log', e);
+    return e;
+  }
+  update(e) { e.u = Date.now(); this.doc.save(); this.emit('log', e); }
+
+  /* ---------- вложения (картинки/PDF для модели) хранятся отдельными файлами ---------- */
+  partsFile(id) { return path.join(this.dir, 'parts', id + '.json'); }
+  saveParts(parts) { const id = rid(8); ensureDir(path.join(this.dir, 'parts')); writeJSONSync(this.partsFile(id), parts); return id; }
+  loadParts(id) { return readJSON(this.partsFile(id), []); }
+  dropParts(msgs) { for (const m of msgs) if (m._pf) fs.rm(this.partsFile(m._pf), { force: true }, () => {}); }
+
+  /* в запрос уходят вложения трёх последних сообщений с файлами; уровень отката: 1 — без PDF, 2 — без всего */
+  wire() {
+    const H = this.doc.v.hist, lvl = this.settings().vis === false ? 2 : this.noVis;
+    const rec = new Set(H.map((m, i) => m._pf ? i : -1).filter(i => i >= 0).slice(-3));
+    const us = H.map((m, i) => m.role === 'user' ? i : -1).filter(i => i >= 0), from = us.length > 40 ? us[us.length - 40] : 0;
+    const out = [];
+    for (let i = from; i < H.length; i++) {
+      const { _pf, ...m } = H[i];
+      if (_pf && lvl < 2 && rec.has(i)) {
+        const ps = this.loadParts(_pf).filter(p => lvl < 1 || p.type === 'image_url');
+        if (ps.length) m.content = [{ type: 'text', text: m.content }, ...ps];
+      }
+      out.push(m);
+    }
+    return out;
+  }
+  hasPdf() { return this.wire().some(m => Array.isArray(m.content) && m.content.some(p => p.type === 'file')); }
+
+  trimHist() {
+    const H = this.doc.v.hist, us = H.map((m, i) => m.role === 'user' ? i : -1).filter(i => i >= 0);
+    if (us.length > 80) { const cut = us[us.length - 60]; this.dropParts(H.slice(0, cut)); H.splice(0, cut); }
+  }
+
+  /* незакрытые вызовы инструментов получают ответ, иначе модель не примет историю */
+  repair(why = 'Прервано пользователем') {
+    const H = this.doc.v.hist;
+    let i = H.length - 1; while (i >= 0 && H[i].role === 'tool') i--;
+    const a = H[i];
+    if (a && a.tool_calls) {
+      const got = new Set(H.slice(i + 1).map(x => x.tool_call_id));
+      for (const c of a.tool_calls) if (!got.has(c.id)) H.push({ role: 'tool', tool_call_id: c.id, content: why });
+    }
+    for (const e of this.doc.v.log) if (e.kind === 'tool' && e.state === 'run') e.state = 'bad';
+    this.doc.save();
+  }
+
+  /* ---------- управление ---------- */
+  submit({ text = '', files = [], parts = [], origin = 'web' }) {
+    if (this.running) throw Object.assign(new Error('Мочи ещё работает над прошлой задачей'), { status: 409 });
+    text = String(text).slice(0, 100000);
+    if (!text.trim() && !files.length) throw Object.assign(new Error('пустое сообщение'), { status: 400 });
+    const content = (text.trim() || 'Файлы во вложении.') + (files.length
+      ? '\n\n[Пользователь загрузил файлы на сервер:\n' + files.map(f => '- ' + f.path + ' (' + sz(f.size) + ')').join('\n') + ']' : '');
+    const m = { role: 'user', content };
+    if (parts.length) m._pf = this.saveParts(parts);
+    this.doc.v.hist.push(m);
+    this.trimHist();
+    this.push({ kind: 'user', text, origin, files: files.map(f => ({ name: f.name, size: f.size, fid: f.fid || null })) });
+    this.start(origin);
+  }
+
+  retry(origin = 'web') {
+    if (this.running) throw Object.assign(new Error('Мочи уже работает'), { status: 409 });
+    const H = this.doc.v.hist, last = H[H.length - 1];
+    if (!last || last.role === 'assistant') throw Object.assign(new Error('нечего повторять'), { status: 400 });
+    this.start(origin);
+  }
+
+  stop() { this.ctl?.abort(); }
+
+  clear() {
+    this.gen++;
+    this.ctl?.abort(); this.ctl = null; this.partial = '';
+    this.dropParts(this.doc.v.hist);
+    Object.assign(this.doc.v, { hist: [], log: [], run: null, sess: rid(16) });
+    this.doc.save();
+    this.emit('reset');
+    this.emit('run', this.runState());
+  }
+
+  async start(origin, resumed) {
+    const g = this.gen, ctl = new AbortController();
+    this.ctl = ctl; this.partial = '';
+    this.doc.v.run = resumed && this.doc.v.run ? this.doc.v.run : { origin, t: Date.now(), steps: 0 };
+    this.doc.save();
+    const run = this.doc.v.run;
+    this.emit('run', this.runState());
+    let text = '', err = null;
+    try { text = await this.loop(ctl.signal, g); }
+    catch (e) { if (!ctl.signal.aborted) err = e; }
+    if (g !== this.gen) return; /* чат очистили — старая задача молча уходит */
+    if (ctl.signal.aborted && this.partial.trim()) {
+      /* остановили посреди ответа — то, что модель успела написать, оставляем */
+      this.doc.v.hist.push({ role: 'assistant', content: this.partial });
+      this.push({ kind: 'assistant', text: this.partial });
+    }
+    this.partial = '';
+    this.repair(err ? 'Прервано: ' + friendly(err) : 'Прервано пользователем');
+    if (err) { console.warn('agent:', this.u.name, err.message); this.push({ kind: 'error', text: friendly(err), detail: err.detail || '', retry: true }); }
+    else if (ctl.signal.aborted) this.push({ kind: 'note', text: 'Остановлено' });
+    this.doc.v.run = null; this.doc.save();
+    this.ctl = null;
+    this.emit('run', this.runState());
+    this.emit('done', { origin: run.origin, text, err, stopped: ctl.signal.aborted && !err, steps: run.steps, ms: Date.now() - run.t });
+  }
+
+  async system(webOn) {
+    const S = this.settings(), I = await agentInfo(), dir = userDir(this.u), now = new Date();
+    const tg = hooks.tg?.statusLine(this.u) || 'Telegram не подключён.';
+    const pkg = I.sudo
+      ? `Есть sudo без пароля; пакеты: sudo ${I.pm === 'apt-get' ? 'apt-get install -y' : I.pm === 'apk' ? 'apk add' : I.pm === 'pacman' ? 'pacman -S --noconfirm' : I.pm === 'zypper' ? 'zypper -n install' : (I.pm || 'dnf') + ' install -y'} …`
+      : 'Прав root и sudo нет: системные пакеты ставить нельзя. Инструменты ставь к себе: python3 -m venv ~/venv && ~/venv/bin/pip install …, npm install -g … (префикс ~/.local), бинарники — в ~/.local/bin.';
+    return S.sys
+      + `\nСегодня ${now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}, время сервера ${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}.`
+      + `\nСервер: ${I.os}, ядро ${I.kernel}, ${I.arch}, ${I.cpus || '?'} CPU, ${I.mem || '?'} МБ RAM. Ты работаешь как пользователь ${I.user}. ${pkg} Установлено: ${(I.tools || []).join(', ') || '—'}, node.`
+      + `\nРабочая папка пользователя: ${dir} (inbox/ — файлы от пользователя, outbox/ — для файлов пользователю). Задачи выполняются на сервере в фоне: пользователь может закрыть браузер, работа продолжится, а результат он увидит в чате. Долгие процессы (серверы, длинные загрузки, сборки дольше часа) запускай в фоне: nohup команда > файл.log 2>&1 & — и проверяй позже. Команды, ждущие ввода, не работают (stdin пустой): используй флаги -y и т. п.`
+      + ' Чтобы отдать файл пользователю, создай его (лучше в outbox/) и вызови send_file; не выводи содержимое файлов текстом вместо этого. Имена с пробелами бери в кавычки.'
+      + (webOn ? '\nУ тебя есть поиск в интернете (web_search, web_fetch): используй его для новостей, свежих данных и всего, что могло измениться; на простые вопросы отвечай сразу. Источники называй по имени сайта.' : '')
+      + '\n' + tg + ' Если пользователь хочет управлять тобой из Telegram или получать уведомления: попроси создать бота у @BotFather (команда /newbot) и прислать токен, затем вызови telegram_connect и дай пользователю ссылку из ответа.'
+      + (this.wire().some(m => Array.isArray(m.content)) ? '\nКартинки и PDF из сообщений пользователя ты видишь напрямую; те же файлы лежат в inbox/, если их нужно обработать.' : '');
+  }
+
+  /* ---------- цикл агента ---------- */
+  async loop(sig, g) {
+    const chk = () => { if (sig.aborted || g !== this.gen) throw abortErr(); };
+    const H = this.doc.v.hist, run = this.doc.v.run;
+    for (;;) {
+      if (run.steps >= CFG.maxSteps) throw new Error('Мочи сделала ' + CFG.maxSteps + ' шагов подряд и остановилась, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить.');
+      run.steps++;
+      const S = this.settings();
+      const web = S.search ? await webTools() : []; chk();
+      const tools = [RUN_TOOL, SEND_TOOL, ...TG_TOOLS, ...web];
+      const { text, calls } = await this.callModel(await this.system(web.length > 0), tools, sig); chk();
+      H.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}) });
+      this.partial = '';
+      if (text) this.push({ kind: 'assistant', text });
+      this.doc.save();
+      if (!calls.length) return text;
+      for (const tc of calls) {
+        let a = {}, bad = false;
+        try { a = JSON.parse(tc.function.arguments || '{}') || {}; } catch { bad = true; }
+        if (typeof a !== 'object' || Array.isArray(a)) { a = {}; bad = true; }
+        const nm = tc.function.name;
+        const e = this.push({ kind: 'tool', name: nm, label: labelFor(nm, a), hint: nm === 'run_command' ? String(a.command || '').slice(0, 2000) : '', state: 'run' });
+        this.emit('tool', e);
+        let out;
+        try {
+          out = bad ? 'Ошибка: аргументы вызова — невалидный JSON (возможно, обрезаны). Повтори вызов с корректным JSON, длинное содержимое раздели на части.'
+            : await this.tool(nm, a, sig, web, tc);
+        } catch (x) { if (sig.aborted || g !== this.gen) throw abortErr(); out = 'Ошибка: ' + x.message; }
+        if (g !== this.gen) throw abortErr();
+        out = String(out);
+        e.state = /^Ошибка|\[таймаут|\[прервано|\[не выполнено/.test(out) ? 'bad' : 'ok';
+        this.update(e);
+        H.push({ role: 'tool', tool_call_id: tc.id, content: out });
+        this.doc.save();
+        chk();
+      }
+    }
+  }
+
+  async tool(nm, a, sig, web) {
+    if (nm === 'run_command') {
+      if (!a.command) return 'Ошибка: нет параметра command';
+      const r = await runCmd({ cmd: String(a.command), cwd: this.doc.v.cwd || userDir(this.u), timeout: a.timeout }, sig);
+      if (r.cwd) this.doc.v.cwd = r.cwd;
+      const note = r.killed ? '[прервано пользователем]' : r.timedOut ? '[таймаут: команда работала дольше ' + Math.min(Math.max(+a.timeout || 120, 1), 3600) + ' с и была прервана. Повтори с большим timeout или запусти в фоне через nohup]' : '';
+      return (r.out || '(нет вывода)') + '\n[код выхода: ' + r.code + ']' + (note ? '\n' + note : '');
+    }
+    if (nm === 'send_file') {
+      const f = await pullFile(a.path, this.doc.v.cwd || userDir(this.u));
+      const name = a.name ? String(a.name).replace(/[\\/]/g, '_').slice(0, 120) : f.name;
+      const st = await storeFile(this.u, name, f.data);
+      const note = a.note ? String(a.note).slice(0, 200) : '';
+      this.push({ kind: 'file', fid: st.fid, name: st.name, size: st.size, note });
+      this.emit('file', { name: st.name, data: f.data, note });
+      return 'Файл «' + st.name + '» (' + sz(st.size) + ') отправлен пользователю: в чате появилась кнопка «Скачать».';
+    }
+    if (nm.startsWith('telegram_')) {
+      if (!hooks.tg) return 'Ошибка: Telegram недоступен на этом сервере';
+      return await hooks.tg.tool(this, nm, a);
+    }
+    if (web.some(t => t.function.name === nm)) return await webCall(nm, a, { signal: sig, session: this.doc.v.sess, model: this.settings().model });
+    return 'Ошибка: неизвестный инструмент ' + nm;
+  }
+
+  async callModel(sys, tools, sig) {
+    const S = this.settings();
+    for (let attempt = 0; ; attempt++) {
+      const msgs = this.wire(), hasM = msgs.some(m => Array.isArray(m.content));
+      const h = { 'Content-Type': 'application/json' };
+      if (S.key) h.Authorization = 'Bearer ' + S.key;
+      /* «тишина» дольше 3 минут — модель зависла */
+      const idle = new AbortController();
+      let it = setTimeout(() => idle.abort(), 180000);
+      const poke = () => { clearTimeout(it); it = setTimeout(() => idle.abort(), 180000); };
+      const signal = AbortSignal.any([sig, idle.signal]);
+      try {
+        const r = await fetch(S.base.replace(/\/+$/, '') + '/chat/completions', { method: 'POST', headers: h, signal,
+          body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: sys }, ...msgs], tools, stream: true }) });
+        if (!r.ok) {
+          const et = (await r.text().catch(() => '')).slice(0, 300);
+          if (hasM && [400, 404, 413, 415, 422].includes(r.status) && this.noVis < 2) {
+            this.noVis = this.hasPdf() && this.noVis < 1 ? 1 : 2;
+            this.push({ kind: 'note', text: this.noVis === 1 ? 'Эта модель не принимает PDF напрямую — отправляю только картинки, а PDF остаётся на сервере.' : 'Эта модель не принимает картинки — отправляю только пути к файлам. Проверь модель в настройках.' });
+            continue;
+          }
+          if ([408, 429, 500, 502, 503, 504, 529].includes(r.status) && attempt < 3) { await sleep([3000, 10000, 30000][attempt], sig); if (sig.aborted) throw abortErr(); continue; }
+          throw Object.assign(new Error('HTTP ' + r.status), { status: r.status, detail: et });
+        }
+        return await this.readReply(r, poke);
+      } catch (e) {
+        if (sig.aborted) throw abortErr();
+        const net = e instanceof TypeError || idle.signal.aborted || e.name === 'AbortError';
+        if (net && attempt < 3) { await sleep([3000, 10000, 30000][attempt], sig); if (sig.aborted) throw abortErr(); continue; }
+        if (net) throw Object.assign(new Error(idle.signal.aborted ? 'Модель не отвечает уже 3 минуты. Нажми «Повторить».' : 'Не достучалась до модели (' + (e.cause?.code || e.message) + '). Проверь адрес API в настройках.'), { detail: '' });
+        throw e;
+      } finally { clearTimeout(it); }
+    }
+  }
+
+  async readReply(r, poke) {
+    let text = '', calls = [];
+    const apiErr = e => Object.assign(new Error(typeof e === 'string' ? e : (e && e.message) || 'ошибка модели'), { detail: e && typeof e === 'object' ? JSON.stringify(e).slice(0, 300) : '' });
+    /* части вызовов инструментов: по index, а если его нет — по id */
+    const merge = t => {
+      let ix = t.index;
+      if (typeof ix !== 'number') { if (t.id) { ix = calls.findIndex(c => c && c.id === t.id); if (ix < 0) ix = calls.length; } else ix = Math.max(0, calls.length - 1); }
+      const c = calls[ix] ??= { id: '', type: 'function', function: { name: '', arguments: '' } };
+      if (t.id) c.id = t.id;
+      const fn = t.function || {};
+      if (fn.name && c.function.name !== fn.name) c.function.name += fn.name;
+      if (fn.arguments != null) c.function.arguments += typeof fn.arguments === 'string' ? fn.arguments : JSON.stringify(fn.arguments);
+    };
+    const delta = d => { text += d; this.partial = text; this.emit('delta', d); };
+    if (!(r.headers.get('content-type') || '').includes('event-stream')) {
+      const j = await r.json();
+      if (j && j.error) throw apiErr(j.error);
+      const m = j?.choices?.[0]?.message;
+      if (!m) throw new Error('пустой ответ модели');
+      if (typeof m.content === 'string' && m.content) delta(m.content);
+      calls = Array.isArray(m.tool_calls) ? m.tool_calls.slice() : [];
+    } else {
+      const dec = new TextDecoder(); let buf = '';
+      const lines = ls => {
+        for (const l0 of ls) {
+          const l = l0.replace(/\r$/, ''); if (!l.startsWith('data:')) continue;
+          const p = l.slice(5).trim(); if (!p || p === '[DONE]') continue;
+          let j; try { j = JSON.parse(p); } catch { continue; }
+          if (j && j.error) throw apiErr(j.error);
+          const d = j?.choices?.[0]?.delta; if (!d) continue;
+          if (typeof d.content === 'string' && d.content) delta(d.content);
+          for (const t of d.tool_calls || []) if (t) merge(t);
+        }
+      };
+      for await (const chunk of r.body) {
+        poke();
+        buf += dec.decode(chunk, { stream: true });
+        const ls = buf.split('\n'); buf = ls.pop(); lines(ls);
+      }
+      buf += dec.decode(); if (buf) lines([buf]);
+    }
+    calls = calls.filter(c => c && c.function && c.function.name).map((c, i) => {
+      const fn = c.function, ar = fn.arguments;
+      return { ...c, type: 'function', id: c.id || 'call_' + Date.now().toString(36) + '_' + i, function: { name: fn.name, arguments: typeof ar === 'string' ? ar : JSON.stringify(ar ?? {}) } };
+    });
+    if (!text && !calls.length) throw new Error('Модель вернула пустой ответ. Нажми «Повторить» или выбери другую модель в настройках.');
+    return { text, calls };
+  }
+
+  /* убрать секрет (токен бота) из истории и журнала — он уже сохранён в защищённом месте */
+  scrub(secret, repl = '[токен бота сохранён на сервере]') {
+    if (!secret) return;
+    const fix = s => typeof s === 'string' ? s.split(secret).join(repl) : s;
+    for (const m of this.doc.v.hist) {
+      m.content = fix(m.content);
+      for (const c of m.tool_calls || []) c.function.arguments = fix(c.function.arguments);
+    }
+    for (const e of this.doc.v.log) { e.text = fix(e.text); e.hint = fix(e.hint); }
+    this.doc.save();
+  }
+}
+
+/* после перезапуска сервера: незаконченные задачи продолжаются */
+export function resumeAll(users) {
+  for (const u of users) {
+    const c = getChat(u), r = c.doc.v.run;
+    if (!r) continue;
+    c.repair('Прервано: сервер перезапускался. Если команда важна — проверь её результат и при необходимости повтори.');
+    if (Date.now() - r.t < 6 * 3600e3) {
+      c.push({ kind: 'note', text: 'Сервер перезапускался — продолжаю работу' });
+      c.start(r.origin, true);
+    } else {
+      c.doc.v.run = null; c.doc.save();
+      c.push({ kind: 'error', text: 'Работа прервалась: сервер был выключен.', retry: true });
+    }
+  }
+}
