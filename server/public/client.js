@@ -14,7 +14,6 @@ de.classList.add('srv');
 /* ---------- стили серверного режима ---------- */
 const css = document.createElement('style');
 css.textContent = `
-html.srv .scr.curve{filter:none}
 html.srv #term{display:none}
 #tty{flex:1;min-height:0;width:100%;border:0;background:var(--tbg);display:block}
 .snote{align-self:center;max-width:92%;padding:6px 12px;color:var(--mut);background:var(--card);font:7px/1.6 var(--pf);box-shadow:var(--sh2);text-align:center}
@@ -599,17 +598,77 @@ function skillForm(name, raw, d = $('#x-skf')) {
   }
 }
 
-/* ---------- терминал: ttyd за авторизацией ---------- */
+/* ---------- терминал: ttyd за авторизацией ----------
+   ttyd рисует xterm.js в iframe с того же адреса, поэтому оформляем его как экран браузерной версии:
+   шрифт VT323, свечение люминофора, отступы, палитра из текущей темы (и меняется вместе с ней). */
 let tty = null;
 function ttyFrame() {
   if (tty) return tty;
   tty = document.createElement('iframe');
   tty.id = 'tty'; tty.title = 'Терминал сервера'; tty.setAttribute('allow', 'clipboard-read; clipboard-write');
+  tty.addEventListener('load', ttyLook);
   tty.src = 'term/';
   $('#scr').insertBefore(tty, $('#tstat'));
   return tty;
 }
 const xterm = () => { try { return tty && tty.contentWindow && tty.contentWindow.term; } catch (e) { return null; } };
+const fit = () => { const t = xterm(); try { t && t.fit && t.fit(); } catch (e) {} };
+
+/* цвета: #rrggbb → смесь; палитра ANSI — оттенки люминофора, чтобы ls, tmux и PS1 не выбивались из темы */
+const hex = c => { c = String(c || '').trim().replace('#', ''); if (c.length === 3) c = c.replace(/./g, '$&$&'); const n = parseInt(c, 16); return /^[0-9a-f]{6}$/i.test(c) ? [n >> 16, n >> 8 & 255, n & 255] : null; };
+const mix = (a, b, k) => { const x = hex(a), y = hex(b); if (!x || !y) return a || b; return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, '0')).join(''); };
+function ttyTheme() {
+  const cs = getComputedStyle(de), v = n => cs.getPropertyValue(n).trim();
+  const bg = v('--tbg') || '#1b1230', fg = v('--tfg') || '#7dffb0', acc = v('--acc') || '#ff6b9d';
+  const tint = (c, k = .45) => mix(fg, c, k), lit = c => mix(c, '#ffffff', .25);
+  const red = tint('#ff4d6d', .6), yel = tint('#ffd166'), blu = tint('#6fa8ff', .55), mag = tint(acc, .6), cyn = tint('#5ff2ff');
+  return {
+    background: bg, foreground: fg, cursor: fg, cursorAccent: bg,
+    selectionBackground: mix(bg, fg, .3), selectionForeground: fg,
+    black: mix(bg, fg, .14), red, green: fg, yellow: yel, blue: blu, magenta: mag, cyan: cyn, white: mix(fg, '#ffffff', .2),
+    brightBlack: mix(bg, fg, .45), brightRed: lit(red), brightGreen: lit(fg), brightYellow: lit(yel), brightBlue: lit(blu),
+    brightMagenta: lit(mag), brightCyan: lit(cyn), brightWhite: mix(fg, '#ffffff', .6),
+  };
+}
+/* шрифты страницы (VT323 и запасной Handjet встроены в index.html) — копируем их @font-face в iframe */
+const fontCss = () => {
+  let out = '';
+  for (const sh of document.styleSheets) {
+    let rules; try { rules = sh.cssRules; } catch (e) { continue; }
+    for (const r of rules) if (r.type === CSSRule.FONT_FACE_RULE && /VT323|Handjet/.test(r.style.getPropertyValue('font-family'))) out += r.cssText + '\n';
+  }
+  return out;
+};
+let lookT = 0;
+function ttyLook() {
+  clearTimeout(lookT);
+  let d; try { d = tty.contentDocument; } catch (e) { return; }
+  const t = xterm();
+  if (!d || !t || !t.options) { if (tty) lookT = setTimeout(ttyLook, 150); return; } /* xterm ещё не создан */
+  let st = d.getElementById('mochi-look');
+  if (!st) {
+    st = d.createElement('style'); st.id = 'mochi-look';
+    st.textContent = fontCss() + `
+html,body{background:transparent!important}
+#terminal-container{background:transparent!important}
+#terminal-container .terminal{padding:18px 22px!important;height:100%!important;box-sizing:border-box}
+.xterm-rows{text-shadow:0 0 6px var(--glow)}
+.xterm-rows .xterm-cursor{box-shadow:0 0 8px var(--glow)}
+.xterm-viewport{scrollbar-width:none}.xterm-viewport::-webkit-scrollbar{display:none}`;
+    d.head.append(st);
+  }
+  const th = ttyTheme();
+  d.documentElement.style.setProperty('--glow', th.foreground + '8c');
+  const mono = getComputedStyle(de).getPropertyValue('--mono').trim() || 'VT323, monospace';
+  Object.assign(t.options, { theme: th, fontFamily: mono, fontSize: cfg.tfs || 18, lineHeight: 1.05, cursorBlink: true, cursorStyle: 'block', fontWeight: 'normal', fontWeightBold: 'normal' });
+  /* метрики шрифта меряются при смене fontFamily — дождёмся загрузки VT323, потом подгоним размер */
+  (d.fonts && d.fonts.load ? d.fonts.load(`${cfg.tfs || 18}px VT323`).catch(() => {}) : Promise.resolve()).then(() => {
+    t.options.fontFamily = mono + ', monospace'; t.options.fontFamily = mono; fit();
+  });
+}
+new MutationObserver(() => tty && ttyLook()).observe(de, { attributes: true, attributeFilter: ['data-theme'] });
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => tty && ttyLook());
+
 function tx(s) {
   const t = xterm(); if (!t) return false;
   try {
@@ -619,10 +678,10 @@ function tx(s) {
     t.focus && t.focus(); return true;
   } catch (e) { return false; }
 }
-document.querySelector('nav [data-v=term]').addEventListener('click', () => { ttyFrame(); setTimeout(() => { const t = xterm(); t && t.fit && t.fit(); t && t.focus && t.focus(); }, 80); });
+document.querySelector('nav [data-v=term]').addEventListener('click', () => { ttyFrame(); setTimeout(() => { fit(); const t = xterm(); t && t.focus && t.focus(); }, 80); });
 document.querySelectorAll('.keys button[data-k]').forEach(b => b.onclick = () => { tx(keyStr(b.dataset.k)); window.sfx && sfx('key'); });
 $('#tcls').onclick = () => { tx('\x0c'); window.sfx && sfx('key'); };
-const tfs = d => { cfg.tfs = Math.min(30, Math.max(10, (cfg.tfs || 16) + d)); save(); const t = xterm(); if (t && t.options) { t.options.fontSize = cfg.tfs; t.fit && t.fit(); } };
+const tfs = d => { cfg.tfs = Math.min(30, Math.max(12, (cfg.tfs || 18) + d)); save(); const t = xterm(); if (t && t.options) { t.options.fontSize = cfg.tfs; fit(); } };
 $('#tfm').onclick = () => tfs(-2); $('#tfp').onclick = () => tfs(2);
 $('#tin').placeholder = 'команда и Enter (или печатай прямо в терминале)';
 $('#tsend').onclick = () => { const i = $('#tin'); if (tx(i.value + '\r')) i.value = ''; window.sfx && sfx('key'); };

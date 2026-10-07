@@ -309,18 +309,17 @@ mkd 0755 root:root /var/log/mochi
 A="$STATE/agent"
 mkd 0750 mochi-agent:mochi "$A/.local"
 mkd 0750 mochi-agent:mochi "$A/.local/bin"
-[ -f "$A/.tmux.conf" ] || { cat > "$A/.tmux.conf" <<'EOF'
-# Мочи: терминал в браузере
+# оформление tmux — в $APP/bin/tmux.conf (цвета следуют теме); розовый ~/.tmux.conf
+# от прежних версий установщика убираем, только если его не меняли
+OLD_TMUX='# Мочи: терминал в браузере
 set -g mouse on
 set -g history-limit 50000
 set -g default-terminal "xterm-256color"
 set -g status-style "bg=#33254f,fg=#f3d9ff"
 set -g status-left "[мочи] "
 set -g status-right "%H:%M"
-set -g window-status-current-style "bg=#ff6b9d,fg=#1b1230"
-EOF
-chown mochi-agent:mochi "$A/.tmux.conf"; }
-chmod 0640 "$A/.tmux.conf" 2>/dev/null || true
+set -g window-status-current-style "bg=#ff6b9d,fg=#1b1230"'
+if [ -f "$A/.tmux.conf" ] && [ "$(cat "$A/.tmux.conf")" = "$OLD_TMUX" ]; then rm -f "$A/.tmux.conf"; fi
 [ -f "$A/.profile" ] || { cat > "$A/.profile" <<EOF
 export PATH="\$HOME/.local/bin:$(dirname "$NODE"):\$PATH"
 export NPM_CONFIG_PREFIX="\$HOME/.local"
