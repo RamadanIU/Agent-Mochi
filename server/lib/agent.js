@@ -4,9 +4,10 @@
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { CFG } from './config.js';
 import { Doc, ensureDir, rid, writeJSONSync, readJSON } from './store.js';
-import { runCmd, agentInfo } from './runner-client.js';
+import { runCmd, fileCmd, agentInfo } from './runner-client.js';
 import { userDir, pullFile, storeFile, sz } from './files.js';
 import { webTools, webCall } from './mcp.js';
 import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens } from './ext.js';
@@ -22,6 +23,23 @@ const RUN_TOOL = { type: 'function', function: { name: 'run_command', descriptio
     action: { type: 'string', description: 'Что ты делаешь сейчас — для пользователя: 2–6 слов на его языке, например «Проверяю версию ядра». Без команд и технических деталей.' },
     command: { type: 'string', description: 'Команда' },
     timeout: { type: 'number', description: 'Таймаут, сек (по умолчанию 120, максимум 3600). Для более долгого — запуск в фоне через nohup.' } }, required: ['action', 'command'] } } };
+/* файлы: читать, править и создавать без cat/sed/heredoc (см. fileops.js — там же все проверки) */
+const P_PATH = { type: 'string', description: 'Путь к файлу: абсолютный или от текущей папки' };
+const READ_TOOL = { type: 'function', function: { name: 'read_file', description: 'Прочитать текстовый файл. Строки выводятся как «номер<TAB>текст» — номер и табуляция не часть файла. Длинный файл — частями: внизу подсказка, с какого offset продолжить. Для папки — её содержимое. Поиск по файлам — run_command (grep -rn, find).',
+  parameters: { type: 'object', properties: {
+    path: P_PATH,
+    offset: { type: 'integer', description: 'С какой строки начать (с 1); отрицательный — последние строки (-50 — хвост лога)' },
+    limit: { type: 'integer', description: 'Сколько строк показать (по умолчанию до 1000)' } }, required: ['path'] } } };
+const P_EDIT = {
+  old_string: { type: 'string', description: 'Точный текст, который нужно заменить' },
+  new_string: { type: 'string', description: 'Текст на замену (пустой — удалить)' },
+  replace_all: { type: 'boolean', description: 'true — заменить все вхождения' } };
+const EDIT_TOOL = { type: 'function', function: { name: 'edit_file', description: 'Точечно изменить текстовый файл: заменить old_string на new_string. old_string копируй из read_file точно — с отступами, без номеров строк; он должен встречаться в файле один раз (добавь соседние строки для однозначности) или replace_all: true. Несколько правок одного файла — одним вызовом через edits: по порядку, все или ни одной. В ответе — изменённые строки с соседними, перечитывать файл не нужно.',
+  parameters: { type: 'object', properties: { path: P_PATH, ...P_EDIT,
+    edits: { type: 'array', description: 'Несколько правок {old_string, new_string, replace_all} вместо одной', items: { type: 'object', properties: { old_string: { type: 'string' }, new_string: { type: 'string' }, replace_all: { type: 'boolean' } }, required: ['old_string', 'new_string'] } } }, required: ['path'] } } };
+const WRITE_TOOL = { type: 'function', function: { name: 'write_file', description: 'Создать файл (недостающие папки создаются) или целиком заменить его содержимое. Существующий файл сначала прочитай через read_file; для частичных изменений используй edit_file — он дешевле и надёжнее. Пиши содержимое полностью, без сокращений вроде «… остальное без изменений».',
+  parameters: { type: 'object', properties: { path: P_PATH, content: { type: 'string', description: 'Полное содержимое файла' } }, required: ['path', 'content'] } } };
+const FILE_TOOLS = new Set(['read_file', 'edit_file', 'write_file']);
 const SEND_TOOL = { type: 'function', function: { name: 'send_file', description: 'Передать пользователю файл с сервера: в чате появится карточка с кнопкой «Скачать» (и файл придёт в Telegram, если он подключён и пользователь не в чате). Используй, когда результат — файл (документ, архив, картинка, таблица, скрипт), а не текст. Один вызов — один файл; несколько файлов упакуй в архив (tar czf). Файл должен лежать в рабочей папке.',
   parameters: { type: 'object', properties: {
     path: { type: 'string', description: 'Путь к файлу (абсолютный или относительно текущей папки), например outbox/report.pdf' },
@@ -40,9 +58,9 @@ export const TG_TOOLS = [
 ];
 
 /* встроенные инструменты, которые пользователь может выключить (Настройки → Инструменты) */
-const GROUPS = { run_command: 'Сервер', send_file: 'Сервер', mcp_manage: 'Расширения', skills_manage: 'Расширения' };
+const GROUPS = { run_command: 'Сервер', send_file: 'Сервер', read_file: 'Файлы', edit_file: 'Файлы', write_file: 'Файлы', mcp_manage: 'Расширения', skills_manage: 'Расширения' };
 const groupOf = n => GROUPS[n] || (n.startsWith('telegram_') ? 'Telegram' : 'Интернет');
-const builtins = () => [RUN_TOOL, SEND_TOOL, ...TG_TOOLS];
+const builtins = () => [RUN_TOOL, READ_TOOL, EDIT_TOOL, WRITE_TOOL, SEND_TOOL, ...TG_TOOLS];
 /* встроенные включает и выключает только пользователь: агенту об этом нужно знать, чтобы не пытаться обойти */
 for (const t of [...builtins(), ...MANAGE_TOOLS]) BUILTIN.add(t.function.name);
 const isOn = (S, n) => (S.tools || {})[n] !== false;
@@ -66,6 +84,7 @@ function labelFor(n, a) {
   let s;
   if (n === 'run_command') s = a.action || 'Работаю на сервере';
   else if (n === 'send_file') s = 'Отправляю файл: ' + (a.name || String(a.path || '').split('/').pop());
+  else if (FILE_TOOLS.has(n)) s = { read_file: 'Читаю файл', edit_file: 'Правлю файл', write_file: 'Пишу файл' }[n] + ': ' + String(a.path || '').replace(/\/+$/, '').split('/').pop();
   else if (n === 'web_search') { const q = Array.isArray(a.search_queries) ? a.search_queries[0] : a.objective; s = 'Ищу в интернете' + (q ? ': ' + q : ''); }
   else if (n === 'web_fetch') { let h = ''; try { h = new URL([].concat(a.urls || [])[0]).hostname.replace(/^www\./, ''); } catch {} s = 'Читаю страницу' + (h ? ': ' + h : ''); }
   else if (n === 'telegram_connect') s = 'Подключаю Telegram';
@@ -107,6 +126,9 @@ export class Chat extends EventEmitter {
     this.set = new Doc(path.join(this.dir, 'settings.json'), () => ({ ...DEF_SETTINGS }));
     this.clients = new Set();
     this.ctl = null; this.partial = ''; this.gen = 0; this.noVis = 0;
+    /* что агент уже видел из файлов (только в памяти): настоящий путь → {sig: версия, rng: [[с, по, ход]]};
+       нужно, чтобы не перезаписать непрочитанный файл и не выводить заново то, что уже есть в разговоре */
+    this.seen = new Map(); this.turn = 0; this.phKey = null;
   }
   get running() { return !!this.ctl; }
   get away() { return this.clients.size === 0; }
@@ -181,6 +203,7 @@ export class Chat extends EventEmitter {
     const m = { role: 'user', content };
     if (parts.length) m._pf = this.saveParts(parts);
     this.doc.v.hist.push(m);
+    this.turn++;
     this.trimHist();
     this.push({ kind: 'user', text, origin, files: files.map(f => ({ name: f.name, size: f.size, fid: f.fid || null })) });
     this.start(origin);
@@ -198,6 +221,7 @@ export class Chat extends EventEmitter {
   clear() {
     this.gen++;
     this.ctl?.abort(); this.ctl = null; this.partial = '';
+    this.seen.clear(); this.phKey = null;
     this.dropParts(this.doc.v.hist);
     Object.assign(this.doc.v, { hist: [], log: [], run: null, sess: rid(16), act: [] });
     this.doc.save();
@@ -236,6 +260,7 @@ export class Chat extends EventEmitter {
     const S = this.settings(), has = n => names.has(n), dir = userDir(this.u), now = new Date();
     const run = has('run_command'), I = run ? await agentInfo() : null;
     const tgOn = TG_TOOLS.some(t => has(t.function.name));
+    const FT = [['read_file', 'читай через read_file'], ['edit_file', 'правь через edit_file'], ['write_file', 'создавай через write_file']].filter(([n]) => has(n)).map(x => x[1]);
     const pkg = !run ? '' : I.sudo
       ? `Есть sudo без пароля; пакеты: sudo ${I.pm === 'apt-get' ? 'apt-get install -y' : I.pm === 'apk' ? 'apk add' : I.pm === 'pacman' ? 'pacman -S --noconfirm' : I.pm === 'zypper' ? 'zypper -n install' : (I.pm || 'dnf') + ' install -y'} …`
       : 'Прав root и sudo нет: системные пакеты ставить нельзя. Инструменты ставь к себе: python3 -m venv ~/venv && ~/venv/bin/pip install …, npm install -g … (префикс ~/.local), бинарники — в ~/.local/bin.';
@@ -244,6 +269,7 @@ export class Chat extends EventEmitter {
       + (run ? `\nСервер: ${I.os}, ядро ${I.kernel}, ${I.arch}, ${I.cpus || '?'} CPU, ${I.mem || '?'} МБ RAM. Ты работаешь как пользователь ${I.user}. ${pkg} Установлено: ${(I.tools || []).join(', ') || '—'}, node.` : '')
       + `\nРабочая папка пользователя: ${dir} (inbox/ — файлы от пользователя, outbox/ — для файлов пользователю). Задачи выполняются на сервере в фоне: пользователь может закрыть браузер, работа продолжится, а результат он увидит в чате.`
       + (run ? ' Долгие процессы (серверы, длинные загрузки, сборки дольше часа) запускай в фоне: nohup команда > файл.log 2>&1 & — и проверяй позже. Команды, ждущие ввода, не работают (stdin пустой): используй флаги -y и т. п.' : '')
+      + (FT.length ? ` Файлы ${FT.join(', ')}${run ? ' — не через cat, sed, echo > или heredoc в run_command; run_command — для поиска (grep -rn, find), запуска, сборки и git' : ''}.` : '')
       + (has('send_file') ? ' Чтобы отдать файл пользователю, создай его (лучше в outbox/) и вызови send_file; не выводи содержимое файлов текстом вместо этого. Имена с пробелами бери в кавычки.' : '')
       + (webOn ? '\nУ тебя есть поиск в интернете (web_search, web_fetch): используй его для новостей, свежих данных и всего, что могло измениться; на простые вопросы отвечай сразу. Источники называй по имени сайта.' : '')
       + (tgOn ? '\n' + (hooks.tg?.statusLine(this.u) || 'Telegram не подключён.') + ' Если пользователь хочет управлять тобой из Telegram или получать уведомления: попроси создать бота у @BotFather (команда /newbot) и прислать токен, затем вызови telegram_connect и дай пользователю ссылку из ответа.' : '')
@@ -276,7 +302,7 @@ export class Chat extends EventEmitter {
         try { a = JSON.parse(tc.function.arguments || '{}') || {}; } catch { bad = true; }
         if (typeof a !== 'object' || Array.isArray(a)) { a = {}; bad = true; }
         const nm = tc.function.name;
-        const e = this.push({ kind: 'tool', name: nm, label: labelFor(nm, a), hint: nm === 'run_command' ? String(a.command || '').slice(0, 2000) : '', state: 'run' });
+        const e = this.push({ kind: 'tool', name: nm, label: labelFor(nm, a), hint: nm === 'run_command' ? String(a.command || '').slice(0, 2000) : FILE_TOOLS.has(nm) ? String(a.path || '').slice(0, 500) : '', state: 'run' });
         this.emit('tool', e);
         let out;
         try {
@@ -303,6 +329,7 @@ export class Chat extends EventEmitter {
       const note = r.killed ? '[прервано пользователем]' : r.timedOut ? '[таймаут: команда работала дольше ' + Math.min(Math.max(+a.timeout || 120, 1), 3600) + ' с и была прервана. Повтори с большим timeout или запусти в фоне через nohup]' : '';
       return (r.out || '(нет вывода)') + '\n[код выхода: ' + r.code + ']' + (note ? '\n' + note : '');
     }
+    if (FILE_TOOLS.has(nm)) return await this.fileTool(nm, a, sig);
     if (nm === 'send_file') {
       const f = await pullFile(a.path, this.doc.v.cwd || userDir(this.u));
       const name = a.name ? String(a.name).replace(/[\\/]/g, '_').slice(0, 120) : f.name;
@@ -320,6 +347,62 @@ export class Chat extends EventEmitter {
     if (X.route.has(nm)) return await mcpCall(this.u, X.route.get(nm), a, sig);
     if (EXT_TOOLS.has(nm)) return await extTool(this, nm, a);
     return 'Ошибка: неизвестный инструмент ' + nm;
+  }
+
+  /* ---------- файлы ---------- */
+  remember(real, sig, rng) {
+    const S = this.seen, k = S.get(real), v = k && k.sig === sig ? k : { sig, rng: [] };
+    if (rng) { v.rng.push([...rng, this.turn]); if (v.rng.length > 20) v.rng.shift(); }
+    S.delete(real); S.set(real, v);
+    if (S.size > 300) S.delete(S.keys().next().value);
+  }
+
+  async fileTool(nm, a, sig) {
+    const p = typeof a.path === 'string' ? a.path : '', cwd = this.doc.v.cwd || userDir(this.u);
+    if (!p.trim()) return 'Ошибка: нет параметра path';
+    if (nm === 'read_file') {
+      const r = await fileCmd({ fop: 'read', path: p, cwd, offset: a.offset, limit: a.limit }, sig);
+      if (r.err) return 'Ошибка: ' + r.err;
+      if (r.sig) {
+        /* тот же кусок той же версии файла уже есть выше в разговоре — не тратим токены повторно */
+        const k = this.seen.get(r.real);
+        if (r.from && k && k.sig === r.sig && k.rng.some(([f, t, turn]) => f <= r.from && r.to <= t && this.turn - turn < 30))
+          return `[${p}: файл не менялся с прошлого чтения — строки ${r.from}–${r.to} уже есть выше в разговоре]`;
+        this.remember(r.real, r.sig, r.from ? [r.from, r.to] : null);
+      }
+      return r.text;
+    }
+    /* заглушку («// ... остальное без изменений») пропускаем, только если модель повторила тот же вызов */
+    const key = crypto.createHash('sha1').update(nm + '\0' + JSON.stringify(a)).digest('hex');
+    let r;
+    if (nm === 'edit_file') {
+      let more = a.edits;
+      if (typeof more === 'string') try { more = JSON.parse(more); } catch { return 'Ошибка: edits должен быть массивом объектов {old_string, new_string}'; }
+      const edits = [];
+      if (a.old_string !== undefined || a.new_string !== undefined) edits.push({ old_string: a.old_string, new_string: a.new_string, replace_all: a.replace_all });
+      if (Array.isArray(more)) edits.push(...more);
+      if (!edits.length) return 'Ошибка: нужны old_string и new_string (или массив edits)';
+      if (edits.length > 50) return 'Ошибка: слишком много правок за раз (максимум 50) — раздели на несколько вызовов';
+      r = await fileCmd({ fop: 'edit', path: p, cwd, edits, allowPh: this.phKey === key }, sig);
+    } else {
+      if (typeof a.content !== 'string') return 'Ошибка: нет параметра content (для пустого файла — пустая строка)';
+      if (a.content.length > 4e6) return 'Ошибка: слишком большое содержимое для одного вызова — создай файл частями (write_file + edit_file) или командой';
+      const q = { fop: 'write', path: p, cwd, content: a.content, allowPh: this.phKey === key };
+      r = await fileCmd(q, sig);
+      if (r.need) {
+        /* непустой файл перезаписываем, только если агент видел именно эту его версию */
+        const k = this.seen.get(r.real);
+        if (!k) return `Ошибка: ${p} уже существует (${r.lines != null ? 'строк: ' + r.lines + ', ' : ''}${sz(r.size)}), а ты его не читала — перезапись стёрла бы содержимое. Прочитай его через read_file или правь через edit_file.`;
+        if (k.sig !== r.sig) return `Ошибка: ${p} изменился после того, как ты его читала (например, командой). Перечитай его через read_file перед перезаписью или правь через edit_file.`;
+        r = await fileCmd({ ...q, expect: r.sig }, sig);
+        if (r.need) return `Ошибка: ${p} изменился прямо во время записи — перечитай его и повтори.`;
+      }
+    }
+    if (r.ph) this.phKey = key;
+    if (r.err) return 'Ошибка: ' + r.err;
+    this.phKey = null;
+    this.remember(r.real, r.sig, null);
+    return r.text;
   }
 
   async callModel(sys, tools, sig) {
