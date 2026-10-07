@@ -354,6 +354,8 @@ export const MANAGE_TOOLS = [
   }, ['action']),
 ];
 export const EXT_TOOLS = new Set(['skill', 'mcp_connect', 'mcp_manage', 'skills_manage']);
+/* имена встроенных инструментов (заполняет agent.js): ими управляет только пользователь */
+export const BUILTIN = new Set();
 
 /* для очередного шага агента: инструменты расширений и строки для системной подсказки */
 export async function agentExt(chat, off = {}) {
@@ -410,6 +412,7 @@ export async function extTool(chat, nm, a) {
   }
   const act = String(a.action || '');
   if (nm === 'mcp_manage') {
+    if (BUILTIN.has(name) || BUILTIN.has(name.toLowerCase())) return 'Ошибка: «' + name + '» — встроенный инструмент. Включает и выключает их только пользователь в настройках (Инструменты → Встроенные).';
     const all = X(u).mcp, key = name.toLowerCase();
     if (act === 'list') return Object.keys(all).length ? Object.entries(all).map(([n, s]) => srvLine(n, s)).join('\n') : 'MCP-серверов нет.';
     if (act === 'add') {

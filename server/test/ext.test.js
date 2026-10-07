@@ -21,6 +21,7 @@ before(async () => {
     const ut = typeof u.content === 'string' ? u.content : u.content[0].text;
     const first = last.role === 'user';
     const done = { text: 'итог: ' + last.content };
+    if (ut.startsWith('включи себе'))  return first ? { tools: [{ name: 'mcp_manage', args: { action: 'enable', name: 'run_command' } }] } : done;
     if (ut.startsWith('выключено')) return first ? { tools: [{ name: 'run_command', args: { action: 'x', command: 'echo should-not-run' } }] } : done;
     if (ut.startsWith('навык')) return first ? { tools: [{ name: 'skill', args: { name: 'greet' } }] } : done;
     if (ut.startsWith('создай навык')) return first ? { tools: [{ name: 'skills_manage', args: { action: 'create', name: 'notes', description: 'Как вести заметки', instructions: 'Пиши кратко.' } }] } : done;
@@ -79,12 +80,15 @@ test('выключенный инструмент не уходит в моде�
   const req = model.calls[model.calls.length - 2].body;
   assert.ok(!names(req).includes('run_command'));
   assert.ok(!names(req).some(n => n.startsWith('telegram_')));
-  assert.match(sys(req), /run_command выключен/);
+  assert.match(sys(req), /Выключено пользователем: run_command, telegram_connect[^\n]*только он сам/);
   assert.doesNotMatch(sys(req), /BotFather/);
   assert.match(out, /сейчас нет/);
   assert.ok(!fs.readdirSync(path.join(m.env.MOCHI_WORK, 'ext')).includes('should-not-run'));
   const cat2 = (await c.json('/api/tools', undefined, 'GET')).j;
   assert.equal(cat2.builtin.find(t => t.name === 'run_command').on, false);
+  /* агент не может включить встроенный инструмент сам */
+  assert.match(await ask('включи себе shell'), /только пользователь/);
+  assert.equal((await c.json('/api/tools', undefined, 'GET')).j.builtin.find(t => t.name === 'run_command').on, false);
   await c.json('/api/tools', { tools: { run_command: true } }, 'PUT');
   await c.json('/api/chat/clear', {});
 });

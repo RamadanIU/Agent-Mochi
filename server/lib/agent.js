@@ -9,7 +9,7 @@ import { Doc, ensureDir, rid, writeJSONSync, readJSON } from './store.js';
 import { runCmd, agentInfo } from './runner-client.js';
 import { userDir, pullFile, storeFile, sz } from './files.js';
 import { webTools, webCall } from './mcp.js';
-import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, mcpPublic, skillList, tokens } from './ext.js';
+import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens } from './ext.js';
 
 export const DEF_SYS = 'Тебя зовут Мочи — ты милый пиксельный зверёк-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. В поле action кратко и по-человечески пиши, что делаешь. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
 export const DEF_SETTINGS = { base: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', sys: DEF_SYS, search: true, vis: true };
@@ -43,6 +43,8 @@ export const TG_TOOLS = [
 const GROUPS = { run_command: 'Сервер', send_file: 'Сервер', mcp_manage: 'Расширения', skills_manage: 'Расширения' };
 const groupOf = n => GROUPS[n] || (n.startsWith('telegram_') ? 'Telegram' : 'Интернет');
 const builtins = () => [RUN_TOOL, SEND_TOOL, ...TG_TOOLS];
+/* встроенные включает и выключает только пользователь: агенту об этом нужно знать, чтобы не пытаться обойти */
+for (const t of [...builtins(), ...MANAGE_TOOLS]) BUILTIN.add(t.function.name);
 const isOn = (S, n) => (S.tools || {})[n] !== false;
 
 /* что видит пользователь в настройках: все инструменты, их состояние и примерный «вес» в каждом запросе */
@@ -230,7 +232,7 @@ export class Chat extends EventEmitter {
   }
 
   /* подсказка собирается только из того, что сейчас включено: выключенный инструмент не занимает память */
-  async system(names, extra = '', webOn = false) {
+  async system(names, extra = '', webOn = false, offB = []) {
     const S = this.settings(), has = n => names.has(n), dir = userDir(this.u), now = new Date();
     const run = has('run_command'), I = run ? await agentInfo() : null;
     const tgOn = TG_TOOLS.some(t => has(t.function.name));
@@ -239,12 +241,13 @@ export class Chat extends EventEmitter {
       : 'Прав root и sudo нет: системные пакеты ставить нельзя. Инструменты ставь к себе: python3 -m venv ~/venv && ~/venv/bin/pip install …, npm install -g … (префикс ~/.local), бинарники — в ~/.local/bin.';
     return S.sys
       + `\nСегодня ${now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}, время сервера ${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}.`
-      + (run ? `\nСервер: ${I.os}, ядро ${I.kernel}, ${I.arch}, ${I.cpus || '?'} CPU, ${I.mem || '?'} МБ RAM. Ты работаешь как пользователь ${I.user}. ${pkg} Установлено: ${(I.tools || []).join(', ') || '—'}, node.` : '\nИнструмент run_command выключен пользователем: команды на сервере выполнять нельзя.')
+      + (run ? `\nСервер: ${I.os}, ядро ${I.kernel}, ${I.arch}, ${I.cpus || '?'} CPU, ${I.mem || '?'} МБ RAM. Ты работаешь как пользователь ${I.user}. ${pkg} Установлено: ${(I.tools || []).join(', ') || '—'}, node.` : '')
       + `\nРабочая папка пользователя: ${dir} (inbox/ — файлы от пользователя, outbox/ — для файлов пользователю). Задачи выполняются на сервере в фоне: пользователь может закрыть браузер, работа продолжится, а результат он увидит в чате.`
       + (run ? ' Долгие процессы (серверы, длинные загрузки, сборки дольше часа) запускай в фоне: nohup команда > файл.log 2>&1 & — и проверяй позже. Команды, ждущие ввода, не работают (stdin пустой): используй флаги -y и т. п.' : '')
       + (has('send_file') ? ' Чтобы отдать файл пользователю, создай его (лучше в outbox/) и вызови send_file; не выводи содержимое файлов текстом вместо этого. Имена с пробелами бери в кавычки.' : '')
       + (webOn ? '\nУ тебя есть поиск в интернете (web_search, web_fetch): используй его для новостей, свежих данных и всего, что могло измениться; на простые вопросы отвечай сразу. Источники называй по имени сайта.' : '')
       + (tgOn ? '\n' + (hooks.tg?.statusLine(this.u) || 'Telegram не подключён.') + ' Если пользователь хочет управлять тобой из Telegram или получать уведомления: попроси создать бота у @BotFather (команда /newbot) и прислать токен, затем вызови telegram_connect и дай пользователю ссылку из ответа.' : '')
+      + (offB.length ? '\nВыключено пользователем: ' + offB.join(', ') + '. Включить их может только он сам в настройках — ты не можешь.' : '')
       + extra
       + (this.wire().some(m => Array.isArray(m.content)) ? '\nКартинки и PDF из сообщений пользователя ты видишь напрямую; те же файлы лежат в inbox/, если их нужно обработать.' : '');
   }
@@ -257,11 +260,12 @@ export class Chat extends EventEmitter {
       if (run.steps >= CFG.maxSteps) throw new Error('Мочи сделала ' + CFG.maxSteps + ' шагов подряд и остановилась, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить.');
       run.steps++;
       const S = this.settings(), on = t => isOn(S, t.function.name);
-      const web = (S.search ? await webTools() : []).filter(on); chk();
+      const web0 = S.search ? await webTools() : [], web = web0.filter(on); chk();
+      const offB = [...builtins(), ...web0, ...MANAGE_TOOLS].filter(t => !on(t)).map(t => t.function.name);
       const X = await agentExt(this, S.tools); chk();
       const tools = [...builtins().filter(on), ...web, ...X.defs], names = new Set(tools.map(t => t.function.name));
       const ctx = { web, X, names };
-      const { text, calls } = await this.callModel(await this.system(names, X.prompt, web.length > 0), tools, sig); chk();
+      const { text, calls } = await this.callModel(await this.system(names, X.prompt, web.length > 0, offB), tools, sig); chk();
       H.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}) });
       this.partial = '';
       if (text) this.push({ kind: 'assistant', text });
