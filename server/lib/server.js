@@ -17,6 +17,7 @@ import * as X from './ext.js';
 import { putInbox, storeCopy, getFile, dropFiles, userDir, safeName } from './files.js';
 import * as TG from './telegram.js';
 import { TERM_PREFIX, proxyHttp, proxyUpgrade } from './term.js';
+import * as U from './update.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const VERSION = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8')).version;
@@ -113,7 +114,7 @@ function stream(req, res, u) {
   const chat = getChat(u);
   res.writeHead(200, { ...SEC, 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store, no-transform', 'x-accel-buffering': 'no', connection: 'keep-alive' });
   const send = (ev, d) => res.write(`event: ${ev}\ndata: ${JSON.stringify(d)}\n\n`);
-  send('snap', { ...chat.snapshot(), user: A.publicUser(u) });
+  send('snap', { ...chat.snapshot(), user: A.publicUser(u), build: U.buildId() });
   const on = {
     log: e => send('log', e), delta: d => send('delta', { d }), run: r => send('run', r),
     reset: () => send('snap', chat.snapshot()),
@@ -189,6 +190,10 @@ async function models(c, b) {
   return { models: ids.slice(0, 2000), free, needKey: !key && (isOpenRouter(base) || isOllamaCloud(base)) };
 }
 
+/* ---------- обновления: что стоит, что нового, как идёт обновление (busy — сколько задач продолжатся после перезапуска) ---------- */
+const updInfo = u => ({ ...U.summary(), status: U.updateStatus(), version: VERSION, admin: !!u.admin, ready: U.updaterReady(),
+  busy: A.listUsers().filter(x => getChat(x).running).length });
+
 /* ---------- маршруты ---------- */
 async function api(req, res, url) {
   const p = url.pathname, M = req.method;
@@ -219,7 +224,7 @@ async function api(req, res, url) {
   const u = userOf(req);
   if (p === '/api/me') {
     if (!u) return json(res, 401, { error: 'нужен вход', setup: !A.hasUsers(), invite: !CFG.allowRegister });
-    return json(res, 200, { user: A.publicUser(u), version: VERSION, publicUrl: CFG.publicUrl || null });
+    return json(res, 200, { user: A.publicUser(u), version: VERSION, build: U.buildId(), publicUrl: CFG.publicUrl || null });
   }
   if (!u) throw new HttpErr(401, 'нужен вход');
   const chat = getChat(u);
@@ -291,6 +296,14 @@ async function api(req, res, url) {
     case '/api/skill-install':
       if (M === 'POST') { const b = await jbody(req); return json(res, 200, { names: await X.skillInstall(u, b.url, b.name || undefined) }); }
       break;
+    /* обновления: посмотреть и проверить может каждый, обновить — только администратор */
+    case '/api/update':
+      if (M === 'GET') return json(res, 200, updInfo(u));
+      if (M !== 'POST' && M !== 'DELETE') break;
+      if (!u.admin) throw new HttpErr(403, 'Обновлять Мочи может только администратор сервера');
+      if (M === 'POST') U.requestUpdate(u); else U.cancelUpdate();
+      return json(res, 200, updInfo(u));
+    case '/api/update/check': if (M === 'POST') { await U.refresh(true); return json(res, 200, updInfo(u)); } break;
     case '/api/account':
       if (M === 'GET') return json(res, 200, { user: A.publicUser(u), sessions: A.sessionCount(u.id), work: userDir(u), invites: u.admin ? A.inviteCount() : undefined, users: u.admin ? A.listUsers().map(A.publicUser) : undefined });
       break;
@@ -382,7 +395,7 @@ async function admin(cmd) {
       await fsp.rm(path.join(CFG.data, 'users', u.id), { recursive: true, force: true });
       return { ok: true, note: 'рабочая папка ' + path.join(CFG.work, u.name) + ' оставлена' };
     }
-    case 'status': return { version: VERSION, users: A.listUsers().length, running: A.listUsers().filter(u => getChat(u).running).map(u => u.name), publicUrl: CFG.publicUrl, uptime: Math.round(process.uptime()) };
+    case 'status': return { version: VERSION, build: U.buildId(), users: A.listUsers().length, running: A.listUsers().filter(u => getChat(u).running).map(u => u.name), publicUrl: CFG.publicUrl, uptime: Math.round(process.uptime()) };
     default: throw new Error('неизвестная команда');
   }
 }
@@ -414,6 +427,7 @@ export function startServer() {
   TG.initTelegram(A.listUsers);
   resumeAll(A.listUsers());
   loadPage();
+  U.initUpdates();
   const srv = http.createServer({ requestTimeout: 0, headersTimeout: 30000 }, handle);
   srv.on('upgrade', upgrade);
   srv.keepAliveTimeout = 65000;

@@ -184,6 +184,7 @@ function welcomeS(cleared) {
 }
 function onSnap(s) {
   if (s.user) me = s.user;
+  seenBuild(s.build);
   quietly(() => {
     const box = $('#msgs'); box.innerHTML = ''; tray = null; bubble = null; ents.clear(); think(false);
     for (const e of s.log) render(e);
@@ -222,7 +223,8 @@ function connect() {
   es.onopen = () => { if (connected) setSt(READY, 'on'); };
   es.onerror = async () => {
     if (!es) return;
-    if (connected) { connected = false; setSt('нет связи с сервером', 'err'); }
+    /* во время обновления сервер перезапускается — это не ошибка */
+    if (connected) { connected = false; if (uMode === 'run') setSt('обновляюсь…', 'on'); else setSt('нет связи с сервером', 'err'); }
     if (es.readyState === 2) { es.close(); es = null; await check(); if (me) setTimeout(connect, 3000); }
   };
 }
@@ -241,6 +243,7 @@ async function started() {
   try { srvSet = await api('api/settings'); mirror(); } catch (e) {}
   connect();
   initPane();
+  updBoot(true);
 }
 function mirror() {
   if (!srvSet) return;
@@ -389,6 +392,7 @@ const tgBtn = (txt, fn) => { const b = document.createElement('button'); b.class
 async function refreshPane() {
   try {
     const [a, t] = await Promise.all([api('api/account'), api('api/telegram')]);
+    api('api/update').then(updState).catch(() => {});
     $('#s-acct').textContent = a.user.name + (a.user.admin ? ' · администратор' : '') + ' · сессий: ' + a.sessions;
     foldMeta(fAcct, a.user.name + (a.user.admin ? ' · админ' : ''));
     $('#s-inv').hidden = !a.user.admin;
@@ -442,6 +446,245 @@ const logout = async all => {
 };
 $('#s-out').onclick = () => logout(false);
 $('#s-outall').onclick = () => logout(true);
+
+/* ---------- обновления ----------
+   Сервер сам смотрит на GitHub, что нового. Если вышла новая версия, администратору при входе
+   показывается окошко с Мочи: что изменилось и «Позже» / «Обновить». Обновляет root-служба на сервере
+   (server/bin/mochi-update): окошко показывает её шаги, переживает перезапуск сервера и перезагружает страницу.
+   Остальные открытые страницы перезагружаются сами, когда видят новую сборку (build в snap). */
+css.textContent += `
+#upd{max-width:460px}
+#upd .ubody{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:18px 20px 20px;font-size:9px;line-height:1.8}
+#upd .uhead{display:flex;align-items:center;gap:18px}
+#upd canvas{flex:none;width:120px;height:108px;image-rendering:pixelated}
+#upd .usay{flex:1;min-width:0;position:relative;margin:4px;padding:10px 12px;background:var(--bg);font-size:10px;line-height:1.7;box-shadow:var(--sh4)}
+#upd .usay::before{content:"";position:absolute;left:-8px;top:14px;width:8px;height:8px;background:var(--bg);box-shadow:-4px 0 var(--ink),0 -4px var(--ink),0 4px var(--ink)}
+#upd .uver{margin-top:16px;color:var(--mut);font-size:8px;white-space:pre-line}
+#upd .uhd{margin-top:14px;color:var(--acc);font-size:8px;text-transform:uppercase}
+#upd .uch,#upd .ust{margin:8px 0 0;padding:0;list-style:none}
+#upd .uch li,#upd .ust li{position:relative;padding:3px 0 3px 18px;font-size:8px;line-height:1.7;overflow-wrap:anywhere}
+#upd .uch li::before{content:"+";position:absolute;left:2px;color:var(--acc)}
+#upd .uch li.umore{color:var(--mut)}#upd .uch li.umore::before{content:""}
+#upd .ust li{color:var(--mut)}
+#upd .ust li::before{position:absolute;left:2px}
+#upd .ust li.ok::before{content:"✓";color:var(--ok)}
+#upd .ust li.run{color:var(--fg)}#upd .ust li.run::before{content:">";color:var(--acc);animation:blk .6s steps(1) infinite}
+#upd .ust li.warn::before{content:"!"}#upd .ust li.past::before{content:"·"}
+#upd .ust li.err{color:var(--err)}#upd .ust li.err::before{content:"x";color:var(--err)}
+#upd .ubar{height:14px;margin:20px 4px 8px;background:var(--bg);box-shadow:var(--sh4)}
+#upd .ubar i{display:block;height:100%;width:0;background:repeating-linear-gradient(90deg,var(--acc) 0 8px,transparent 8px 12px);transition:width .5s steps(10)}
+#upd .uerr{display:block;margin-top:14px;color:var(--err);font-size:8px;line-height:1.7;overflow-wrap:anywhere}
+#upd .note{margin-top:16px}
+#upd .wfoot .p{margin-left:auto}
+#upd [hidden],#p-srv [hidden]{display:none!important}
+#set{position:relative}
+#set.upd::after,#t-lx.upd::after{content:"";position:absolute;top:-6px;right:-6px;width:8px;height:8px;background:var(--acc);box-shadow:0 0 0 2px var(--card);animation:blk 1.2s steps(1) infinite}
+#dlg .fold>summary .fm.new{color:var(--acc)}
+`;
+const upd = document.createElement('dialog');
+upd.id = 'upd'; upd.className = 'win ask'; upd.setAttribute('aria-labelledby', 'upd-h');
+upd.innerHTML = `<div class="wbar"><span></span><b id="upd-h">Обновление</b><span></span></div>
+<div class="ubody"><div class="uhead"><canvas aria-hidden="true"></canvas><p class="usay" id="upd-say" role="status" aria-live="polite"></p></div><div id="upd-m"></div></div>
+<div class="wfoot"><button class="lnk" id="upd-no" type="button">Позже</button><button class="p" id="upd-ok" type="button">Обновить</button></div>`;
+document.body.append(upd);
+/* в окошке — сама Мочи: копируем кадры её холста из верхней панели (там же меняем ей настроение) */
+const upc = upd.querySelector('canvas');
+function upDraw() {
+  if (!upd.open) return;
+  const src = $('#pet');
+  if (upc.width !== src.width || upc.height !== src.height) { upc.width = src.width; upc.height = src.height; }
+  const g = upc.getContext('2d'); g.clearRect(0, 0, upc.width, upc.height); g.drawImage(src, 0, 0);
+  requestAnimationFrame(upDraw);
+}
+
+const UPH = {
+  offer: ['Ура! Вышло обновление!', 'Ура, есть обновление! Обновимся?', 'Смотри, я научилась новому! Обновим?', 'Свеженькая версия приехала!'],
+  unknown: ['Не знаю, какая у меня версия… Обновимся до свежей?'],
+  fresh: ['У меня самая свежая версия!', 'Обновлений нет — я и так новенькая ^_^'],
+  done: ['Готово! Я обновилась ^_^', 'Ура! Я теперь новенькая!', 'Обновилась! Сейчас перезагружусь~'],
+  fail: ['Ой… обновиться не получилось', 'Хнык… обновление не вышло'],
+};
+const upick = a => a[Math.random() * a.length | 0];
+const plural = (n, a, b, c) => { const m = n % 10, h = n % 100; return n + ' ' + (m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 12 || h > 14) ? b : c); };
+const dday = s => { const d = s ? new Date(s) : null; return d && !isNaN(d) ? d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : ''; };
+const ago = t => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'только что' : m < 60 ? m + ' мин назад' : m < 1440 ? Math.round(m / 60) + ' ч назад' : dday(t); };
+const ver = (c, d) => (c && c.commit ? c.commit : 'неизвестно') + ((d || c && c.date) ? ' от ' + dday(d || c.date) : '');
+/* доля готовности — по шагам установщика (он печатает их по порядку) */
+const UPCT = [[/что нового/, 4], [/Устанавливаю Мочи/, 8], [/системные пакеты/, 12], [/Пакеты на месте/, 26], [/Node\.js/, 38], [/ttyd/, 46], [/Caddy/, 52],
+  [/код Мочи/, 58], [/^Код:/, 68], [/Запускаю службы/, 76], [/Сервер Мочи работает/, 88], [/сертификат/, 92], [/HTTPS/, 96]];
+const pct = steps => steps.reduce((p, s) => Math.max(p, ...UPCT.filter(([re]) => re.test(s.t)).map(x => x[1])), 3);
+/* «Позже» — не напоминать об этой версии сутки */
+const LATER = 'mochi-upd-later';
+const snoozed = c => { try { const v = JSON.parse(localStorage.getItem(LATER) || 'null'); return !!v && v.c === c && Date.now() < v.t; } catch (e) { return false; } };
+const snooze = c => { try { localStorage.setItem(LATER, JSON.stringify({ c, t: Date.now() + 864e5 })); } catch (e) {} };
+
+let updI = null, uMode = '', uSince = 0, uPoll = 0, uLastOk = 0, uLast = null, uOdd = 0, updAt = 0, build0 = null, reloadT = 0;
+const uSay = (t, mood, ms) => { $('#upd-say').textContent = t; window.petSet && petSet(mood, t, ms || 0); };
+function uBtns(no, ok) {
+  const n = $('#upd-no'), o = $('#upd-ok');
+  n.hidden = !no; o.hidden = !ok;
+  if (no) { n.textContent = no[0]; n.onclick = no[1]; }
+  if (ok) { o.textContent = ok[0]; o.onclick = ok[1]; o.disabled = !ok[1]; }
+}
+const unote = (m, t) => m.append(el('small', 'note', t));
+
+/* предложение обновиться: что стоит, что нового */
+function uOffer(i) {
+  uMode = 'offer';
+  const m = $('#upd-m'), ch = i.changes || [];
+  m.innerHTML = '';
+  m.append(el('p', 'uver', 'Сейчас: ' + ver(i.current, i.current && (i.current.date || i.current.installed)) + (i.latest && i.available !== false ? '\nНовая: ' + ver(i.latest) : '')));
+  if (ch.length) {
+    m.append(el('p', 'uhd', 'Что нового'));
+    const ul = el('ul', 'uch');
+    for (const c of ch.slice(0, 8)) ul.append(el('li', null, c.title));
+    if (ch.length > 8 || i.more) ul.append(el('li', 'umore', i.more ? 'и ещё много всего…' : 'и ещё ' + plural(ch.length - 8, 'изменение', 'изменения', 'изменений')));
+    m.append(ul);
+  }
+  const can = i.admin && i.ready && i.available !== false;
+  if (!i.admin) unote(m, 'Обновить Мочи может администратор сервера.');
+  else if (!i.ready) unote(m, 'Чтобы обновлять прямо отсюда, один раз выполни на сервере «sudo mochi update» — эта команда поставит службу обновления. Дальше хватит кнопки.');
+  else if (can) unote(m, 'Сервер перезапустится примерно на минуту. Переписка, настройки и файлы сохранятся' + (i.busy ? ', а начатые задачи продолжатся сами.' : '.'));
+  uSay(i.available === false ? upick(UPH.fresh) : i.available ? upick(UPH.offer) : upick(UPH.unknown), i.available === false ? 'happy' : 'wow', 2500);
+  uBtns([can ? 'Позже' : 'Закрыть', () => { if (can && i.latest) snooze(i.latest.commit); upd.close(); }], can ? ['Обновить', uGo] : null);
+}
+async function uGo() {
+  $('#upd-ok').disabled = true;
+  try { const i = await post('api/update'); updState(i); uSince = i.status.since || i.status.started || 0; uOdd = 0; uRun(i.status); uTick(); }
+  catch (e) { uFail({ error: e.message, steps: [] }); }
+}
+/* ход обновления; down — сервер не отвечает (перезапускается) */
+function uRun(st, down) {
+  uMode = 'run'; uLast = st;
+  const m = $('#upd-m');
+  if (!m.querySelector('.ust')) m.innerHTML = '<div class="ubar"><i></i></div><ul class="ust"></ul>';
+  const steps = st.steps || [], last = steps.filter(s => s.k === 'run' || s.k === 'ok').at(-1);
+  m.querySelector('.ubar i').style.width = (st.state === 'queued' ? 3 : pct(steps)) + '%';
+  const ul = m.querySelector('.ust'); ul.innerHTML = '';
+  /* «🐾 делаю…» мигает, только пока это последний шаг; пройденные — точкой */
+  steps.slice(-6).forEach((s, k, a) => ul.append(el('li', s.k === 'run' && (k < a.length - 1 || st.state !== 'running') ? 'past' : s.k, s.t)));
+  m.querySelector('.note')?.remove();
+  const stuck = st.state === 'queued' && Date.now() - st.since > 60e3;
+  if (stuck) unote(m, 'Служба обновления на сервере пока не отвечает. Проверь её: «systemctl status mochi-update.path» (на Alpine — «rc-service mochi-updater status»). Обновить можно и командой «sudo mochi update».');
+  uSay(down ? 'Сервер перезапускается… сейчас вернусь!' : st.state === 'queued' ? 'Передаю просьбу серверу…' : last ? last.t : 'Обновляюсь…', 'work');
+  uBtns(stuck ? ['Отменить', async () => { try { updState(await api('api/update', { method: 'DELETE' })); clearTimeout(uPoll); uMode = ''; upd.close(); } catch (e) {} }] : ['Скрыть', () => upd.close()], ['Обновляю…', null]);
+}
+function uTick() {
+  clearTimeout(uPoll);
+  uPoll = setTimeout(async () => {
+    let i = null;
+    try { i = await api('api/update'); uLastOk = Date.now(); }
+    catch (e) { if (e.status === 401) { uMode = ''; upd.close(); return check(); } }
+    if (!i) {
+      if (Date.now() - uLastOk > 10 * 60e3) return uFail({ error: 'Сервер не отвечает уже 10 минут. Загляни на сервер: «mochi status» и «mochi logs».', steps: uLast ? uLast.steps : [] });
+      if (uMode === 'run' && upd.open) uRun(uLast || { state: 'running', steps: [] }, true);
+      return uTick();
+    }
+    updState(i);
+    const st = i.status, ours = st.started && st.started + 2000 >= uSince;
+    if (st.state === 'done' && ours) return uDone(st);
+    if (st.state === 'failed' && ours) return uFail(st);
+    /* ни нашего запроса, ни нашего обновления: дадим службе 15 секунд — вдруг она как раз забирает запрос */
+    if (st.state === 'idle' || !ours && st.state !== 'queued') {
+      if (!uOdd) uOdd = Date.now();
+      else if (Date.now() - uOdd > 15e3) return uFail({ error: 'Запрос на обновление пропал — попробуй ещё раз.', steps: [] });
+      return uTick();
+    }
+    uOdd = 0;
+    if (upd.open) uRun(st);
+    uTick();
+  }, 1500);
+}
+function uDone(st) {
+  uMode = 'done';
+  /* страница уже с новой версией (перезагрузилась, пока сервер доделывал) — перезагружать незачем */
+  const fresh = !!(build0 && st.to && build0 === st.to);
+  if (!upd.open) { if (!fresh) reloadSoon(); return; }
+  uRun(st); uMode = 'done';
+  $('#upd-m .ubar i').style.width = '100%';
+  uSay(fresh ? UPH.done[0] : upick(UPH.done), 'love', 3000);
+  if (fresh) { uBtns(null, ['Отлично', () => upd.close()]); uMode = ''; return; }
+  uBtns(null, ['Перезагрузить', () => location.reload()]);
+  setTimeout(() => location.reload(), 2500);
+}
+function uFail(st) {
+  uMode = 'fail'; clearTimeout(uPoll);
+  if (!upd.open) { upd.showModal(); requestAnimationFrame(upDraw); }
+  const m = $('#upd-m'); m.innerHTML = '';
+  m.append(el('small', 'uerr', st.error || 'Обновление не удалось'));
+  if (st.steps && st.steps.length) { const ul = el('ul', 'ust'); for (const s of st.steps.slice(-6)) ul.append(el('li', s.k === 'run' ? 'past' : s.k, s.t)); m.append(ul); }
+  unote(m, 'Повторять не страшно: установщик сохраняет данные и настройки, а Мочи работает дальше.');
+  uSay(upick(UPH.fail), 'sad', 6000);
+  uBtns(['Закрыть', () => upd.close()], updI && updI.admin && updI.ready ? ['Повторить', uGo] : null);
+}
+function updOpen(i) {
+  const st = i.status;
+  if (!upd.open) { upd.showModal(); requestAnimationFrame(upDraw); }
+  if (i.admin && (st.state === 'running' || st.state === 'queued')) { if (uMode !== 'run') { uSince = st.since || st.started || 0; uOdd = 0; } uRun(st); uTick(); }
+  else uOffer(i);
+}
+upd.addEventListener('close', () => { if (uMode !== 'run' && window.petSet) petSet('idle'); });
+
+/* сервер обновился, пока страница была открыта: перезагружаемся, как только это никому не помешает */
+function reloadSoon() {
+  if (reloadT) return;
+  window.petSet && petSet('wow', 'Я обновилась! Сейчас перезагружусь~', 3000);
+  const go = () => { if (!$('#inp').value.trim() && !document.querySelector('dialog[open]')) location.reload(); else reloadT = setTimeout(go, 3000); };
+  reloadT = setTimeout(go, 2000);
+}
+function seenBuild(b) {
+  if (!b) return;
+  if (build0 && b !== build0 && uMode !== 'run' && uMode !== 'done') reloadSoon();
+  build0 = build0 || b;
+}
+
+/* настройки → Сервер → «Обновления» */
+const fUpd = fold('upd', 'Обновления');
+fUpd.body.innerHTML = `<span class="tgs" id="s-upd">…</span>
+<div class="row2"><button class="pbtn" type="button" id="s-updc"><span>Проверить обновления</span></button><button class="pbtn" type="button" id="s-updgo" hidden><span>Обновить</span></button></div>
+<small class="note" id="s-updn"></small>`;
+pane.append(fUpd);
+function updState(i) {
+  if (!i || !i.status) return;
+  updI = i;
+  const st = i.status, on = !!(i.admin && i.available);
+  $('#set').classList.toggle('upd', on); lxTab.classList.toggle('upd', on);
+  const busy = st.state === 'running' || st.state === 'queued';
+  const lines = [i.known ? 'Стоит версия ' + ver(i.current, i.current.date || i.current.installed) : 'Неизвестно, какая версия стоит: Мочи установлена без сведений о сборке.'];
+  if (busy) lines.push('Сейчас идёт обновление…');
+  else if (i.available) lines.push('Есть новая версия: ' + ver(i.latest) + (i.changes.length ? ' · ' + plural(i.changes.length, 'изменение', 'изменения', 'изменений') + (i.more ? ' и больше' : '') : ''));
+  else if (i.available === false) lines.push('Это последняя версия ✓');
+  if (i.error) lines.push('Не получилось проверить: ' + i.error);
+  if (i.checked) lines.push('Проверено ' + ago(i.checked) + '.');
+  else if (i.known && !i.error) lines.push('Ещё не проверяла.');
+  $('#s-upd').textContent = lines.join('\n'); $('#s-upd').style.whiteSpace = 'pre-line';
+  $('#s-updgo').hidden = !(i.admin && i.ready && (busy || i.available || (i.available === null && i.latest)));
+  $('#s-updgo span').textContent = busy ? 'Показать ход' : 'Обновить';
+  $('#s-updn').textContent = !i.admin ? 'Обновляет администратор сервера.' : !i.ready ? 'Чтобы обновлять из браузера, один раз выполни на сервере «sudo mochi update» — она поставит службу обновления.' : 'Мочи проверяет GitHub раз в 6 часов и сама предложит обновиться. Откуда берётся код: ' + (i.repo || '?') + (i.ref && i.ref !== 'HEAD' ? ' (ветка ' + i.ref + ')' : '') + '.';
+  foldMeta(fUpd, busy ? 'обновляется…' : i.available ? 'есть новая' : i.available === false ? 'последняя' : i.error ? 'не проверить' : i.current && i.current.commit || '', !busy && !i.available && !!i.error);
+  fUpd.querySelector(':scope>summary>.fm').classList.toggle('new', !!(busy || i.available));
+}
+$('#s-updc').onclick = async () => {
+  const b = $('#s-updc'); b.disabled = true; $('#s-upd').textContent = 'Смотрю на GitHub…';
+  try {
+    const i = await post('api/update/check'); updAt = Date.now(); updState(i);
+    if (i.admin && (i.available || i.status.state === 'running' || i.status.state === 'queued')) updOpen(i);
+    else if (i.available === false && window.petSet) petSet('happy', upick(UPH.fresh), 3000);
+  } catch (e) { $('#s-upd').textContent = 'Не получилось: ' + e.message; }
+  finally { b.disabled = false; }
+};
+$('#s-updgo').onclick = () => updI && updOpen(updI);
+
+/* при входе и при возвращении на вкладку (если давно не смотрели): есть новая версия — предлагаем */
+async function updBoot(auto) {
+  let i; try { i = await api('api/update'); } catch (e) { return; }
+  updAt = Date.now(); updState(i);
+  if (!i.admin || upd.open) return;
+  const st = i.status;
+  if (st.state === 'running' || st.state === 'queued') return updOpen(i);
+  if (auto && i.available && i.latest && !snoozed(i.latest.commit)) setTimeout(() => { if (!document.querySelector('dialog[open]')) updOpen(i); }, 2000);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && me && Date.now() - updAt > 3 * 3600e3) updBoot(true); });
 
 /* ---------- вкладка «Инструменты»: Встроенные · MCP-серверы · Навыки ----------
    Всё применяется сразу. Выключенное не попадает в запросы к модели — рядом виден примерный «вес» в токенах.

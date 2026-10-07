@@ -16,6 +16,7 @@ umask 022  # всё создаваемое — не доступно на зап
 
 REPO="${MOCHI_REPO:-RamadanIU/Agent-Mochi}"
 REF="${MOCHI_REF:-HEAD}"  # HEAD = основная ветка репозитория, как бы она ни называлась
+COMMIT="${MOCHI_COMMIT:-}"  # скачать ровно этот коммит (так делает mochi-update); ветка в настройках не меняется
 PREFIX=/opt/mochi
 STATE=/var/lib/mochi
 ETC=/etc/mochi
@@ -49,7 +50,7 @@ cat <<EOF
   --no-firewall      не открывать порты 80/443 в ufw/firewalld
   --ref BRANCH       ветка/тег репозитория ${REPO} (по умолчанию ${REF})
   --source DIR       взять код из локальной папки вместо GitHub
-  --update           обновить код и зависимости, настройки оставить
+  --update           обновить код и зависимости, настройки оставить (то же — «sudo mochi update» или кнопка в настройках)
   --uninstall        удалить программу (данные пользователей останутся в ${STATE})
   --purge            вместе с --uninstall: удалить и все данные
 По умолчанию без домена используется адрес вида 1-2-3-4.sslip.io с настоящим сертификатом.
@@ -145,8 +146,9 @@ SERVICES="mochi-runner mochi-term mochi"
 # ---------- удаление ----------
 if [ "$MODE" = uninstall ]; then
   say "Удаляю Мочи…"
-  for s in mochi mochi-term mochi-runner mochi-caddy; do svc stop "$s" >/dev/null 2>&1 || true; svc disable "$s"; done
-  rm -f /etc/systemd/system/mochi*.service /etc/init.d/mochi /etc/init.d/mochi-term /etc/init.d/mochi-runner /etc/init.d/mochi-caddy
+  if [ "$INIT" = systemd ]; then UPD="mochi-update.path"; else UPD="mochi-updater"; fi
+  for s in $UPD mochi mochi-term mochi-runner mochi-caddy; do svc stop "$s" >/dev/null 2>&1 || true; svc disable "$s"; done
+  rm -f /etc/systemd/system/mochi*.service /etc/systemd/system/mochi*.path /etc/init.d/mochi /etc/init.d/mochi-term /etc/init.d/mochi-runner /etc/init.d/mochi-caddy /etc/init.d/mochi-updater
   [ "$INIT" = systemd ] && systemctl daemon-reload
   rm -rf "$PREFIX" /usr/local/bin/mochi /etc/sudoers.d/mochi-agent
   if [ "$PURGE" = 1 ]; then
@@ -165,6 +167,10 @@ if [ "$MODE" = update ] && [ -r "$ETC/install.conf" ]; then
   # shellcheck disable=SC1091
   . "$ETC/install.conf"
 fi
+# попадают в адреса, в build.json и в install.conf — только безопасные символы
+[[ "$REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || die "Неверный репозиторий: $REPO (нужно ВЛАДЕЛЕЦ/ИМЯ)"
+[[ "$REF" =~ ^[A-Za-z0-9._/-]+$ ]] || die "Неверная ветка: $REF"
+[ -z "$COMMIT" ] || [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "Неверный MOCHI_COMMIT: $COMMIT"
 
 say "${B}Устанавливаю Мочи${N} · $OS_NAME · $(uname -m) · $INIT · пакеты: $PM"
 
@@ -272,20 +278,29 @@ TRUST=0; [ "$TLS" = on ] || [ -n "$PUBLIC_URL" ] && TRUST=1
 say "Ставлю код Мочи…"
 here=""; [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ] && here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 if [ -z "$SRC" ] && [ -n "$here" ] && [ -f "$here/server/mochi.js" ] && [ -f "$here/index.html" ]; then SRC="$here"; fi
+BUILD_COMMIT=""  # коммит, из которого ставим: по нему сервер проверяет, есть ли обновление
 if [ -z "$SRC" ]; then
-  fetch "https://codeload.github.com/${REPO}/tar.gz/${REF}" "$TMP/src.tgz" || die "Не скачался код ${REPO}@${REF}"
-  mkdir -p "$TMP/src"; tar -xzf "$TMP/src.tgz" -C "$TMP/src" --strip-components=1
+  fetch "https://codeload.github.com/${REPO}/tar.gz/${COMMIT:-$REF}" "$TMP/src.tgz" || die "Не скачался код ${REPO}@${COMMIT:-$REF}"
+  gzip -dc "$TMP/src.tgz" > "$TMP/src.tar" || die "Архив с кодом повреждён — запусти ещё раз"
+  mkdir -p "$TMP/src"; tar -xf "$TMP/src.tar" -C "$TMP/src" --strip-components=1
+  # GitHub собирает архив через git archive и пишет коммит в его заголовок: «comment=<sha>»
+  BUILD_COMMIT=$(head -c 1024 "$TMP/src.tar" | tr -c '0-9a-z=\n' '\n' | sed -n 's/^comment=\([0-9a-f]\{40\}\)$/\1/p' | sed -n 1p)
+  rm -f "$TMP/src.tar" "$TMP/src.tgz"
   SRC="$TMP/src"
+elif [ -e "$SRC/.git" ] && command -v git >/dev/null 2>&1; then
+  BUILD_COMMIT=$(git -c safe.directory='*' -C "$SRC" rev-parse HEAD 2>/dev/null || true)
 fi
+[[ "$BUILD_COMMIT" =~ ^[0-9a-f]{40}$ ]] || BUILD_COMMIT=""
 [ -f "$SRC/server/mochi.js" ] && [ -f "$SRC/index.html" ] || die "В $SRC нет server/mochi.js — это точно код Мочи?"
 rm -rf "$PREFIX/app.new"; mkdir -p "$PREFIX/app.new"
 cp -r "$SRC/index.html" "$SRC/sw.js" "$SRC/manifest.webmanifest" "$SRC/icons" "$SRC/server" "$PREFIX/app.new/"
 rm -rf "$PREFIX/app.new/server/test" "$PREFIX/app.new/server/.dev"
+printf '{"repo":"%s","ref":"%s","commit":"%s","installed":"%s"}\n' "$REPO" "$REF" "$BUILD_COMMIT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$PREFIX/app.new/build.json"
 chmod -R u=rwX,go=rX "$PREFIX/app.new"; chmod 0755 "$PREFIX/app.new/server/bin/"*
 "$NODE" --check "$PREFIX/app.new/server/mochi.js" || die "Код не прошёл проверку синтаксиса"
 rm -rf "$PREFIX/app.old"; [ -d "$PREFIX/app" ] && mv "$PREFIX/app" "$PREFIX/app.old"
 mv "$PREFIX/app.new" "$PREFIX/app"
-ok "Код: $(cd "$PREFIX/app/server" && "$NODE" -p 'require("./package.json").version')"
+ok "Код: $(cd "$PREFIX/app/server" && "$NODE" -p 'require("./package.json").version')${BUILD_COMMIT:+ · ${BUILD_COMMIT:0:7}}"
 
 # ---------- пользователи ----------
 NOLOGIN=$(command -v nologin || echo /bin/false)
@@ -306,6 +321,7 @@ mkd 0700 mochi:mochi "$STATE/data"
 mkd 2770 mochi-agent:mochi "$STATE/agent"
 mkd 0755 root:root "$ETC"  # секретов здесь нет; Caddyfile читает mochi-caddy
 mkd 0755 root:root /var/log/mochi
+mkd 0750 root:mochi "$STATE/update"  # ход обновления (пишет root, читает сервер)
 A="$STATE/agent"
 mkd 0750 mochi-agent:mochi "$A/.local"
 mkd 0750 mochi-agent:mochi "$A/.local/bin"
@@ -355,6 +371,7 @@ MOCHI_AGENT_SUDO=$WITH_SUDO
 MOCHI_RUNNER_SOCK=/run/mochi-runner/runner.sock
 MOCHI_TTYD_SOCK=/run/mochi-term/ttyd.sock
 MOCHI_TTYD_BIN=$PREFIX/bin/ttyd
+MOCHI_UPDATE_DIR=$STATE/update
 EOF
 chmod 0640 "$ETC/mochi.env"; chown root:mochi "$ETC/mochi.env"
 cat > "$ETC/install.conf" <<EOF
@@ -529,6 +546,29 @@ EOF
   else
     systemctl disable --now mochi-caddy >/dev/null 2>&1 || true; rm -f /etc/systemd/system/mochi-caddy.service
   fi
+  # кнопка «Обновить» в браузере: сервер (без прав) кладёт файл-запрос, systemd замечает его
+  # и запускает обновление от root. Что и откуда ставить, решает только mochi-update (из install.conf)
+  cat > /etc/systemd/system/mochi-update.service <<EOF
+[Unit]
+Description=Мочи — обновление (по кнопке в настройках)
+
+[Service]
+Type=oneshot
+Environment=HOME=/root
+ExecStart=$APP/bin/mochi-update service
+TimeoutStartSec=30min
+EOF
+  cat > /etc/systemd/system/mochi-update.path <<EOF
+[Unit]
+Description=Мочи — ждёт запрос на обновление из настроек
+
+[Path]
+PathExists=$STATE/data/update.request
+Unit=mochi-update.service
+
+[Install]
+WantedBy=multi-user.target
+EOF
   systemctl daemon-reload
 else
   # OpenRC (Alpine и др.)
@@ -566,6 +606,8 @@ EOF
     setcap cap_net_bind_service=+ep "$PREFIX/bin/caddy" || die "Не удалось разрешить Caddy порты 80/443 (нужен setcap)"
     orc mochi-caddy mochi-caddy:mochi-caddy "Мочи — HTTPS" "" "$CADDY_HOME" "HOME=$CADDY_HOME XDG_DATA_HOME=$CADDY_HOME XDG_CONFIG_HOME=$CADDY_HOME" "$PREFIX/bin/caddy run --config $ETC/Caddyfile --adapter caddyfile" "after mochi"
   fi
+  # кнопка «Обновить» в браузере: следит за файлом-запросом сервера и обновляет от root
+  orc mochi-updater root:root "Мочи — обновление по кнопке в настройках" "" "$STATE" "HOME=/root" "$APP/bin/mochi-update watch"
 fi
 
 # ---------- команда mochi ----------
@@ -586,7 +628,7 @@ case "${1:-help}" in
   start|stop|restart) need_root "$@"; each "$1" ;;
   logs)
     if [ "$INIT" = systemd ]; then shift; exec journalctl -u 'mochi*' -n 200 "${@:--f}"; else exec tail -n 200 -f /var/log/mochi/*.log; fi ;;
-  update) need_root "$@"; curl -fsSL "https://raw.githubusercontent.com/$REPO/$REF/install.sh" | bash -s -- --update ;;
+  update) need_root "$@"; exec "$APP/bin/mochi-update" cli ;;
   uninstall) need_root "$@"; shift; curl -fsSL "https://raw.githubusercontent.com/$REPO/$REF/install.sh" | bash -s -- --uninstall "$@" ;;
   status)
     for s in $SERVICES; do
@@ -604,7 +646,7 @@ mochi admin <имя> [off] — сделать (снять) администра�
 mochi deluser <имя>     — удалить пользователя
 mochi status | logs     — состояние и журнал
 mochi start | stop | restart
-mochi update            — обновить Мочи (данные сохраняются)
+mochi update            — обновить Мочи (данные сохраняются; то же — кнопка в настройках → Сервер)
 mochi uninstall [--purge]
 H
     ;;
@@ -625,6 +667,11 @@ fi
 say "Запускаю службы…"
 for s in $SERVICES; do svc enable "$s"; done
 for s in $SERVICES; do svc restart "$s" >/dev/null 2>&1 || svc start "$s" >/dev/null; done
+# служба обновления по кнопке. Если обновляет она сама (MOCHI_UPDATER), её не перезапускаем — это оборвало бы обновление
+if [ "$INIT" = systemd ]; then UPD=mochi-update.path; else UPD=mochi-updater; fi
+svc enable "$UPD"
+if [ -n "${MOCHI_UPDATER:-}" ]; then svc start "$UPD" >/dev/null 2>&1 || true
+else svc restart "$UPD" >/dev/null 2>&1 || svc start "$UPD" >/dev/null 2>&1 || warn "Не запустилась служба $UPD — обновлять можно командой: sudo mochi update"; fi
 
 up=0
 for _ in $(seq 1 60); do curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && { up=1; break; }; sleep 0.5; done
