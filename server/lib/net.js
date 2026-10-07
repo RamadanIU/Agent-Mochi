@@ -2,6 +2,7 @@
    Cloudflare перед некоторыми API (так делает OpenRouter) узнаёт Node.js по TLS-отпечатку и отвечает
    403 {"success":false,"error":"Access denied by security policy."} — ещё до проверки ключа. Браузер и curl он пускает.
    apiFetch делает обычный fetch, а на такой ответ повторяет запрос через curl и дальше ходит к этому хосту только через него.
+   Так же пробуем curl и на другие страницы блокировки Cloudflare (см. cfBlock): если пустил — дальше через него.
    curlFetch отдаёт настоящий Response с потоковым телом: SSE-ответ модели читается так же, как от fetch. */
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -10,27 +11,55 @@ import path from 'node:path';
 
 const viaCurl = new Set();
 let noCurl = false;
-export const isCfBlock = (status, text) => status === 403 && /access denied by security policy/i.test(text || '');
+
+/* Cloudflare не пустил запрос — ещё до проверки ключа:
+   'node'      — JSON «Access denied by security policy»: OpenRouter не пускает Node.js, curl пускает;
+   'waf'       — страница «Sorry, you have been blocked» или «Access denied · Error 1020»: правило защиты сайта,
+                 обычно по IP-адресу, стране или сети хостинга сервера;
+   'challenge' — «Just a moment…»: проверка, которую проходит только браузер. */
+export function cfBlock(status, text, headers) {
+  if (status !== 403 && status !== 503) return null;
+  const t = String(text || '');
+  if (status === 403 && /access denied by security policy/i.test(t)) return 'node';
+  if (headers?.get?.('cf-mitigated') === 'challenge' || /<title>\s*just a moment|_cf_chl_opt|challenges\.cloudflare\.com/i.test(t)) return 'challenge';
+  if (status === 403 && /cloudflare/i.test(t) && /attention required|you have been blocked|error code:? 10\d\d|error 10\d\d/i.test(t)) return 'waf';
+  return null;
+}
+/* что показать человеку: ключ тут ни при чём, и что можно сделать */
+export function cfMessage(kind, url, headers) {
+  let host = ''; try { host = new URL(url).host; } catch {}
+  const ray = String(headers?.get?.('cf-ray') || '').replace(/[^\w-]/g, '').slice(0, 40);
+  if (kind === 'node') return 'Это не ключ: Cloudflare перед API модели не пускает запросы с этого сервера (HTTP 403 «Access denied by security policy»). Обычно помогает curl — проверь, что он установлен на сервере (curl --version), и перезапусти Мочи.';
+  const sup = 'Напиши в поддержку провайдера' + (ray ? ' (Cloudflare Ray ID: ' + ray + ')' : '');
+  if (kind === 'challenge') return `Это не ключ: Cloudflare перед ${host || 'API модели'} требует проверку «я не робот», которую проходит только браузер, а сервер — нет. ${sup}: API не должен так отвечать.`;
+  return `Это не ключ: Cloudflare перед ${host || 'API модели'} заблокировал запрос с этого сервера (HTTP 403 «Sorry, you have been blocked»). Так настроена защита у провайдера — обычно по IP-адресу или стране сервера. ${sup} или запусти Мочи на другом сервере.`;
+}
 
 export async function apiFetch(url, init = {}) {
   const host = new URL(url).host;
   if (viaCurl.has(host) && !noCurl) return curlFetch(url, init);
   const r = await fetch(url, init);
-  if (r.status !== 403 || noCurl) return r;
+  if ((r.status !== 403 && r.status !== 503) || noCurl) return r;
   const text = await r.text().catch(() => '');
   const again = () => new Response(text, { status: r.status, statusText: r.statusText, headers: r.headers });
-  if (!isCfBlock(r.status, text)) return again();
-  try {
-    const c = await curlFetch(url, init);
-    viaCurl.add(host);
-    console.warn('net: ' + host + ' не пускает Node.js (Cloudflare), дальше запросы идут через curl');
-    return c;
-  } catch (e) {
+  const kind = cfBlock(r.status, text, r.headers);
+  if (!kind) return again();
+  let c;
+  try { c = await curlFetch(url, init); } catch (e) {
     if (e.code !== 'ENOENT') throw e;
     noCurl = true;
     console.warn('net: ' + host + ' не пускает Node.js (Cloudflare), а curl не установлен');
     return again();
   }
+  /* curl тоже не пустили (блокировка по IP) — отдаём ответ как есть, а в следующий раз снова попробуем fetch */
+  if (c.status === 403 || c.status === 503) {
+    const ct = await c.text().catch(() => '');
+    if (cfBlock(c.status, ct, c.headers)) return again();
+    return new Response(ct, { status: c.status, statusText: c.statusText, headers: c.headers });
+  }
+  viaCurl.add(host);
+  console.warn('net: ' + host + ' не пускает Node.js (Cloudflare), дальше запросы идут через curl');
+  return c;
 }
 
 const netErr = (msg, code) => Object.assign(new TypeError(msg), { cause: { code } });

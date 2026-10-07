@@ -322,11 +322,14 @@ loadModels = async function () {
   if (!base) { h.textContent = ''; delete h.dataset.s; return; }
   h.textContent = 'Сервер проверяет связь с моделью…'; h.dataset.s = 'wait';
   try {
-    const { models: ids, free } = await post('api/models', { base, key }); if (t !== mt) return;
+    const { models: ids, free, needKey } = await post('api/models', { base, key }); if (t !== mt) return;
     const f = ids.filter(x => !/embed|whisper|tts|dall-e|moderation|image|audio|realtime|transcribe/i.test(x));
     mdl = [...new Set(f.length ? f : ids)].sort();
     h.textContent = (mdl.length ? 'Связь есть, моделей: ' + mdl.length + '. нажми на поле, чтобы выбрать' : 'Связь есть') + (free ? '. ' + freeNote(free) : ''); h.dataset.s = 'ok';
-    const cur = mi().value.trim(); if (mdl.length && (!cur || (cur === DEF.model && !mdl.includes(cur)) || (free && !isFree(cur)))) mi().value = pickModel(mdl);
+    /* /models у OpenRouter и Ollama Cloud отвечает и без ключа, а модель без него — нет */
+    if (needKey) { h.textContent += '. Вставь API ключ — без него модель не ответит'; delete h.dataset.s; }
+    const cur = mi().value.trim(); if (mdl.length && (!cur || (cur === DEF.model && !mdl.includes(cur)) || (provNew && !mdl.includes(cur)) || (free && !isFree(cur)))) mi().value = pickModel(mdl);
+    if (mdl.length) provNew = false;
   } catch (e) {
     if (t !== mt) return; mdl = []; h.dataset.s = 'err';
     const u = e.j && e.j.upstream;

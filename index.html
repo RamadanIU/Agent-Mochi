@@ -493,8 +493,9 @@ function ask(title,text,val,ok){return new Promise(res=>{const d=$('#ask'),i=$('
 $('#ask-ok').onclick=()=>$('#ask').close('ok');$('#ask-no').onclick=()=>$('#ask').close('');
 $('#ask-i').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#ask').close('ok')}};
 $('#ask').addEventListener('click',e=>{if(e.target===$('#ask'))$('#ask').close('')});
-const PRESETS={OpenAI:'https://api.openai.com/v1',OpenRouter:'https://openrouter.ai/api/v1',Ollama:'http://localhost:11434/v1','LM Studio':'http://localhost:1234/v1'};
-const LOCAL=['Ollama','LM Studio'],CUSTOM='Другой',MEMS=[64,128,256,512,1024];
+/* Ollama Cloud не пускает браузер (нет CORS) — он только в серверном режиме; свой Ollama — через «Другой» */
+const PRESETS={OpenAI:'https://api.openai.com/v1',OpenRouter:'https://openrouter.ai/api/v1',...(SRV?{'Ollama Cloud':'https://ollama.com/v1'}:{}),JustWoker:'https://api.justwoker.icu/v1','LM Studio':'http://localhost:1234/v1'};
+const LOCAL=['LM Studio'],CUSTOM='Другой',MEMS=[64,128,256,512,1024];
 /* API модели вызывается прямо из браузера, поэтому важен CORS. OpenAI, OpenRouter, Gemini, Groq, DeepSeek, Mistral, xAI, Together
    отвечают на preflight сами. Anthropic пускает браузер только с особым заголовком. http-адрес в локальной сети (Ollama на другом ПК)
    Chrome разрешает со страницы https лишь с targetAddressSpace. Ollama и LM Studio по умолчанию чужие сайты не пускают — см. corsHint */
@@ -504,7 +505,7 @@ const loopHost=h=>/^(localhost|127\.\d+\.\d+\.\d+|\[::1\])$/i.test(h);
 function apiInit(base,key,o){const u=apiUrl(base),h={...(o&&o.headers)};if(key)h.Authorization='Bearer '+key;
   if(u&&/(^|\.)anthropic\.com$/i.test(u.hostname)){h['anthropic-dangerous-direct-browser-access']='true';h['anthropic-version']='2023-06-01'}
   const r={...o,headers:h};if(u&&u.protocol==='http:'&&lanHost(u.hostname))r.targetAddressSpace='local';return r}
-function corsHint(base){const u=apiUrl(base);if(!u||!(loopHost(u.hostname)||lanHost(u.hostname)))return'';
+function corsHint(base){const u=apiUrl(base);if(u&&/(^|\.)ollama\.com$/i.test(u.hostname))return' Ollama Cloud не пускает запросы из браузера — он работает в серверной версии Мочи.';if(!u||!(loopHost(u.hostname)||lanHost(u.hostname)))return'';
   return' Локальный сервер должен пускать этот сайт: Ollama — запусти с OLLAMA_ORIGINS='+location.origin+' (или *), LM Studio — включи «Enable CORS» в настройках сервера.'}
 const prov=$('#c-prov'),memSel=$('#c-mem');
 for(const k of [...Object.keys(PRESETS),CUSTOM])prov.add(new Option(k,k));
@@ -516,14 +517,16 @@ function fill(s){
   $('#c-sfx').checked=s.sfx!==false;$('#c-key').type='password';$('#c-eye').setAttribute('aria-pressed','false');$('#c-search').checked=s.search!==false;$('#c-vis').checked=s.vis!==false;$('#c-tts').checked=s.tts!==false;$('#c-vlang').value=s.vlang||(window.mochiGuess?mochiGuess():'ru-RU');$('#c-neton').checked=!!s.net;$('#c-net').value=relayList(s.net||DEF.net).join('\n');
   memSel.innerHTML='';for(const v of [...new Set([...MEMS,+s.mem||128])].sort((a,b)=>a-b))memSel.add(new Option(v>=1024?v/1024+' ГБ':v+' МБ',v));
   memSel.value=String(+s.mem||128);syncSet()}
-prov.onchange=()=>{if(prov.value!==CUSTOM)$('#c-base').value=PRESETS[prov.value];syncSet();loadModels()};
+/* сменили провайдера — модель из старого списка там, скорее всего, не найдётся: loadModels подберёт новую */
+let provNew=false;
+prov.onchange=()=>{if(prov.value!==CUSTOM)$('#c-base').value=PRESETS[prov.value];provNew=true;syncSet();loadModels()};
 $('#c-neton').onchange=syncSet;
 const stabs=[...document.querySelectorAll('.stabs button')];
 function stab(p){stabs.forEach(b=>{const on=b.dataset.p===p;b.classList.toggle('on',on);b.setAttribute('aria-selected',on);b.tabIndex=on?0:-1});
   document.querySelectorAll('.spane').forEach(x=>x.hidden=x.id!=='p-'+p);$('.sbody').scrollTop=0}
 stabs.forEach((b,k)=>{b.onclick=()=>stab(b.dataset.p);
   b.onkeydown=e=>{const d=e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0;if(!d)return;e.preventDefault();const n=stabs[(k+d+stabs.length)%stabs.length];stab(n.dataset.p);n.focus()}});
-function openSet(p){const keep=window.__keepForm;if(!keep)fill(cfg);window.__keepForm=false;
+function openSet(p){const keep=window.__keepForm;if(!keep){fill(cfg);provNew=false}window.__keepForm=false;
   if(!keep||p)stab(p||(!cfg.key&&!LOCAL.includes(prov.value)?'ai':'me'));$('#dlg').showModal();loadModels()}
 $('#set').onclick=()=>openSet();
 $('#c-eye').onclick=()=>{const k=$('#c-key'),on=k.type==='password';k.type=on?'text':'password';$('#c-eye').setAttribute('aria-pressed',on);$('#c-eye').setAttribute('aria-label',on?'Скрыть ключ':'Показать ключ')};
@@ -793,8 +796,11 @@ async function loadModels(){
     if(ki&&ki.free){const fr=ids.filter(isFree);if(fr.length)ids=fr}
     const f=ids.filter(x=>!/embed|whisper|tts|dall-e|moderation|image|audio|realtime|transcribe/i.test(x));
     mdl=[...new Set(f.length?f:ids)].sort();h.textContent=(mdl.length?'Связь есть, моделей: '+mdl.length+'. нажми на поле, чтобы выбрать':'Связь есть')+(ki&&ki.free?'. '+freeNote(ki):'');h.dataset.s='ok';
+    /* /models у OpenRouter отвечает и без ключа, а модель без него — нет */
+    if(!key&&isOR(base)){h.textContent+='. Вставь API ключ — без него модель не ответит';delete h.dataset.s}
     const cur=mi().value.trim();
-    if(mdl.length&&(!cur||(cur===DEF.model&&!mdl.includes(cur))||(ki&&ki.free&&!isFree(cur))))mi().value=pickModel(mdl);
+    if(mdl.length&&(!cur||(cur===DEF.model&&!mdl.includes(cur))||(provNew&&!mdl.includes(cur))||(ki&&ki.free&&!isFree(cur))))mi().value=pickModel(mdl);
+    if(mdl.length)provNew=false;
   }catch(e){if(t!==mt)return;mdl=[];h.dataset.s='err';
     if(/^40[13]$/.test(e.message)&&!key){h.textContent='Вставь API ключ — после этого загружу список моделей';delete h.dataset.s;return}
     h.textContent=/^40[13]$/.test(e.message)?'Ключ не подошёл (HTTP '+e.message+'). Проверь его':e.message==='format'||e instanceof SyntaxError?'Сервер ответил, но не списком моделей. Модель можно вписать вручную':e instanceof TypeError?'Сервер не отвечает или не пускает браузер (CORS).'+corsHint(base)+' Модель можно вписать вручную':'Список моделей недоступен (HTTP '+e.message+'). Впиши модель вручную'}

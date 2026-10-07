@@ -10,7 +10,7 @@ import { Doc, ensureDir, rid, writeJSONSync, readJSON } from './store.js';
 import { runCmd, fileCmd, agentInfo } from './runner-client.js';
 import { userDir, pullFile, storeFile, sz } from './files.js';
 import { webTools, webCall } from './mcp.js';
-import { apiFetch, isCfBlock } from './net.js';
+import { apiFetch, cfBlock, cfMessage } from './net.js';
 import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens } from './ext.js';
 
 export const DEF_SYS = 'Тебя зовут Мочи — ты милый пиксельный зверёк-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. В поле action кратко и по-человечески пиши, что делаешь. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
@@ -78,6 +78,7 @@ export function setTools(chat, m) {
   chat.set.save();
 }
 
+const argsOk = s => { try { const a = JSON.parse(s); return !!a && typeof a === 'object' && !Array.isArray(a); } catch { return false; } };
 const sleep = (ms, sig) => new Promise(ok => { const t = setTimeout(ok, ms); sig?.addEventListener('abort', () => { clearTimeout(t); ok(); }, { once: true }); });
 const abortErr = () => Object.assign(new Error('остановлено'), { name: 'AbortError' });
 
@@ -100,10 +101,11 @@ function labelFor(n, a) {
   return String(s).slice(0, 80);
 }
 
-export const CF_BLOCK = 'Это не ключ: Cloudflare перед API модели не пускает запросы с этого сервера (HTTP 403 «Access denied by security policy»). Обычно помогает curl — проверь, что он установлен на сервере (curl --version), и перезапусти Мочи.';
 export function friendly(e) {
   const s = e.status;
-  if (isCfBlock(s, e.detail)) return CF_BLOCK;
+  if (e.cf) return e.cf;
+  /* шлюзы вроде New API (JustWoker) отвечают 401/403, когда на ключе кончилась квота, — это не «неверный ключ» */
+  if ((s === 401 || s === 403) && /quota|额度|余额|balance|credits?\b|insufficient[ _](funds|balance|credits?)/i.test(e.detail || '')) return 'На ключе кончились деньги или квота (HTTP ' + s + '). Пополни баланс у провайдера или выбери модель подешевле.';
   if (s === 401 || s === 403) return 'Ключ API не подошёл (HTTP ' + s + '). Проверь его в настройках.';
   if (s === 402) return 'На счёте нет денег для этой модели (HTTP 402). Пополни баланс или выбери бесплатную модель (у OpenRouter — с «:free» в конце).';
   if (s === 404) return 'Не нашла модель или адрес API (HTTP 404). Проверь их в настройках.';
@@ -169,6 +171,8 @@ export class Chat extends EventEmitter {
     const out = [];
     for (let i = from; i < H.length; i++) {
       const { _pf, ...m } = H[i];
+      /* Ollama не принимает историю, где аргументы вызова — не JSON-объект (обрезаны или пустые): шлём {} — модель и так получила ошибку */
+      if (m.tool_calls) m.tool_calls = m.tool_calls.map(c => argsOk(c.function.arguments) ? c : { ...c, function: { ...c.function, arguments: '{}' } });
       if (_pf && lvl < 2 && rec.has(i)) {
         const ps = this.loadParts(_pf).filter(p => lvl < 1 || p.type === 'image_url');
         if (ps.length) m.content = [{ type: 'text', text: m.content }, ...ps];
@@ -421,10 +425,14 @@ export class Chat extends EventEmitter {
       const poke = () => { clearTimeout(it); it = setTimeout(() => idle.abort(), 180000); };
       const signal = AbortSignal.any([sig, idle.signal]);
       try {
-        const r = await apiFetch(S.base.replace(/\/+$/, '') + '/chat/completions', { method: 'POST', headers: h, signal,
+        const url = S.base.replace(/\/+$/, '') + '/chat/completions';
+        const r = await apiFetch(url, { method: 'POST', headers: h, signal,
           body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: sys }, ...msgs], ...(tools.length ? { tools } : {}), stream: true }) });
         if (!r.ok) {
-          const et = (await r.text().catch(() => '')).slice(0, 300);
+          const full = await r.text().catch(() => ''), et = full.slice(0, 300);
+          /* страница блокировки Cloudflare: ключ ни при чём, повторять бесполезно */
+          const cf = cfBlock(r.status, full, r.headers);
+          if (cf) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status, cf: cfMessage(cf, url, r.headers), detail: '' });
           if (hasM && [400, 404, 413, 415, 422].includes(r.status) && this.noVis < 2) {
             this.noVis = this.hasPdf() && this.noVis < 1 ? 1 : 2;
             this.push({ kind: 'note', text: this.noVis === 1 ? 'Эта модель не принимает PDF напрямую — отправляю только картинки, а PDF остаётся на сервере.' : 'Эта модель не принимает картинки — отправляю только пути к файлам. Проверь модель в настройках.' });

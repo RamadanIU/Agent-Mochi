@@ -25,7 +25,7 @@ export async function fakeModel(script) {
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     const ev = d => res.write('data: ' + JSON.stringify({ choices: [{ delta: d }] }) + '\n\n');
     if (step.text) for (const w of step.text.match(/.{1,5}/gs)) { ev({ content: w }); await sleep(5); }
-    (step.tools || []).forEach((t, i) => ev({ tool_calls: [{ index: i, id: 'c' + calls.length + i, function: { name: t.name, arguments: JSON.stringify(t.args) } }] }));
+    (step.tools || []).forEach((t, i) => ev({ tool_calls: [{ index: i, id: 'c' + calls.length + i, function: { name: t.name, arguments: t.raw ?? JSON.stringify(t.args) } }] }));
     res.end('data: [DONE]\n\n');
   });
   const port = await freePort();

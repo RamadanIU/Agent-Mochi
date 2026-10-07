@@ -33,7 +33,7 @@ curl -fsSL https://raw.githubusercontent.com/RamadanIU/Agent-Mochi/HEAD/install.
     https://203-0-113-7.sslip.io/?invite=k3x9-p2mf-q8wd
 ```
 
-Дальше: **Настройки → Модель** — адрес API (OpenAI, OpenRouter, Ollama на сервере, любой OpenAI-совместимый) и ключ. Ключ хранится на сервере и в браузер не возвращается.
+Дальше: **Настройки → Модель** — провайдер (OpenAI, OpenRouter, Ollama Cloud, JustWoker, LM Studio или «Другой» — любой OpenAI-совместимый адрес, например свой Ollama `http://localhost:11434/v1`) и ключ. Ключ хранится на сервере и в браузер не возвращается.
 
 ### Параметры
 
@@ -91,6 +91,10 @@ sudo mochi update        # обновить
 ### Подключение к API модели и CORS
 
 * **Сервер.** Запросы к модели (`/chat/completions`, `/models`) делает сам сервер из Node.js — CORS к ним не применяется, подходит любой OpenAI-совместимый адрес.
+* **Проверка в настройках.** Кроме `/models`, сервер шлёт пустой запрос к `/chat/completions` (без модели и сообщений — ничего не запускается, токены не тратятся): так видно, подходит ли ключ там, где `/models` открыт всем, и не закрыл ли Cloudflare запросы к модели.
+* **Ollama Cloud** (`https://ollama.com/v1`) — только серверный режим: браузер он не пускает (нет CORS). Ключ — на [ollama.com/settings/keys](https://ollama.com/settings/keys). Список моделей открыт и без ключа, поэтому без ключа Мочи пишет «Вставь API ключ».
+* **JustWoker** (`https://api.justwoker.icu/v1`) — шлюз New API, ключ вида `sk-…` из его панели. Перед ним Cloudflare, который может блокировать запросы к модели с некоторых IP (например, сетей хостинга), хотя список моделей отдаёт. Тогда Мочи так и пишет — «Это не ключ: Cloudflare … заблокировал запрос» с Ray ID для поддержки; помочь может только владелец шлюза или другой сервер.
+* **Cloudflare.** Если API отвечает страницей блокировки Cloudflare, Мочи один раз повторяет запрос через `curl` (так проходит OpenRouter) и, если не помогло, показывает понятную ошибку вместо «ключ не подошёл».
 * **Браузерная версия.** Запросы идут прямо из браузера, поэтому провайдер должен разрешать CORS. Проверено со страницы GitHub Pages: OpenAI, OpenRouter, Anthropic, Gemini (`…/v1beta/openai`), Groq, DeepSeek, Mistral, xAI, Together — работают. Для Anthropic Мочи сама добавляет нужный заголовок `anthropic-dangerous-direct-browser-access`.
 * **Ollama и LM Studio** по умолчанию чужие сайты не пускают:
   * Ollama — запустить с `OLLAMA_ORIGINS=https://ramadaniu.github.io` (или `*`), например `OLLAMA_ORIGINS='*' ollama serve`;
