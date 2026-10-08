@@ -1,4 +1,4 @@
-/* Файловые инструменты агента: read_file, edit_file, write_file.
+/* Файловые инструменты агента: read_file, edit_file, write_file и view_image (картинка для модели).
    Работают внутри исполнителя (от имени mochi-agent), как и run_command, — прав у них ровно столько же.
    При полном доступе (root через sudo) то, на что прав не хватило, исполнитель повторяет от root (runner.js).
    Что они берут на себя, чтобы модель не ошибалась и не тратила токены:
@@ -17,7 +17,7 @@ import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 
-const READ_MAX = 32 * 2 ** 20, EDIT_MAX = 8 * 2 ** 20;
+const READ_MAX = 32 * 2 ** 20, EDIT_MAX = 8 * 2 ** 20, IMG_MAX = 8 * 2 ** 20;
 const OUT_MAX = 40000, LINE_MAX = 2000, DEF_LIMIT = 1000, DIR_MAX = 200, SNIP = 12, SNIP_LINE = 300;
 
 const soft = m => Object.assign(new Error(m), { soft: true });
@@ -308,7 +308,7 @@ async function readOp(q) {
   if (f.dir) return { text: await listDir(abs), real: abs };
   if (f.big) throw soft(`${at} слишком большой (${kb(f.st.size)}) — смотри его частями через run_command: grep -n, sed -n '100,200p', head, tail`);
   const d = decode(f.buf), real = await fsp.realpath(abs), sig = sigOf(f.st);
-  if (d.bin) throw soft(`${at}: ${d.bin} (${kb(f.st.size)}), как текст его не показать. Тип покажет run_command: file; байты — xxd | head`);
+  if (d.bin) throw soft(imgType(f.buf) ? `${at} — картинка (${kb(f.st.size)}): посмотри её через view_image` : `${at}: ${d.bin} (${kb(f.st.size)}), как текст его не показать. Тип покажет run_command: file; байты — xxd | head`);
   const L = splitLines(d.text), total = L.length;
   if (!total) return { text: `(файл пустой: ${at})`, real, sig, from: 0, to: 0, total };
   const off = parseInt(q.offset, 10) || 0, lim = parseInt(q.limit, 10) || 0;
@@ -425,6 +425,29 @@ async function writeOp(q) {
   return { text: res + await syntaxNote(abs, content, old), real, sig: sigOf(st) };
 }
 
+/* ---------- картинка для модели (view_image) ----------
+   Формат — по первым байтам, а не по расширению: модели принимают только PNG, JPEG, GIF и WebP. */
+function imgType(b) {
+  if (b.length < 12) return null;
+  if (b[0] === 0x89 && b.toString('latin1', 1, 4) === 'PNG') return 'image/png';
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (b.toString('latin1', 0, 4) === 'GIF8') return 'image/gif';
+  if (b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP') return 'image/webp';
+  return null;
+}
+
+async function imageOp(q) {
+  const abs = resolvePath(q.path, q.cwd), at = show(abs, q.cwd);
+  let f;
+  try { f = await load(abs, IMG_MAX); }
+  catch (e) { if (e.code === 'ENOENT') throw soft(await notFound(abs, q.path, q.cwd)); throw e; }
+  if (f.dir) throw soft(`${at} — это папка; укажи путь к картинке`);
+  if (f.big) throw soft(`${at} слишком большой (${kb(f.st.size)}, можно до ${kb(IMG_MAX)}) — уменьши копию и посмотри её: convert ${at} -resize 2000x2000\\> /tmp/small.jpg`);
+  const type = imgType(f.buf);
+  if (!type) throw soft(`${at}: не PNG, JPEG, GIF или WebP — модель такое не видит. Сконвертируй в PNG (convert, rsvg-convert для SVG, pdftoppm для PDF) и посмотри копию`);
+  return { type, data: f.buf.toString('base64'), size: f.st.size, real: await fsp.realpath(abs), text: `${at} (${kb(f.st.size)})` };
+}
+
 function errText(e, q) {
   const p = e.path || resolvePath(q.path, q.cwd);
   switch (e.code) {
@@ -440,7 +463,7 @@ function errText(e, q) {
   }
 }
 
-/* q: {fop: 'read'|'edit'|'write', path, cwd, ...} */
+/* q: {fop: 'read'|'edit'|'write'|'image', path, cwd, ...} */
 export async function fileOp(q) {
   q = q || {};
   if (typeof q.path !== 'string' || !q.path.trim()) return { err: 'нет параметра path' };
@@ -448,6 +471,7 @@ export async function fileOp(q) {
     if (q.fop === 'read') return await readOp(q);
     if (q.fop === 'edit') return await editOp(q);
     if (q.fop === 'write') return await writeOp(q);
+    if (q.fop === 'image') return await imageOp(q);
     return { err: 'неизвестная операция ' + q.fop };
   } catch (e) {
     /* code — чтобы исполнитель мог повторить от root, если не хватило прав (см. agentFileOp в runner.js) */

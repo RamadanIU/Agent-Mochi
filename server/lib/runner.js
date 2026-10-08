@@ -5,7 +5,7 @@
      → {id, op:'info'}                      ← {id, op:'info', ...}
      → {id, op:'spawn', cmd, cwd, env}      ← {id, op:'line', line}…  ← {id, op:'exit', code, err}
      → {id, op:'write', data}               (долгий процесс со stdin/stdout — stdio-серверы MCP)
-     → {id, op:'file', fop, path, cwd, …}  ← {id, op:'file', text | err, real, sig, …}   (read_file / edit_file / write_file)
+     → {id, op:'file', fop, path, cwd, …}  ← {id, op:'file', text | err, real, sig, …}   (read_file / edit_file / write_file / view_image)
    Каждая команда — новый bash: текущая папка сохраняется между вызовами (её возвращаем), stdin — /dev/null.
    Прерывание/таймаут убивают всю группу процессов. */
 import { spawn, execFileSync } from 'node:child_process';

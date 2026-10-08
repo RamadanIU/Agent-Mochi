@@ -179,3 +179,25 @@ test('проверка синтаксиса: предупреждаем, тол�
   assert.doesNotMatch((await op({ fop: 'write', path: 'tsconfig.json', content: '{\n  // комментарий\n  "a": 1\n}\n' })).text, /⚠/);
   assert.doesNotMatch((await op({ fop: 'write', path: 'ok.sh', content: '#!/bin/bash\nif true; then echo; fi\n' })).text, /⚠/);
 });
+
+test('картинка для view_image: формат по байтам, размер и ошибки', async () => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  fs.writeFileSync(P('a.png'), png);
+  const r = await op({ fop: 'image', path: 'a.png' });
+  assert.equal(r.type, 'image/png');
+  assert.equal(Buffer.from(r.data, 'base64').compare(png), 0);
+  assert.match(r.text, /^a\.png \(\d+ Б\)$/);
+  /* расширение не важно — смотрим на байты */
+  fs.writeFileSync(P('photo.dat'), Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(20)]));
+  assert.equal((await op({ fop: 'image', path: 'photo.dat' })).type, 'image/jpeg');
+  fs.writeFileSync(P('w.webp'), Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBPVP8 ')]));
+  assert.equal((await op({ fop: 'image', path: 'w.webp' })).type, 'image/webp');
+  put('fake.png', 'не картинка вовсе');
+  assert.match((await op({ fop: 'image', path: 'fake.png' })).err, /не PNG, JPEG, GIF или WebP/);
+  fs.writeFileSync(P('big.png'), Buffer.concat([png, Buffer.alloc(8 * 2 ** 20)]));
+  assert.match((await op({ fop: 'image', path: 'big.png' })).err, /слишком большой.*convert/);
+  assert.match((await op({ fop: 'image', path: 'nope.png' })).err, /нет такого файла/);
+  assert.match((await op({ fop: 'image', path: '.' })).err, /это папка/);
+  /* read_file на картинке подсказывает view_image */
+  assert.match((await op({ fop: 'read', path: 'a.png' })).err, /картинка .*view_image/);
+});
