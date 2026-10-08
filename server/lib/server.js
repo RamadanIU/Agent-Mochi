@@ -18,6 +18,7 @@ import { putInbox, storeCopy, getFile, dropFiles, userDir, safeName } from './fi
 import * as TG from './telegram.js';
 import { TERM_PREFIX, proxyHttp, proxyUpgrade } from './term.js';
 import * as U from './update.js';
+import * as AC from './access.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const VERSION = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8')).version;
@@ -193,6 +194,8 @@ async function models(c, b) {
 /* ---------- обновления: что стоит, что нового, как идёт обновление (busy — сколько задач продолжатся после перезапуска) ---------- */
 const updInfo = u => ({ ...U.summary(), status: U.updateStatus(), version: VERSION, admin: !!u.admin, ready: U.updaterReady(),
   busy: A.listUsers().filter(x => getChat(x).running).length });
+/* доступ агента: users — сколько людей получат root вместе с ним (агент и терминал у всех общие) */
+const accInfo = async u => ({ ...await AC.accessInfo(u), users: A.listUsers().length, busy: A.listUsers().filter(x => getChat(x).running).length });
 
 /* ---------- маршруты ---------- */
 async function api(req, res, url) {
@@ -304,6 +307,23 @@ async function api(req, res, url) {
       if (M === 'POST') U.requestUpdate(u); else U.cancelUpdate();
       return json(res, 200, updInfo(u));
     case '/api/update/check': if (M === 'POST') { await U.refresh(true); return json(res, 200, updInfo(u)); } break;
+    /* доступ агента (root): посмотреть может каждый, переключить — только администратор; включить — с паролем */
+    case '/api/access':
+      if (M === 'GET') return json(res, 200, await accInfo(u));
+      if (M !== 'POST' && M !== 'DELETE') break;
+      if (!u.admin) throw new HttpErr(403, 'Доступ агента меняет только администратор сервера');
+      if (M === 'DELETE') { try { AC.cancelAccess(); } catch (e) { throw new HttpErr(e.status || 400, e.message); } return json(res, 200, await accInfo(u)); }
+      {
+        const b = await jbody(req);
+        if (typeof b.root !== 'boolean') throw new HttpErr(400, 'нужно root: true или false');
+        if (b.root) {
+          if (A.limited('u:' + u.name)) throw new HttpErr(429, 'Слишком много попыток. Подожди 15 минут.');
+          if (!await A.login(u.name, String(b.password || ''))) { A.fail('u:' + u.name); throw new HttpErr(400, 'Пароль не подошёл', { field: 'password' }); }
+          A.clearFails('u:' + u.name);
+        }
+        try { AC.requestAccess(b.root); } catch (e) { throw new HttpErr(e.status || 400, e.message); }
+        return json(res, 200, await accInfo(u));
+      }
     case '/api/account':
       if (M === 'GET') return json(res, 200, { user: A.publicUser(u), sessions: A.sessionCount(u.id), work: userDir(u), invites: u.admin ? A.inviteCount() : undefined, users: u.admin ? A.listUsers().map(A.publicUser) : undefined });
       break;

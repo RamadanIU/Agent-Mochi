@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /* mochi serve   — веб-сервер и агент (пользователь mochi)
    mochi runner  — исполнитель команд агента (пользователь mochi-agent)
+   mochi fileop  — файловая операция агента от root (через sudo, при полном доступе)
    mochi invite [дней] | users | passwd <имя> | admin <имя> [off] | deluser <имя> | status — управление (root) */
 import net from 'node:net';
 import crypto from 'node:crypto';
@@ -47,6 +48,16 @@ switch (cmd) {
   case 'admin': out(await adminCall(['admin', args[0], args[1] || 'on'])); console.log('Готово'); break;
   case 'deluser': { const r = out(await adminCall(['deluser', args[0]])); console.log('Удалён.', r.note || ''); break; }
   case 'status': { const r = out(await adminCall(['status'])); console.log(JSON.stringify(r, null, 2)); break; }
+  /* файловая операция агента от root: исполнитель зовёт «sudo -n -- node mochi.js fileop», когда у mochi-agent
+     не хватило прав, а полный доступ включён. Запрос JSON — на stdin, ответ JSON — на stdout */
+  case 'fileop': {
+    let s = '';
+    for await (const c of process.stdin) s += c;
+    const { fileOp } = await import('./lib/fileops.js');
+    let q; try { q = JSON.parse(s); } catch { q = null; }
+    process.stdout.write(JSON.stringify(q && typeof q === 'object' ? await fileOp(q) : { err: 'неверный запрос' }) + '\n');
+    break;
+  }
   default:
     console.log('Команды: serve | runner | invite [дней] | users | passwd <имя> | admin <имя> [off] | deluser <имя> | status');
     process.exit(cmd === 'help' || cmd === '--help' ? 0 : 2);

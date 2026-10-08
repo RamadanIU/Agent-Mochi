@@ -1,5 +1,6 @@
 /* Файловые инструменты агента: read_file, edit_file, write_file.
    Работают внутри исполнителя (от имени mochi-agent), как и run_command, — прав у них ровно столько же.
+   При полном доступе (root через sudo) то, на что прав не хватило, исполнитель повторяет от root (runner.js).
    Что они берут на себя, чтобы модель не ошибалась и не тратила токены:
    • чтение — с номерами строк и срезами (offset/limit) и подсказкой, откуда продолжить; двоичное не выводится;
    • правка — замена точного фрагмента, который обязан быть единственным; не нашёлся — показываем самое похожее место;
@@ -449,6 +450,7 @@ export async function fileOp(q) {
     if (q.fop === 'write') return await writeOp(q);
     return { err: 'неизвестная операция ' + q.fop };
   } catch (e) {
-    return { err: e.soft ? e.message : errText(e, q) };
+    /* code — чтобы исполнитель мог повторить от root, если не хватило прав (см. agentFileOp в runner.js) */
+    return e.soft ? { err: e.message } : { err: errText(e, q), code: e.code };
   }
 }

@@ -3,8 +3,11 @@
 #   mochi-update service — запускает служба mochi-update (systemd .path), когда в браузере нажали «Обновить»:
 #                          сервер Мочи сам обновиться не может (у него нет прав), он лишь кладёт файл-запрос
 #                          в свои данные; что и откуда ставить, решает только этот скрипт;
-#   mochi-update watch   — то же для OpenRC: раз в 3 секунды смотрит, нет ли запроса;
-#   mochi-update cli     — «sudo mochi update» в терминале (ход виден на экране).
+#   mochi-update watch   — то же для OpenRC: раз в 3 секунды смотрит, нет ли запроса (заодно — запроса
+#                          на смену доступа агента: его выполняет mochi-access);
+#   mochi-update cli     — «sudo mochi update» в терминале (ход виден на экране). Из исполнителя или терминала
+#                          Мочи (агент с root) — через запрос root-службе: установщик перезапускает их службы
+#                          и оборвал бы сам себя.
 # Берёт install.sh из того же репозитория и ветки, что при установке (/etc/mochi/install.conf),
 # ровно того коммита, который сейчас последний, и запускает его с --update.
 # Ход работы — в /var/lib/mochi/update: status.json и steps.log читает сервер (группа mochi),
@@ -16,6 +19,7 @@ ETC=${MOCHI_ETC:-/etc/mochi}
 STATE=${MOCHI_STATE:-/var/lib/mochi}
 DIR=$STATE/update
 REQ=$STATE/data/update.request
+AREQ=$STATE/data/access.request
 APPDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 REPO=RamadanIU/Agent-Mochi
 REF=HEAD
@@ -27,7 +31,11 @@ case "$MODE" in service|watch|cli) ;; *) echo "Использование: mochi
 
 if [ "$MODE" = watch ]; then
   # OpenRC: .path-юнитов нет — проверяем запрос сами (один stat раз в 3 секунды)
-  while :; do [ -e "$REQ" ] && "${BASH_SOURCE[0]}" service; sleep 3; done
+  while :; do
+    [ -e "$REQ" ] && "${BASH_SOURCE[0]}" service
+    [ -e "$AREQ" ] && "$(dirname "${BASH_SOURCE[0]}")/mochi-access" service
+    sleep 3
+  done
 fi
 
 # shellcheck disable=SC1091
@@ -40,11 +48,24 @@ STEPS=$DIR/steps.log
 FULL=$DIR/install.log
 BY=web; [ "$MODE" = cli ] && BY=cli
 
-# одно обновление за раз
+if [ "$MODE" = cli ] && grep -qE 'mochi-(runner|term)' "${MOCHI_CGROUP:-/proc/self/cgroup}" 2>/dev/null; then
+  mkdir -p "$(dirname "$REQ")" && printf '{"by":"agent","t":%s000}\n' "$(date +%s)" > "$REQ" || { echo "Не получилось передать запрос: $REQ" >&2; exit 1; }
+  chmod 0600 "$REQ"; [ "$ROOT" = 1 ] && chown mochi:mochi "$REQ" 2>/dev/null
+  echo "🐾 Запрос передан службе обновления: Мочи обновится сама, ход виден в настройках → Сервер → «Обновления»."
+  echo "   Исполнитель команд и терминал при этом перезапустятся — эта команда оборвётся, это нормально."
+  exit 0
+fi
+
+# одно обновление за раз (тот же замок берёт mochi-access: доступ агента не переключается посреди обновления)
 exec 9>"$DIR/.lock"
 if command -v flock >/dev/null 2>&1 && ! flock -n 9; then
-  [ "$MODE" = cli ] && { echo "Обновление уже идёт — дождись его (ход виден в настройках Мочи)" >&2; exit 1; }
-  exit 0
+  if [ "$MODE" = cli ]; then
+    echo "Сейчас идёт обновление или переключение доступа агента — жду…" >&2
+    flock -w 1800 9 || { echo "Не дождалась (30 минут) — попробуй позже" >&2; exit 1; }
+  else
+    # запрос не бросаем и не выходим с ним: systemd перезапускал бы службу по кругу, пока не сдастся
+    flock -w 1800 9 || exit 0
+  fi
 fi
 
 T0=$(date +%s)

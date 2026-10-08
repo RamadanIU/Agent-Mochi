@@ -271,9 +271,11 @@ export class Chat extends EventEmitter {
     const run = has('run_command'), I = run ? await agentInfo() : null;
     const tgOn = TG_TOOLS.some(t => has(t.function.name));
     const FT = [['read_file', 'читай через read_file'], ['edit_file', 'правь через edit_file'], ['write_file', 'создавай через write_file']].filter(([n]) => has(n)).map(x => x[1]);
-    const pkg = !run ? '' : I.sudo
-      ? `Есть sudo без пароля; пакеты: sudo ${I.pm === 'apt-get' ? 'apt-get install -y' : I.pm === 'apk' ? 'apk add' : I.pm === 'pacman' ? 'pacman -S --noconfirm' : I.pm === 'zypper' ? 'zypper -n install' : (I.pm || 'dnf') + ' install -y'} …`
-      : 'Прав root и sudo нет: системные пакеты ставить нельзя. Инструменты ставь к себе: python3 -m venv ~/venv && ~/venv/bin/pip install …, npm install -g … (префикс ~/.local), бинарники — в ~/.local/bin.';
+    const inst = I?.pm === 'apt-get' ? 'apt-get install -y' : I?.pm === 'apk' ? 'apk add' : I?.pm === 'pacman' ? 'pacman -S --noconfirm' : I?.pm === 'zypper' ? 'zypper -n install' : (I?.pm || 'dnf') + ' install -y';
+    /* полный доступ включает администратор (настройки → Сервер → «Доступ агента»); сам агент его не включит */
+    const pkg = !run ? '' : I.sudo || I.root
+      ? `У тебя полный root-доступ к серверу${I.root ? '' : ': sudo без пароля'}. Системное делай${I.root ? '' : ' через sudo'}: пакеты — ${I.root ? '' : 'sudo '}${inst} …, службы — ${I.root ? '' : 'sudo '}systemctl …; системные файлы (/etc и т. п.) читай и правь файловыми инструментами — когда прав не хватает, они сами работают от root. Ты администратор сервера, но действуй бережно: перед необратимым (удаление чужих данных, переустановка системы, настройки SSH и firewall, из-за которых пропадёт доступ к серверу) спроси пользователя. Службы mochi*, /etc/mochi и /var/lib/mochi/data — это ты сама: не трогай их без прямой просьбы (перезапуск mochi-runner оборвёт твою же команду); обновиться — sudo mochi update.`
+      : 'Прав root и sudo нет: системные пакеты ставить нельзя. Инструменты ставь к себе: python3 -m venv ~/venv && ~/venv/bin/pip install …, npm install -g … (префикс ~/.local), бинарники — в ~/.local/bin. Если для задачи нужен root (системные пакеты, службы, /etc), скажи пользователю: полный доступ включает администратор в настройках → Сервер → «Доступ агента» (или на сервере: sudo mochi root on).';
     return S.sys
       + '\n' + FMT
       + `\nСегодня ${now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}, время сервера ${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}.`
