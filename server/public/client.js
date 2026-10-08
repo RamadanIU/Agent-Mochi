@@ -1032,6 +1032,14 @@ function tx(s) {
   } catch (e) { return false; }
 }
 document.querySelector('nav [data-v=term]').addEventListener('click', () => { ttyFrame(); setTimeout(() => { fit(); const t = xterm(); t && t.focus && t.focus(); }, 80); });
+/* проводник: «Открыть в терминале» — перейти в папку (терминал мог ещё не загрузиться — ждём xterm) */
+window.mochiTermCd = dir => {
+  navTo('term'); ttyFrame();
+  const cmd = "cd '" + String(dir).replace(/'/g, "'\\''") + "'\r";
+  let n = 0;
+  const tryIt = () => { if (tx(cmd)) return; if (++n < 40) setTimeout(tryIt, 250); };
+  setTimeout(tryIt, 120);
+};
 document.querySelectorAll('.keys button[data-k]').forEach(b => b.onclick = () => { tx(keyStr(b.dataset.k)); window.sfx && sfx('key'); });
 $('#tcls').onclick = () => { tx('\x0c'); window.sfx && sfx('key'); };
 const tfs = d => { cfg.tfs = Math.min(30, Math.max(12, (cfg.tfs || 18) + d)); save(); const t = xterm(); if (t && t.options) { t.options.fontSize = cfg.tfs; fit(); } };

@@ -61,6 +61,7 @@ export function client(base) {
     const sc = r.headers.get('set-cookie'); if (sc) cookie = sc.split(';')[0];
     return r;
   };
+  c.cookie = () => cookie;
   c.json = async (p, body, method = 'POST') => { const r = await c(p, { method, body: body === undefined ? undefined : JSON.stringify(body) }); return { status: r.status, j: await r.json().catch(() => null) }; };
   /* поток событий: собираем, пока условие не выполнится */
   c.events = (until, ms = 15000) => new Promise(async (ok, no) => {

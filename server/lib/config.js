@@ -38,6 +38,8 @@ export const CFG = {
   sudo: env.MOCHI_SUDO || 'sudo',
   maxSteps: Math.max(5, +env.MOCHI_MAX_STEPS || 100),
   maxFile: (+env.MOCHI_MAX_FILE_MB || 50) * 2 ** 20,
+  /* загрузка файла в проводник (вкладка «Файлы») */
+  maxUpload: (+env.MOCHI_MAX_UPLOAD_MB || 4096) * 2 ** 20,
   allowRegister: env.MOCHI_OPEN_REGISTRATION === '1', /* по умолчанию — только по приглашению */
   searchMcp: env.MOCHI_SEARCH_MCP ?? 'https://search.parallel.ai/mcp',
   tgApi: (env.MOCHI_TG_API || 'https://api.telegram.org').replace(/\/+$/, ''),
