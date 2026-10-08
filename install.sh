@@ -26,7 +26,7 @@ NODE_MAJOR=22
 TTYD_VER=1.7.7
 CADDY_VER=2.10.2
 
-DOMAIN=""; EMAIL=""; TLS=auto; PUBLIC_URL=""; WITH_SUDO=0; MODE=install; PURGE=0; SRC=""; OPEN_FW=1
+DOMAIN=""; EMAIL=""; TLS=auto; PUBLIC_URL=""; WITH_SUDO=0; SUDO_ARG=""; MODE=install; PURGE=0; SRC=""; OPEN_FW=1
 
 # ---------- оформление ----------
 if [ -t 1 ]; then B=$'\e[1m'; G=$'\e[32m'; Y=$'\e[33m'; R=$'\e[31m'; P=$'\e[35m'; N=$'\e[0m'; else B=; G=; Y=; R=; P=; N=; fi
@@ -46,7 +46,9 @@ cat <<EOF
                      (вход через SSH-туннель: ssh -L ${PORT}:127.0.0.1:${PORT} сервер → http://localhost:${PORT})
   --public-url URL   свой обратный прокси (nginx и т. п.) перед 127.0.0.1:${PORT}; вместе с --no-tls
   --port N           внутренний порт сервера (по умолчанию ${PORT})
-  --with-sudo        дать агенту sudo без пароля (сможет ставить пакеты, но и получит полный root!)
+  --root             полный доступ агента: root через sudo без пароля (то же — --with-sudo).
+                     Потом переключается в настройках Мочи или командой «sudo mochi root on|off»
+  --no-root          забрать у агента root (то же — --no-sudo)
   --no-firewall      не открывать порты 80/443 в ufw/firewalld
   --ref BRANCH       ветка/тег репозитория ${REPO} (по умолчанию ${REF})
   --source DIR       взять код из локальной папки вместо GitHub
@@ -64,7 +66,8 @@ while [ $# -gt 0 ]; do
     --no-tls) TLS=off; shift ;;
     --public-url) PUBLIC_URL="${2%/}"; shift 2 ;;
     --port) PORT="${2:-}"; shift 2 ;;
-    --with-sudo) WITH_SUDO=1; shift ;;
+    --root|--with-sudo) SUDO_ARG=1; shift ;;
+    --no-root|--no-sudo) SUDO_ARG=0; shift ;;
     --no-firewall) OPEN_FW=0; shift ;;
     --ref) REF="${2:-}"; shift 2 ;;
     --repo) REPO="${2:-}"; shift 2 ;;
@@ -146,8 +149,9 @@ SERVICES="mochi-runner mochi-term mochi"
 # ---------- удаление ----------
 if [ "$MODE" = uninstall ]; then
   say "Удаляю Мочи…"
-  if [ "$INIT" = systemd ]; then UPD="mochi-update.path"; else UPD="mochi-updater"; fi
+  if [ "$INIT" = systemd ]; then UPD="mochi-update.path mochi-access.path"; else UPD="mochi-updater"; fi
   for s in $UPD mochi mochi-term mochi-runner mochi-caddy; do svc stop "$s" >/dev/null 2>&1 || true; svc disable "$s"; done
+  rm -rf /etc/systemd/system/mochi-runner.service.d /etc/systemd/system/mochi-term.service.d
   rm -f /etc/systemd/system/mochi*.service /etc/systemd/system/mochi*.path /etc/init.d/mochi /etc/init.d/mochi-term /etc/init.d/mochi-runner /etc/init.d/mochi-caddy /etc/init.d/mochi-updater
   [ "$INIT" = systemd ] && systemctl daemon-reload
   rm -rf "$PREFIX" /usr/local/bin/mochi /etc/sudoers.d/mochi-agent
@@ -166,7 +170,13 @@ fi
 if [ "$MODE" = update ] && [ -r "$ETC/install.conf" ]; then
   # shellcheck disable=SC1091
   . "$ETC/install.conf"
+elif [ -r "$ETC/install.conf" ]; then
+  # повторная установка: доступ агента, переключённый в настройках, молча не сбрасываем
+  WITH_SUDO=$(sed -n "s/^WITH_SUDO='\{0,1\}\([01]\)'\{0,1\}$/\1/p" "$ETC/install.conf" | tail -n 1)
 fi
+# явный --root / --no-root важнее сохранённого
+[ -n "$SUDO_ARG" ] && WITH_SUDO=$SUDO_ARG
+[ "$WITH_SUDO" = 1 ] || WITH_SUDO=0
 # попадают в адреса, в build.json и в install.conf — только безопасные символы
 [[ "$REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || die "Неверный репозиторий: $REPO (нужно ВЛАДЕЛЕЦ/ИМЯ)"
 [[ "$REF" =~ ^[A-Za-z0-9._/-]+$ ]] || die "Неверная ветка: $REF"
@@ -192,7 +202,8 @@ case "$PM" in
   pacman)  BASE="curl ca-certificates tar xz gzip bash tmux git procps-ng iproute2"; EXTRA="python python-pip base-devel unzip jq file less" ;;
   zypper)  BASE="curl ca-certificates tar xz gzip bash tmux git procps iproute2 shadow"; EXTRA="python3 python3-pip gcc make unzip jq file less" ;;
 esac
-[ "$WITH_SUDO" = 1 ] && BASE="$BASE sudo"
+# sudo — для полного доступа агента: его можно включить в любой момент из настроек
+BASE="$BASE sudo"
 say "Ставлю системные пакеты…"
 # shellcheck disable=SC2086
 pkgs $BASE || die "Не удалось поставить пакеты: $BASE"
@@ -348,14 +359,6 @@ chmod 0640 "$A/.bashrc" 2>/dev/null || true
 [ -f "$A/README.txt" ] || { printf '%s\n' "Это рабочая папка агента Мочи." "Папки пользователей: <имя>/inbox (файлы от пользователя), <имя>/outbox (результаты)." > "$A/README.txt"; chown mochi-agent:mochi "$A/README.txt"; }
 chmod 0640 "$A/README.txt" 2>/dev/null || true
 
-if [ "$WITH_SUDO" = 1 ]; then
-  echo "mochi-agent ALL=(ALL) NOPASSWD: ALL" > "$TMP/sudo"
-  visudo -cf "$TMP/sudo" >/dev/null && install -m 0440 "$TMP/sudo" /etc/sudoers.d/mochi-agent
-  warn "У агента есть sudo без пароля: он может всё, включая чтение данных сервера."
-else
-  rm -f /etc/sudoers.d/mochi-agent
-fi
-
 # ---------- настройки ----------
 cat > "$ETC/mochi.env" <<EOF
 # Настройки Мочи (после правки: sudo mochi restart). Секретов здесь нет.
@@ -372,6 +375,7 @@ MOCHI_RUNNER_SOCK=/run/mochi-runner/runner.sock
 MOCHI_TTYD_SOCK=/run/mochi-term/ttyd.sock
 MOCHI_TTYD_BIN=$PREFIX/bin/ttyd
 MOCHI_UPDATE_DIR=$STATE/update
+MOCHI_ACCESS_CTL=1
 EOF
 chmod 0640 "$ETC/mochi.env"; chown root:mochi "$ETC/mochi.env"
 cat > "$ETC/install.conf" <<EOF
@@ -386,6 +390,12 @@ REF='$REF'
 OPEN_FW='$OPEN_FW'
 EOF
 chmod 0600 "$ETC/install.conf"
+
+# ---------- доступ агента ----------
+# root через sudo без пароля: правило sudoers и drop-in, снимающий изоляцию исполнителя и терминала
+# (сами службы ниже всегда изолированы). Это делает mochi-access — тот же, что переключает доступ из настроек
+if [ "$WITH_SUDO" = 1 ]; then ROOTW=on; else ROOTW=off; fi
+"$PREFIX/app/server/bin/mochi-access" apply "$ROOTW" --no-restart || warn "Доступ агента не переключился (подробности выше). Повторить: sudo mochi root $ROOTW"
 
 if [ "$TLS" = on ]; then
   mkd 0700 mochi-caddy:mochi-caddy "$CADDY_HOME"
@@ -432,9 +442,9 @@ LockPersonality=yes
 SystemCallArchitectures=native
 CapabilityBoundingSet=
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK"
-  # агент — обычный пользователь без доступа к данным сервера и домашним папкам людей
-  if [ "$WITH_SUDO" = 1 ]; then HARD_AGENT="InaccessiblePaths=-$STATE/data"
-  else HARD_AGENT="NoNewPrivileges=yes
+  # агент — обычный пользователь без доступа к данным сервера и домашним папкам людей.
+  # Полный доступ (root) снимает это drop-in'ом mochi-*.service.d/mochi-root.conf (его пишет mochi-access)
+  HARD_AGENT="NoNewPrivileges=yes
 ProtectSystem=full
 ProtectHome=yes
 PrivateTmp=yes
@@ -442,7 +452,7 @@ InaccessiblePaths=-$STATE/data
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes
-RestrictSUIDSGID=yes"; fi
+RestrictSUIDSGID=yes"
 
   cat > /etc/systemd/system/mochi-runner.service <<EOF
 [Unit]
@@ -569,6 +579,28 @@ Unit=mochi-update.service
 [Install]
 WantedBy=multi-user.target
 EOF
+  # переключатель «Доступ агента» в настройках: так же — файл-запрос сервера и root-служба
+  cat > /etc/systemd/system/mochi-access.service <<EOF
+[Unit]
+Description=Мочи — доступ агента (root вкл/выкл из настроек)
+
+[Service]
+Type=oneshot
+Environment=HOME=/root
+ExecStart=$APP/bin/mochi-access service
+TimeoutStartSec=40min
+EOF
+  cat > /etc/systemd/system/mochi-access.path <<EOF
+[Unit]
+Description=Мочи — ждёт запрос на смену доступа агента из настроек
+
+[Path]
+PathExists=$STATE/data/access.request
+Unit=mochi-access.service
+
+[Install]
+WantedBy=multi-user.target
+EOF
   systemctl daemon-reload
 else
   # OpenRC (Alpine и др.)
@@ -606,8 +638,8 @@ EOF
     setcap cap_net_bind_service=+ep "$PREFIX/bin/caddy" || die "Не удалось разрешить Caddy порты 80/443 (нужен setcap)"
     orc mochi-caddy mochi-caddy:mochi-caddy "Мочи — HTTPS" "" "$CADDY_HOME" "HOME=$CADDY_HOME XDG_DATA_HOME=$CADDY_HOME XDG_CONFIG_HOME=$CADDY_HOME" "$PREFIX/bin/caddy run --config $ETC/Caddyfile --adapter caddyfile" "after mochi"
   fi
-  # кнопка «Обновить» в браузере: следит за файлом-запросом сервера и обновляет от root
-  orc mochi-updater root:root "Мочи — обновление по кнопке в настройках" "" "$STATE" "HOME=/root" "$APP/bin/mochi-update watch"
+  # кнопки «Обновить» и «Доступ агента» в браузере: следит за файлами-запросами сервера и выполняет их от root
+  orc mochi-updater root:root "Мочи — обновление и доступ агента по кнопкам в настройках" "" "$STATE" "HOME=/root" "$APP/bin/mochi-update watch"
 fi
 
 # ---------- команда mochi ----------
@@ -624,11 +656,19 @@ EOF
 cat >> /usr/local/bin/mochi <<'EOF'
 need_root() { [ "$(id -u)" -eq 0 ] || { echo "Нужно через sudo: sudo mochi $*" >&2; exit 1; }; }
 each() { for s in $SERVICES; do if [ "$INIT" = systemd ]; then systemctl "$1" "$s"; else rc-service "$s" "$1"; fi; done; }
+# команда из исполнителя или терминала Мочи (агент с root): перезапуск их служб оборвал бы её на полпути
+inside() { grep -qE 'mochi-(runner|term)' /proc/self/cgroup 2>/dev/null; }
 case "${1:-help}" in
-  start|stop|restart) need_root "$@"; each "$1" ;;
+  start|stop|restart)
+    need_root "$@"
+    if [ "$INIT" = systemd ] && inside; then
+      # shellcheck disable=SC2086
+      systemctl "$1" --no-block $SERVICES && echo "Готово: службы Мочи перезапускаются (эта команда оборвётся вместе с ними — это нормально)"
+    else each "$1"; fi ;;
   logs)
     if [ "$INIT" = systemd ]; then shift; exec journalctl -u 'mochi*' -n 200 "${@:--f}"; else exec tail -n 200 -f /var/log/mochi/*.log; fi ;;
   update) need_root "$@"; exec "$APP/bin/mochi-update" cli ;;
+  root) need_root "$@"; exec "$APP/bin/mochi-access" cli "${2:-status}" ;;
   uninstall) need_root "$@"; shift; curl -fsSL "https://raw.githubusercontent.com/$REPO/$REF/install.sh" | bash -s -- --uninstall "$@" ;;
   status)
     for s in $SERVICES; do
@@ -647,6 +687,7 @@ mochi deluser <имя>     — удалить пользователя
 mochi status | logs     — состояние и журнал
 mochi start | stop | restart
 mochi update            — обновить Мочи (данные сохраняются; то же — кнопка в настройках → Сервер)
+mochi root [on|off]     — полный доступ агента: root через sudo без пароля (то же — настройки → Сервер)
 mochi uninstall [--purge]
 H
     ;;
@@ -672,6 +713,10 @@ if [ "$INIT" = systemd ]; then UPD=mochi-update.path; else UPD=mochi-updater; fi
 svc enable "$UPD"
 if [ -n "${MOCHI_UPDATER:-}" ]; then svc start "$UPD" >/dev/null 2>&1 || true
 else svc restart "$UPD" >/dev/null 2>&1 || svc start "$UPD" >/dev/null 2>&1 || warn "Не запустилась служба $UPD — обновлять можно командой: sudo mochi update"; fi
+if [ "$INIT" = systemd ]; then
+  svc enable mochi-access.path
+  svc restart mochi-access.path >/dev/null 2>&1 || warn "Не запустилась служба mochi-access.path — доступ агента можно переключать командой: sudo mochi root on|off"
+fi
 
 up=0
 for _ in $(seq 1 60); do curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && { up=1; break; }; sleep 0.5; done
@@ -715,5 +760,10 @@ if [ "$TLS" = off ] && [ -z "$PUBLIC_URL" ]; then
 fi
 echo
 echo "  Дальше: в настройках Мочи → «Модель» — вставь ключ API. Telegram: попроси Мочи «подключи Telegram»."
+if [ "$WITH_SUDO" = 1 ]; then
+  echo "  ${Y}У агента полный доступ: root через sudo без пароля.${N} Забрать: ${B}sudo mochi root off${N}"
+else
+  echo "  Агент работает без root. Полный доступ: настройки → Сервер → «Доступ агента» или ${B}sudo mochi root on${N}"
+fi
 echo "  Управление: ${B}mochi help${N}"
 echo

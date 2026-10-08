@@ -1,0 +1,269 @@
+#!/usr/bin/env bash
+# Полный доступ агента Мочи: root через sudo без пароля. Работает только от root:
+#   mochi-access cli on|off|status — «sudo mochi root on|off|status» в терминале сервера;
+#   mochi-access service           — запускает служба mochi-access (systemd .path, в OpenRC — mochi-updater),
+#                                    когда администратор переключил доступ в настройках: сервер Мочи (без прав)
+#                                    лишь кладёт файл-запрос в свои данные. Из запроса берётся одно слово — on или off;
+#   mochi-access apply on|off [--no-restart] — само переключение (его же зовёт установщик).
+# «on»: правило /etc/sudoers.d/mochi-agent (проверяется visudo), drop-in mochi-root.conf для исполнителя команд
+# и терминала — снимает изоляцию systemd (NoNewPrivileges, ProtectSystem и т. п. не дали бы sudo работать),
+# перезапуск этих двух служб и проверка, что sudo действует. «off» — всё обратно и проверка, что прав не осталось.
+# Итог — в /var/lib/mochi/update/access.json (его читает сервер, группа mochi).
+set -uo pipefail
+umask 022
+export LC_ALL=C
+
+ETC=${MOCHI_ETC:-/etc/mochi}
+STATE=${MOCHI_STATE:-/var/lib/mochi}
+SUDOERS_D=${MOCHI_SUDOERS_D:-/etc/sudoers.d}
+UNITS=${MOCHI_UNITS:-/etc/systemd/system}
+DIR=$STATE/update
+REQ=$STATE/data/access.request
+RULE=$SUDOERS_D/mochi-agent
+AGENT=mochi-agent
+APPDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+PREFIX=$(dirname "$APPDIR")
+ROOT=0; [ "$(id -u)" -eq 0 ] && ROOT=1
+
+if [ -n "${MOCHI_INIT:-}" ]; then INIT=$MOCHI_INIT
+elif [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then INIT=systemd
+else INIT=openrc; fi
+
+usage() { echo "Использование: mochi-access cli on|off|status | service | apply on|off [--no-restart]" >&2; exit 2; }
+CMD=${1:-}; [ $# -gt 0 ] && shift
+WANT=""; RESTART=1; BY=cli
+case "$CMD" in
+  apply) WANT=${1:-}; BY=install; [ "${2:-}" = --no-restart ] && RESTART=0 ;;
+  cli) WANT=${1:-status} ;;
+  service) BY=web ;;
+  *) usage ;;
+esac
+case "$CMD:$WANT" in apply:on|apply:off|cli:on|cli:off|cli:status|service:) ;; *) usage ;; esac
+[ "$ROOT" = 1 ] || [ -n "${MOCHI_STATE:-}" ] || { echo "Нужны права root: sudo mochi root $WANT" >&2; exit 1; }
+
+# шаги — как у установщика: «🐾 …», «✔ …», «! …», «✘ …»
+step() { [ "$BY" = web ] || printf '%s\n' "$1"; }
+ERR=""; NOTE=""; CHANGED=0
+note() { NOTE="${NOTE:+$NOTE; }$1"; step "! $1"; }
+
+# что сейчас настроено: правило Мочи на месте — значит, root включён
+cur_mode() { if [ -e "$RULE" ]; then echo on; else echo off; fi; }
+
+T0=$(date +%s)
+jstr() { printf '%s' "$1" | tr -d '"\\' | tr '\n\r\t' '   ' | cut -c1-400; }
+status() { # status running|done|failed — пишем атомарно, сервер показывает это в настройках
+  [ -d "$DIR" ] || return 0
+  local tmp="$DIR/.access.$$" fin=0
+  [ "$1" = running ] || fin=$(date +%s)
+  printf '{"state":"%s","want":"%s","mode":"%s","by":"%s","pid":%s,"started":%s,"finished":%s,"error":"%s","note":"%s"}\n' \
+    "$1" "$WANT" "$(cur_mode)" "$BY" "$$" "$T0" "$fin" "$(jstr "$ERR")" "$(jstr "$NOTE")" > "$tmp"
+  chmod 0640 "$tmp"; [ "$ROOT" = 1 ] && chown root:mochi "$tmp" 2>/dev/null
+  mv -f "$tmp" "$DIR/access.json"
+}
+
+# «изнутри агента»: команда идёт из исполнителя или терминала Мочи (например, агент сам выполнил «sudo mochi root off»).
+# Перезапуск этих служб оборвал бы и её — поэтому просим root-службу, она работает отдельно
+inside_agent() { grep -qE 'mochi-(runner|term)' "${MOCHI_CGROUP:-/proc/self/cgroup}" 2>/dev/null; }
+
+as_agent() { # выполнить от имени mochi-agent (вне его служб — чистая проверка правил sudo)
+  if command -v runuser >/dev/null 2>&1; then runuser -u "$AGENT" -- "$@"
+  else su -s /bin/sh -c "$*" "$AGENT"; fi
+} >/dev/null 2>&1
+
+need_sudo() {
+  command -v sudo >/dev/null 2>&1 && command -v visudo >/dev/null 2>&1 && return 0
+  step "🐾 Ставлю sudo…"
+  local pm=""
+  for p in apt-get dnf yum apk pacman zypper; do command -v "$p" >/dev/null 2>&1 && { pm=$p; break; }; done
+  case "$pm" in
+    apt-get) DEBIAN_FRONTEND=noninteractive apt-get install -y -qq sudo || { apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq sudo; } ;;
+    dnf|yum) "$pm" install -y -q sudo ;;
+    apk) apk add --no-cache -q sudo ;;
+    pacman) pacman -S --noconfirm --needed sudo ;;
+    zypper) zypper -n -q install sudo ;;
+  esac >/dev/null 2>&1
+  command -v sudo >/dev/null 2>&1 && command -v visudo >/dev/null 2>&1 && { step "✔ sudo поставлен"; return 0; }
+  ERR="не удалось поставить sudo${pm:+ ($pm install sudo)} — поставь его вручную и повтори"; return 1
+}
+
+# правило. Полный вариант: без tty, umask root'а (иначе файлы в /etc и /var/www выходили бы 0640 — из UMask=0007 службы),
+# PATH с Node.js Мочи и переменные, без которых apt и pip задают вопросы. Если sudo не понимает Defaults
+# (например, sudo-rs) — только само правило
+SPATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+[ -x "$PREFIX/node/bin/node" ] && SPATH="$SPATH:$PREFIX/node/bin"
+rule_text() {
+  echo "# Мочи: полный доступ агента — root через sudo без пароля."
+  echo "# Выключить: настройки Мочи → Сервер → «Доступ агента» или «sudo mochi root off». Файл перезаписывается."
+  if [ "${1:-}" != min ]; then
+    echo "Defaults:$AGENT !requiretty, !lecture, umask=0022, umask_override"
+    echo "Defaults:$AGENT secure_path=\"$SPATH\""
+    echo "Defaults:$AGENT env_keep += \"DEBIAN_FRONTEND NO_COLOR PAGER GIT_PAGER SYSTEMD_PAGER PIP_DISABLE_PIP_VERSION_CHECK PYTHONUNBUFFERED\""
+  fi
+  echo "$AGENT ALL=(ALL:ALL) NOPASSWD: ALL"
+}
+write_rule() {
+  local tmp; tmp=$(mktemp "${TMPDIR:-/tmp}/mochi-sudoers.XXXXXX") || { ERR="не создать временный файл"; return 1; }
+  rule_text > "$tmp"; chmod 0440 "$tmp"
+  if ! visudo -cf "$tmp" >/dev/null 2>&1; then
+    chmod 0600 "$tmp"; rule_text min > "$tmp"; chmod 0440 "$tmp"
+    visudo -cf "$tmp" >/dev/null 2>&1 || { rm -f "$tmp"; ERR="visudo не принял правило sudo — проверь, что sudo исправен: visudo -c"; return 1; }
+  fi
+  mkdir -p "$SUDOERS_D"
+  if [ -f "$RULE" ] && cmp -s "$tmp" "$RULE"; then rm -f "$tmp"; return 0; fi
+  install -m 0440 "$tmp" "$RULE" && rm -f "$tmp" || { rm -f "$tmp"; ERR="не записать $RULE"; return 1; }
+  CHANGED=1
+}
+# /etc/sudoers почти везде читает /etc/sudoers.d; если нет — добавляем строку (тоже через проверку visudo)
+ensure_include() {
+  [ "$SUDOERS_D" = /etc/sudoers.d ] && [ -f /etc/sudoers ] || return 0
+  grep -Eq '^[[:space:]]*[@#]includedir[[:space:]]+/etc/sudoers\.d/?[[:space:]]*$' /etc/sudoers && return 0
+  local tmp; tmp=$(mktemp "${TMPDIR:-/tmp}/mochi-sudoers.XXXXXX") || return 0
+  { cat /etc/sudoers; printf '\n# Мочи: читать правила из /etc/sudoers.d\n#includedir /etc/sudoers.d\n'; } > "$tmp"; chmod 0440 "$tmp"
+  if visudo -cf "$tmp" >/dev/null 2>&1; then cat "$tmp" > /etc/sudoers; note "в /etc/sudoers добавлена строка #includedir /etc/sudoers.d"; fi
+  rm -f "$tmp"
+}
+
+# drop-in: всё, что установщик ставит исполнителю и терминалу для изоляции, — выключено.
+# Многие из этих настроек при User= сами включают NoNewPrivileges, поэтому перечислены все
+dropin_text() {
+  cat <<'EOF'
+# Мочи: полный доступ агента (выключить: sudo mochi root off). С изоляцией sudo не работает — снимаем её.
+[Service]
+NoNewPrivileges=no
+ProtectSystem=no
+ProtectHome=no
+PrivateTmp=no
+InaccessiblePaths=
+ProtectKernelTunables=no
+ProtectKernelModules=no
+ProtectControlGroups=no
+RestrictSUIDSGID=no
+EOF
+}
+dropins() { # on|off
+  [ "$INIT" = systemd ] || return 0
+  local u d f tmp
+  for u in mochi-runner mochi-term; do
+    d="$UNITS/$u.service.d"; f="$d/mochi-root.conf"
+    if [ "$1" = on ]; then
+      tmp=$(mktemp "${TMPDIR:-/tmp}/mochi-dropin.XXXXXX") || { ERR="не создать временный файл"; return 1; }
+      dropin_text > "$tmp"
+      if [ -f "$f" ] && cmp -s "$tmp" "$f"; then rm -f "$tmp"; continue; fi
+      mkdir -p "$d" && install -m 0644 "$tmp" "$f" || { rm -f "$tmp"; ERR="не записать $f"; return 1; }
+      rm -f "$tmp"; CHANGED=1
+    elif [ -e "$f" ]; then
+      rm -f "$f"; rmdir "$d" 2>/dev/null; CHANGED=1
+    fi
+  done
+}
+
+setkv() { # setkv ФАЙЛ КЛЮЧ ЗНАЧЕНИЕ: заменить строку КЛЮЧ=… (или дописать); права и владелец — как были
+  [ -f "$1" ] || return 0
+  grep -qx "$2=$3" "$1" && return 0
+  local tmp="$1.mochi.$$"
+  { grep -v "^$2=" "$1"; printf '%s=%s\n' "$2" "$3"; } > "$tmp" || { rm -f "$tmp"; return 0; }
+  chmod "$(stat -c %a "$1")" "$tmp"; [ "$ROOT" = 1 ] && chown "$(stat -c %u:%g "$1")" "$tmp"
+  mv -f "$tmp" "$1"
+}
+
+restart_agent() {
+  step "🐾 Перезапускаю исполнитель команд и терминал…"
+  if [ "$INIT" = systemd ]; then
+    systemctl daemon-reload && systemctl restart mochi-runner mochi-term || { ERR="службы mochi-runner и mochi-term не перезапустились — смотри: mochi logs"; return 1; }
+  else
+    { rc-service mochi-runner restart && rc-service mochi-term restart; } >/dev/null 2>&1 || { ERR="службы mochi-runner и mochi-term не перезапустились — смотри: mochi logs"; return 1; }
+  fi
+}
+
+agent_listed() { sudo -n -l -U "$AGENT" 2>/dev/null | grep -q 'may run the following'; }
+verify() {
+  if [ "$WANT" = on ]; then
+    as_agent sudo -n true || { ERR="правило записано, но sudo у $AGENT не работает: проверь, что /etc/sudoers читает /etc/sudoers.d (sudo -l -U $AGENT)"; return 1; }
+    if [ "$INIT" = systemd ] && [ "$RESTART" = 1 ]; then
+      local u
+      for u in mochi-runner mochi-term; do
+        systemctl show -p NoNewPrivileges "$u" 2>/dev/null | grep -q '=no$' || { ERR="служба $u осталась с NoNewPrivileges — sudo в ней не сработает"; return 1; }
+      done
+    fi
+  else
+    # не «sudo -n true» от имени агента: без прав это «incident», письмо root'у и запись в журнал
+    agent_listed && note "у $AGENT остались права sudo из другого правила, не от Мочи — проверь /etc/sudoers и /etc/sudoers.d (sudo -l -U $AGENT)"
+    local g; g=$(id -nG "$AGENT" 2>/dev/null | tr ' ' '\n' | grep -xE 'sudo|wheel|admin|root|docker|lxd' | tr '\n' ' ')
+    [ -n "$g" ] && note "$AGENT состоит в группах ${g% } — они тоже дают права root (убрать: gpasswd -d $AGENT ГРУППА)"
+  fi
+  return 0
+}
+
+apply() {
+  if [ "$WANT" = on ]; then
+    step "🐾 Даю агенту полный доступ (root через sudo)…"
+    need_sudo && write_rule || return 1
+    ensure_include
+    dropins on || return 1
+  else
+    step "🐾 Забираю у агента root…"
+    [ -e "$RULE" ] && { rm -f "$RULE"; CHANGED=1; }
+    dropins off
+  fi
+  local v=0; [ "$WANT" = on ] && v=1
+  setkv "$ETC/install.conf" WITH_SUDO "'$v'"
+  setkv "$ETC/mochi.env" MOCHI_AGENT_SUDO "$v"
+  # ничего не поменялось — службы не трогаем (не обрываем команды агента зря)
+  if [ "$RESTART" = 1 ] && [ "$CHANGED" = 1 ]; then restart_agent || return 1; fi
+  verify || return 1
+  if [ "$WANT" = on ]; then step "✔ У агента полный root: sudo без пароля"; else step "✔ Root у агента забран"; fi
+}
+
+lock() { # одно переключение за раз и не посреди обновления (тот же замок, что у mochi-update)
+  [ -d "$DIR" ] || { mkdir -p "$DIR"; chmod 0750 "$DIR"; [ "$ROOT" = 1 ] && chown root:mochi "$DIR" 2>/dev/null; }
+  exec 9>"$DIR/.lock"
+  command -v flock >/dev/null 2>&1 || return 0
+  flock -n 9 && return 0
+  step "🐾 Идёт обновление Мочи — жду, пока оно закончится…"
+  flock -w 1800 9 || { ERR="обновление Мочи идёт больше 30 минут — попробуй позже"; return 1; }
+}
+
+case "$CMD" in
+  apply)
+    # зовёт установщик: замок уже держит mochi-update (или установщик запущен вручную)
+    apply; code=$?
+    if [ "$code" = 0 ]; then status "done"; else step "✘ $ERR"; status failed; fi
+    exit "$code" ;;
+
+  service)
+    [ -e "$REQ" ] || exit 0
+    lock || { status failed; rm -f "$REQ"; exit 1; }
+    WANT=$(head -c 16 "$REQ" 2>/dev/null | tr -dc 'a-z')
+    case "$WANT" in on|off) ;; *) WANT=""; ERR="непонятный запрос — ожидалось on или off"; status failed; rm -f "$REQ"; exit 1 ;; esac
+    status running
+    rm -f "$REQ"  # уже после статуса: страница не увидит «ни запроса, ни переключения»
+    apply; code=$?
+    if [ "$code" = 0 ]; then status "done"; else status failed; fi
+    exit "$code" ;;
+
+  cli)
+    if [ "$WANT" = status ]; then
+      echo "Полный доступ агента (root): $([ "$(cur_mode)" = on ] && echo включён || echo выключен)"
+      echo "  правило sudo $RULE: $([ -e "$RULE" ] && echo есть || echo нет)"
+      if [ "$INIT" = systemd ]; then
+        echo "  изоляция исполнителя: $(systemctl show -p NoNewPrivileges mochi-runner 2>/dev/null | grep -q '=no$' && echo снята || echo на месте)"
+      fi
+      echo "  sudo у $AGENT: $(agent_listed && echo есть || echo нет)"
+      echo "Включить: sudo mochi root on · выключить: sudo mochi root off"
+      exit 0
+    fi
+    if inside_agent; then
+      # просим root-службу: она перезапустит исполнитель и терминал (эта команда при этом оборвётся)
+      mkdir -p "$(dirname "$REQ")" && printf '%s\n' "$WANT" > "$REQ" || { echo "✘ Не получилось передать запрос: $REQ" >&2; exit 1; }
+      chmod 0600 "$REQ"; [ "$ROOT" = 1 ] && chown mochi:mochi "$REQ" 2>/dev/null
+      echo "🐾 Запрос передан службе mochi-access: через пару секунд root $([ "$WANT" = on ] && echo появится || echo пропадёт)."
+      echo "   Исполнитель команд и терминал при этом перезапустятся — эта команда оборвётся, это нормально."
+      exit 0
+    fi
+    [ "$WANT" = on ] && printf '%s\n' "! Агент получит полный root: любой пользователь Мочи (и любая инструкция, которую агент прочтёт в интернете или в файле) сможет менять систему целиком."
+    lock || { step "✘ $ERR"; exit 1; }
+    status running
+    apply; code=$?
+    if [ "$code" = 0 ]; then status "done"; else step "✘ $ERR"; status failed; fi
+    exit "$code" ;;
+esac

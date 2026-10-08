@@ -31,7 +31,11 @@ export const CFG = {
   /* за Caddy на этой же машине: доверяем X-Forwarded-* только от 127.0.0.1 */
   trustProxy: env.MOCHI_TRUST_PROXY ? env.MOCHI_TRUST_PROXY === '1' : !dev,
   secureCookie: env.MOCHI_SECURE_COOKIE ? env.MOCHI_SECURE_COOKIE === '1' : !dev,
+  /* полный доступ агента (root через sudo без пароля): его включает и выключает root-служба mochi-access,
+     она же правит MOCHI_AGENT_SUDO в mochi.env и перезапускает исполнитель. accessCtl — служба установлена */
   agentSudo: env.MOCHI_AGENT_SUDO === '1',
+  accessCtl: env.MOCHI_ACCESS_CTL === '1',
+  sudo: env.MOCHI_SUDO || 'sudo',
   maxSteps: Math.max(5, +env.MOCHI_MAX_STEPS || 100),
   maxFile: (+env.MOCHI_MAX_FILE_MB || 50) * 2 ** 20,
   allowRegister: env.MOCHI_OPEN_REGISTRATION === '1', /* по умолчанию — только по приглашению */

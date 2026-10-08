@@ -2,8 +2,7 @@
    В режиме разработки (MOCHI_RUNNER_SOCK=inline) команды выполняются прямо в процессе сервера. */
 import net from 'node:net';
 import { CFG } from './config.js';
-import { execCommand, spawnProcess, sysInfo } from './runner.js';
-import { fileOp } from './fileops.js';
+import { execCommand, spawnProcess, sysInfo, agentFileOp } from './runner.js';
 
 let conn = null, buf = '', seq = 0;
 const wait = new Map(), subs = new Map();
@@ -24,7 +23,7 @@ function connect() {
       }
     });
     const lost = e => {
-      conn = null; buf = '';
+      conn = null; buf = ''; info = null; /* исполнитель перезапустился (например, сменился доступ агента) — спросим заново */
       no(e || new Error('closed'));
       for (const [id, w] of wait) { wait.delete(id); w({ op: 'lost' }); }
       for (const s of [...subs.values()]) s({ op: 'exit', code: null, err: 'связь с исполнителем оборвалась' });
@@ -61,7 +60,7 @@ export async function runCmd(opts, signal) {
 
 /* файловая операция от имени агента → {text | err, real, sig, …} (см. fileops.js) */
 export async function fileCmd(opts, signal) {
-  if (CFG.runnerSock === 'inline') return fileOp(opts);
+  if (CFG.runnerSock === 'inline') return agentFileOp(opts);
   let m;
   try { m = await call({ ...opts, op: 'file' }, signal); } catch (e) { return { err: e.message }; }
   if (m.op === 'lost') return { err: 'связь с исполнителем оборвалась (служба mochi-runner перезапускалась) — повтори' };
@@ -82,8 +81,9 @@ export function spawnProc(opts, onLine, onExit) {
 }
 
 let info = null;
-export async function agentInfo() {
-  if (info) return info;
+/* fresh — спросить исполнитель заново (настройки → «Доступ агента» показывают, есть ли root прямо сейчас) */
+export async function agentInfo(fresh = false) {
+  if (info && !fresh) return info;
   if (CFG.runnerSock === 'inline') return info = sysInfo();
   try { const m = await call({ op: 'info' }); if (m.op === 'info') return info = m; } catch {}
   return { os: 'Linux', kernel: '', arch: process.arch, user: 'mochi-agent', pm: '', sudo: false, tools: [] };

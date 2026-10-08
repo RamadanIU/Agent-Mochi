@@ -15,7 +15,9 @@ import net from 'node:net';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
-import { fileOp } from './fileops.js';
+import { fileURLToPath } from 'node:url';
+import { CFG } from './config.js';
+import { fileOp, resolvePath } from './fileops.js';
 import { mirror } from './mirror.js';
 
 const SHELL = ['/bin/bash', '/usr/bin/bash'].find(p => fs.existsSync(p)) || '/bin/sh';
@@ -145,13 +147,51 @@ export function sysInfo() {
   const has = c => { try { execFileSync(SHELL, ['-c', 'command -v ' + c], { stdio: 'ignore' }); return true; } catch { return false; } };
   const pm = ['apt-get', 'dnf', 'yum', 'apk', 'pacman', 'zypper'].find(has) || '';
   let sudo = false;
-  if (has('sudo')) try { execFileSync('sudo', ['-n', 'true'], { stdio: 'ignore', timeout: 5000 }); sudo = true; } catch {}
+  if (has(CFG.sudo)) try { execFileSync(CFG.sudo, ['-n', 'true'], { stdio: 'ignore', timeout: 5000 }); sudo = true; } catch {}
   infoCache = {
     os: osName, kernel: os.release(), arch: os.arch(), shell: SHELL, user: os.userInfo().username,
     home: os.homedir(), pm, sudo, root: process.getuid?.() === 0, cpus: os.cpus().length,
     mem: Math.round(os.totalmem() / 2 ** 20), tools: ['git', 'python3', 'curl', 'tmux', 'docker'].filter(has),
   };
   return infoCache;
+}
+
+/* ---------- файловые инструменты при полном доступе ----------
+   Сначала — от имени mochi-agent (файлы в рабочих папках остаются его). Не хватило прав, а у агента root
+   (sudo без пароля) — тот же fileOp ещё раз от root: sudo node mochi.js fileop, запрос JSON на stdin, ответ на stdout.
+   Так правка /etc/nginx/… через edit_file работает так же, как через «sudo tee». В разработке — только с MOCHI_AGENT_SUDO=1 */
+const MOCHI_JS = fileURLToPath(new URL('../mochi.js', import.meta.url));
+const DENIED = new Set(['EACCES', 'EPERM']);
+const rootFiles = () => (CFG.agentSudo || !CFG.dev) && process.getuid?.() !== 0 && sysInfo().sudo;
+
+function fileOpAsRoot(q) {
+  return new Promise((ok, no) => {
+    let ch, out = '', err = '';
+    try { ch = spawn(CFG.sudo, ['-n', '--', process.execPath, MOCHI_JS, 'fileop'], { cwd: os.homedir(), stdio: ['pipe', 'pipe', 'pipe'] }); }
+    catch (e) { return no(e); }
+    const t = setTimeout(() => { try { ch.kill('SIGKILL'); } catch {} }, 120e3);
+    ch.stdout.on('data', d => { out += d; });
+    ch.stderr.on('data', d => { err = (err + d).slice(-2000); });
+    ch.stdin.on('error', () => {});
+    ch.on('error', e => { clearTimeout(t); no(e); });
+    ch.on('close', code => {
+      clearTimeout(t);
+      let r = null; try { r = JSON.parse(out); } catch {}
+      if (r && typeof r === 'object') ok(r); else no(new Error(cleanOut(err).trim().split('\n').pop() || 'sudo завершился с кодом ' + code));
+    });
+    ch.stdin.end(JSON.stringify(q));
+  });
+}
+
+export async function agentFileOp(q) {
+  const r = await fileOp(q);
+  if (!DENIED.has(r.code) || !rootFiles()) return r;
+  /* путь — уже готовый: у root другой HOME, а «~» и относительные пути — от папки агента */
+  let r2;
+  try { r2 = await fileOpAsRoot({ ...q, path: resolvePath(q.path, q.cwd) }); }
+  catch (e) { return { ...r, err: r.err + ` (повторить от root не вышло: ${e.message})` }; }
+  if (r2.text && q.fop !== 'read') r2.text += '\n[сделано от root: прав mochi-agent не хватило]';
+  return { ...r2, root: true };
 }
 
 /* ---------- служба: unix-сокет ---------- */
@@ -173,7 +213,7 @@ export function startRunner(sock) {
         } else if (m.op === 'spawn' && !jobs.has(m.id)) {
           jobs.set(m.id, spawnProcess(m, line => send({ id: m.id, op: 'line', line }), (code, err) => { jobs.delete(m.id); send({ id: m.id, op: 'exit', code, err }); }));
         } else if (m.op === 'file') {
-          fileOp(m).then(r => send({ ...r, id: m.id, op: 'file' }), e => send({ id: m.id, op: 'file', err: e.message }));
+          agentFileOp(m).then(r => send({ ...r, id: m.id, op: 'file' }), e => send({ id: m.id, op: 'file', err: e.message }));
         } else if (m.op === 'write') jobs.get(m.id)?.write?.(m.data);
         else if (m.op === 'kill') jobs.get(m.id)?.kill();
         else if (m.op === 'info') send({ id: m.id, op: 'info', ...sysInfo() });

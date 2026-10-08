@@ -4,7 +4,7 @@
    • агент работает на сервере в фоне: чат подписан на поток событий и после возвращения
      показывает и прогресс, и итог;
    • вкладка «Терминал» — настоящий терминал сервера (ttyd за авторизацией);
-   • в настройках — вкладка «Сервер» (Telegram, приглашения, пароль, выход) и «Инструменты» (вкл/выкл, MCP, навыки).
+   • в настройках — вкладка «Сервер» (Telegram, приглашения, пароль, выход, обновления, доступ агента — root) и «Инструменты» (вкл/выкл, MCP, навыки).
    Используем функции основного скрипта (add, trayAdd, md, think, ask…), а не дублируем их. */
 (() => {
 if (typeof SRV === 'undefined' || !SRV) return;
@@ -393,6 +393,7 @@ async function refreshPane() {
   try {
     const [a, t] = await Promise.all([api('api/account'), api('api/telegram')]);
     api('api/update').then(updState).catch(() => {});
+    api('api/access').then(i => { accState(i); if (accBusy(i)) accTick(); }).catch(() => {});
     $('#s-acct').textContent = a.user.name + (a.user.admin ? ' · администратор' : '') + ' · сессий: ' + a.sessions;
     foldMeta(fAcct, a.user.name + (a.user.admin ? ' · админ' : ''));
     $('#s-inv').hidden = !a.user.admin;
@@ -674,6 +675,98 @@ $('#s-updc').onclick = async () => {
   finally { b.disabled = false; }
 };
 $('#s-updgo').onclick = () => updI && updOpen(updI);
+
+/* ---------- настройки → Сервер → «Доступ агента» ----------
+   Обычный пользователь mochi-agent или полный root (sudo без пароля). Переключает root-служба mochi-access:
+   сервер кладёт запрос, служба правит sudoers и изоляцию, перезапускает исполнитель и терминал.
+   Включить — только администратор и только с паролем; выключить — одной кнопкой. */
+const fAcc = fold('acc', 'Доступ агента');
+fAcc.body.innerHTML = `<span class="tgs" id="s-acc">…</span>
+<div class="row2"><button class="pbtn" type="button" id="s-accgo" hidden><span></span></button><button class="pbtn" type="button" id="s-acccn" hidden><span>Отменить</span></button></div>
+<small class="note" id="s-accn"></small>`;
+pane.append(fAcc);
+css.textContent += `#p-srv #s-acc{white-space:pre-line}#p-srv #s-acc b{color:var(--acc);font-weight:normal}#p-srv #s-acc .bad{color:var(--err)}
+#dlg .fold>summary .fm.root{color:var(--acc)}`;
+let accI = null, accPoll = 0, accWait = 0;
+const accBusy = i => !!i && (i.status.state === 'queued' || i.status.state === 'running');
+/* ask с переносами строк (в тексте предупреждения — абзацы) */
+const askML = async (title, text, val, ok) => { const t = $('#ask-t'); t.style.whiteSpace = 'pre-line'; try { return await ask(title, text, val, ok); } finally { t.style.whiteSpace = ''; } };
+function accState(i) {
+  if (!i || !i.status) return;
+  accI = i;
+  const st = i.status, busy = accBusy(i), box = $('#s-acc');
+  box.innerHTML = '';
+  const line = (t, cls) => { if (box.childNodes.length) box.append('\n'); box.append(cls ? el('span', cls, t) : t); };
+  if (busy) line(st.want === 'on' ? 'Даю агенту root… Исполнитель команд и терминал перезапускаются.' : st.want === 'off' ? 'Забираю root… Исполнитель команд и терминал перезапускаются.' : 'Переключаю доступ…');
+  else if (i.root) {
+    box.append(el('b', null, 'Полный доступ: root')); box.append(' — sudo без пароля. Агент ставит пакеты, настраивает службы, правит /etc.');
+    if (i.mode === 'off') line('Права дала не Мочи: sudo для ' + i.user + ' настроен на сервере вручную.');
+  } else {
+    line('Обычный пользователь ' + i.user + ': без root, только свои папки и то, что разрешено всем.');
+    if (i.mode === 'on') line('Root включён, но sudo у агента сейчас не работает. Включи ещё раз или выполни на сервере: sudo mochi root on', 'bad');
+  }
+  if (!busy && st.state === 'failed') line('Не получилось: ' + (st.error || 'ошибка'), 'bad');
+  if (!busy && st.note) line('! ' + st.note);
+  const can = i.admin && i.ready;
+  const b = $('#s-accgo');
+  b.hidden = !can || busy; b.firstChild.textContent = i.root ? 'Забрать root' : 'Дать полный root';
+  $('#s-acccn').hidden = !(i.admin && st.state === 'queued' && Date.now() - st.since > 30e3);
+  $('#s-accn').textContent = !i.admin ? 'Доступ агента меняет администратор сервера.'
+    : !i.ready ? 'Переключатель заработает после «sudo mochi update» на сервере. Сразу — командой там же: sudo mochi root ' + (i.root ? 'off' : 'on') + '.'
+    : st.state === 'queued' && Date.now() - st.since > 30e3 ? 'Служба на сервере пока не взяла запрос. Проверь её: «systemctl status mochi-access.path» (на Alpine — «rc-service mochi-updater status») или переключи командой: sudo mochi root ' + (st.want || 'on') + '.'
+    : i.root ? 'Терминал: sudo -i — root-оболочка. Забрать root можно в любой момент; то, что агент уже поменял в системе, останется как есть.'
+    : 'Полный доступ — как у администратора сервера: sudo без пароля, системные пакеты, службы, файлы в /etc. Включается с паролем от Мочи.';
+  foldMeta(fAcc, busy ? 'переключается…' : i.root ? 'root' : 'без root', !busy && st.state === 'failed');
+  fAcc.querySelector(':scope>summary>.fm').classList.toggle('root', !busy && !!i.root);
+}
+/* ждём, пока служба переключит доступ (исполнитель в это время перезапускается — сервер может пару секунд не знать, есть ли root) */
+function accTick() {
+  clearTimeout(accPoll);
+  accPoll = setTimeout(async () => {
+    let i = null;
+    try { i = await api('api/access'); } catch (e) { if (e.status === 401) return check(); }
+    if (i) {
+      const was = accI && accI.root;
+      accState(i);
+      if (accBusy(i)) return accTick();
+      if (i.status.state === 'failed') { window.petSet && petSet('sad', 'Не вышло переключить доступ…', 4000); return; }
+      /* сразу после перезапуска исполнитель мог ещё не ответить — переспросим пару раз */
+      if (accWait && i.root !== (accWait > 0) && Date.now() - Math.abs(accWait) < 20e3) return accTick();
+      if (accWait) window.petSet && petSet(i.root ? 'love' : 'happy', i.root ? 'Теперь у меня root! Буду бережной ^_^' : 'Root отдала — я снова обычный пользователь', 3500);
+      accWait = 0;
+      if (was !== i.root) refreshPane();
+      return;
+    }
+    accTick();
+  }, 1500);
+}
+async function accSet(on) {
+  const b = $('#s-accgo');
+  if (on) {
+    const n = accI ? accI.users : 1;
+    const ok = await askML('Полный доступ', 'Агент получит root на этом сервере: sudo без пароля, системные пакеты и службы, любые файлы.'
+      + '\n\nЧем это опасно:'
+      + '\n· root получат все пользователи Мочи' + (n > 1 ? ' (их ' + n + ')' : '') + ' — агент и терминал у всех общие;'
+      + '\n· инструкция, спрятанная на сайте или в файле, который прочтёт агент, сможет управлять всем сервером;'
+      + '\n· агенту станут доступны ключи API и пароли Мочи.'
+      + '\n\nИсполнитель команд и терминал перезапустятся' + (accI && accI.busy ? ': идущие команды оборвутся, агент продолжит сам.' : '.'), null, 'Дальше');
+    if (!ok) return;
+    const pw = await pwAsk('Полный доступ', 'Подтверди паролем от Мочи');
+    if (pw == null) return;
+    b.disabled = true;
+    try { accState(await post('api/access', { root: true, password: pw })); accWait = Date.now(); accTick(); }
+    catch (e) { await ask('Полный доступ', 'Не получилось: ' + e.message, null, 'OK'); }
+    finally { b.disabled = false; }
+  } else {
+    if (!await askML('Забрать root', 'Агент снова станет обычным пользователем ' + (accI ? accI.user : 'mochi-agent') + '.\n\nИсполнитель команд и терминал перезапустятся. То, что агент уже поменял в системе с root, останется как есть.', null, 'Забрать')) return;
+    b.disabled = true;
+    try { accState(await post('api/access', { root: false })); accWait = -Date.now(); accTick(); }
+    catch (e) { await ask('Забрать root', 'Не получилось: ' + e.message, null, 'OK'); }
+    finally { b.disabled = false; }
+  }
+}
+$('#s-accgo').onclick = () => accI && accSet(!accI.root);
+$('#s-acccn').onclick = async () => { try { accState(await api('api/access', { method: 'DELETE' })); accWait = 0; clearTimeout(accPoll); } catch (e) { $('#s-accn').textContent = e.message; } };
 
 /* при входе и при возвращении на вкладку (если давно не смотрели): есть новая версия — предлагаем */
 async function updBoot(auto) {
