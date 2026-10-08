@@ -124,6 +124,14 @@ test('агент сам создаёт навык; навыки можно уд�
   assert.ok(sk.some(k => k.name === 'notes' && k.desc === 'Как вести заметки' && k.on));
   assert.equal((await c('/api/skills/notes', { method: 'DELETE' })).status, 200);
   assert.ok(!fs.existsSync(path.join(m.env.MOCHI_WORK, 'ext', 'skills', 'notes')));
+  /* из формы: кириллица в имени — транслитом; занятое имя не перезаписывается молча */
+  const ru = await c.json('/api/skills', { name: 'Отчёт за неделю', description: 'Еженедельный отчёт', instructions: 'По шаблону.', create: true });
+  assert.equal(ru.status, 200, JSON.stringify(ru.j));
+  assert.equal(ru.j.name, 'otchyot-za-nedelyu');
+  const dup = await c.json('/api/skills', { name: 'otchyot-za-nedelyu', description: 'другое', instructions: 'другое', create: true });
+  assert.equal(dup.status, 400);
+  assert.match(dup.j.error, /уже есть/);
+  assert.equal((await c('/api/skills/otchyot-za-nedelyu', { method: 'DELETE' })).status, 200);
   /* управление навыками можно выключить — инструмента не станет */
   await c.json('/api/tools', { tools: { skills_manage: false } }, 'PUT');
   await ask('просто привет');

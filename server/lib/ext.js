@@ -166,7 +166,9 @@ export function mcpPublic(u) {
 /* ======================= навыки ======================= */
 export const SKILL_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const SKILL_DIR = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-const normSkill = s => String(s || '').trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
+/* кириллицу в имени — транслитом: «Отчёт за неделю» → otchyot-za-nedelyu */
+const RU = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'yo', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya', і: 'i', ї: 'yi', є: 'ye', ґ: 'g' };
+export const normSkill = s => String(s || '').trim().toLowerCase().replace(/[а-яёіїєґ]/g, c => RU[c]).replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
 export const skillsRoot = u => path.join(userDir(u), 'skills');
 
 /* YAML-заголовок SKILL.md — только простые «ключ: значение» (и многострочные значения с отступом) */
@@ -245,7 +247,8 @@ async function useSkill(u, name) {
 /* записать SKILL.md (от имени агента). b: {name, raw} — готовый файл, или {name, description, instructions} */
 export async function skillWrite(u, b) {
   const name = normSkill(b.name);
-  if (!SKILL_NAME.test(name)) throw bad('Имя навыка: латиница в нижнем регистре, цифры и «-», до 64 символов');
+  if (!SKILL_NAME.test(name)) throw bad(String(b.name ?? '').trim() ? 'Имя навыка «' + String(b.name).trim() + '» не подходит: нужны буквы или цифры (например: weekly-report)' : 'Нужно имя навыка (например: weekly-report)');
+  if (b.create && await skillRaw(u, name) != null) throw bad('Навык «' + name + '» уже есть. Выбери другое имя или открой его кнопкой «Изменить».');
   let md;
   if (typeof b.raw === 'string') {
     md = b.raw.replace(/\r\n/g, '\n');
