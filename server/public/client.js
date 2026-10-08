@@ -815,7 +815,9 @@ const sbtn = (txt, fn) => { const b = el('button', 'pbtn sm'); b.type = 'button'
 const gobtn = txt => { const b = el('button', 'pbtn xgo'); b.type = 'button'; b.append(el('span', null, txt)); return b; };
 const field = (label, input) => { const l = el('label', 'f', label); l.append(input); return l; };
 const inp = (ph, area) => { const i = el(area ? 'textarea' : 'input'); i.placeholder = ph || ''; i.spellcheck = false; i.setAttribute('autocapitalize', 'off'); i.autocomplete = 'off'; if (area) i.rows = 3; return i; };
-function tlMsg(t, ok) { const m = $('#x-msg'); if (!m) return; m.textContent = t || ''; if (ok) m.dataset.s = 'ok'; else delete m.dataset.s; }
+/* сообщение — вверху вкладки и, если передано, прямо под кнопкой формы (иначе его не видно, когда форма внизу) */
+function tlMsg(t, ok, near) { for (const m of [$('#x-msg'), near]) { if (!m) continue; m.textContent = t || ''; if (ok) m.dataset.s = 'ok'; else delete m.dataset.s; } }
+const fmsg = () => { const m = el('small', 'xmsg'); m.setAttribute('role', 'status'); return m; };
 const setTools = m => api('api/tools', { method: 'PUT', json: { tools: m } }).then(loadTools);
 
 async function loadTools() {
@@ -873,11 +875,12 @@ async function loadTools() {
     go.onclick = async () => {
       const v = u.value.trim(), http = /^https?:\/\//i.test(v), body = { name: n.value.trim(), description: ds.value.trim(), [http ? 'url' : 'command']: v };
       if (k.value.trim()) body[http ? 'headers' : 'env'] = k.value;
-      go.disabled = true; tlMsg('Подключаю…', true);
+      go.disabled = true; tlMsg('Подключаю…', true, fm);
       try { const r = await post('api/mcp', body); tlMsg(r.err ? 'Сохранён, но не подключился: ' + r.err : 'Сервер «' + r.name + '» подключён', !r.err); opened['m+'] = false; opened['m:' + r.name] = true; await loadTools(); }
-      catch (e) { tlMsg(e.message); } finally { go.disabled = false; }
+      catch (e) { tlMsg(e.message, false, fm); } finally { go.disabled = false; }
     };
-    A.body.append(go, el('small', 'xs', 'Локальные серверы запускаются на сервере от имени агента (как его команды). Ключи хранятся на сервере и в браузер не возвращаются.'));
+    const fm = fmsg();
+    A.body.append(go, fm, el('small', 'xs', 'Локальные серверы запускаются на сервере от имени агента (как его команды). Ключи хранятся на сервере и в браузер не возвращаются.'));
     M.body.append(A);
   }
   tl.append(M);
@@ -900,11 +903,13 @@ async function loadTools() {
     const U = fold('k+url', 'Установить по ссылке'), u = inp('https://github.com/anthropics/skills/tree/main/skills/pdf'), n = inp('необязательно'), go = gobtn('Установить');
     U.body.append(field('Папка или репозиторий GitHub, или URL на SKILL.md', u), field('Имя навыка (если в репозитории их несколько)', n));
     go.onclick = async () => {
-      go.disabled = true; tlMsg('Скачиваю…', true);
-      try { const r = await post('api/skill-install', { url: u.value.trim(), name: n.value.trim() }); tlMsg('Установлено: ' + r.names.join(', '), true); opened['k+url'] = false; await loadTools(); }
-      catch (e) { tlMsg(e.message); } finally { go.disabled = false; }
+      if (!u.value.trim()) { tlMsg('Вставь ссылку на навык', false, fm); u.focus(); return; }
+      go.disabled = true; tlMsg('Скачиваю…', true, fm);
+      try { const r = await post('api/skill-install', { url: u.value.trim(), name: n.value.trim() }); tlMsg('Установлено: ' + r.names.join(', '), true); opened['k+url'] = false; for (const x of r.names) opened['k:' + x] = true; await loadTools(); }
+      catch (e) { tlMsg(e.message, false, fm); } finally { go.disabled = false; }
     };
-    U.body.append(go); K.body.append(U);
+    const fm = fmsg();
+    U.body.append(go, fm); K.body.append(U);
   }
   const N = fold('k+new', 'Создать навык'); N.id = 'x-skf'; K.body.append(N); skillForm(null, null, N);
   tl.append(K);
@@ -922,14 +927,20 @@ function skillForm(name, raw, d = $('#x-skf')) {
   d.body.append(field('Имя', n));
   if (raw == null) d.body.append(field('Когда применять', ds));
   d.body.append(field(raw != null ? 'SKILL.md' : 'Инструкция', body));
+  const fm = fmsg();
   go.onclick = async () => {
-    go.disabled = true;
+    const miss = !n.value.trim() ? [n, 'Нужно имя навыка (например: weekly-report)']
+      : raw == null && !ds.value.trim() ? [ds, 'Нужно описание: когда применять навык']
+      : !body.value.trim() ? [body, raw != null ? 'SKILL.md пустой' : 'Нужен текст инструкции'] : null;
+    if (miss) { tlMsg(miss[1], false, fm); miss[0].focus(); return; }
+    go.disabled = true; tlMsg('Сохраняю…', true, fm);
     try {
-      const r = await post('api/skills', raw != null ? { name: n.value.trim(), raw: body.value } : { name: n.value.trim(), description: ds.value.trim(), instructions: body.value });
-      tlMsg('Навык «' + r.name + '» сохранён', true); opened['k+new'] = false; await loadTools();
-    } catch (e) { tlMsg(e.message); } finally { go.disabled = false; }
+      const r = await post('api/skills', raw != null ? { name: n.value.trim(), raw: body.value } : { name: n.value.trim(), description: ds.value.trim(), instructions: body.value, create: true });
+      tlMsg('Навык «' + r.name + '» сохранён', true); opened['k+new'] = false; opened['k:' + r.name] = true; await loadTools();
+      $('#p-tl [data-k="k:' + r.name + '"]')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    } catch (e) { tlMsg(e.message, false, fm); } finally { go.disabled = false; }
   };
-  d.body.append(go);
+  d.body.append(go, fm);
   if (name) {
     const c = el('button', 'lnk'); c.type = 'button'; c.textContent = 'Отмена'; c.onclick = () => { skillForm(null, null, d); d.open = false; };
     d.body.append(c);
