@@ -43,6 +43,10 @@ const EDIT_TOOL = { type: 'function', function: { name: 'edit_file', description
 const WRITE_TOOL = { type: 'function', function: { name: 'write_file', description: 'Создать файл (недостающие папки создаются) или целиком заменить его содержимое. Существующий файл сначала прочитай через read_file; для частичных изменений используй edit_file — он дешевле и надёжнее. Пиши содержимое полностью, без сокращений вроде «… остальное без изменений».',
   parameters: { type: 'object', properties: { path: P_PATH, content: { type: 'string', description: 'Полное содержимое файла' } }, required: ['path', 'content'] } } };
 const FILE_TOOLS = new Set(['read_file', 'edit_file', 'write_file']);
+/* картинка с диска → модели: результат инструмента бывает только текстом, поэтому сама картинка приходит
+   следующим сообщением (как вложение пользователя) — так её видят все OpenAI-совместимые модели со зрением */
+const VIEW_TOOL = { type: 'function', function: { name: 'view_image', description: 'Посмотреть картинку с сервера своими глазами: фото, скриншот, график, схему (PNG, JPEG, GIF, WebP до 8 МБ). Картинка придёт следующим сообщением. Другие форматы (SVG, PDF, HEIC, BMP) сначала сконвертируй в PNG через run_command.',
+  parameters: { type: 'object', properties: { path: P_PATH }, required: ['path'] } } };
 const SEND_TOOL = { type: 'function', function: { name: 'send_file', description: 'Передать пользователю файл с сервера: в чате появится карточка с кнопкой «Скачать» (и файл придёт в Telegram, если он подключён и пользователь не в чате). Используй, когда результат — файл (документ, архив, картинка, таблица, скрипт), а не текст. Один вызов — один файл; несколько файлов упакуй в архив (tar czf). Файл должен лежать в рабочей папке.',
   parameters: { type: 'object', properties: {
     path: { type: 'string', description: 'Путь к файлу (абсолютный или относительно текущей папки), например outbox/report.pdf' },
@@ -61,9 +65,9 @@ export const TG_TOOLS = [
 ];
 
 /* встроенные инструменты, которые пользователь может выключить (Настройки → Инструменты) */
-const GROUPS = { run_command: 'Сервер', send_file: 'Сервер', read_file: 'Файлы', edit_file: 'Файлы', write_file: 'Файлы', mcp_manage: 'Расширения', skills_manage: 'Расширения' };
+const GROUPS = { run_command: 'Сервер', send_file: 'Сервер', read_file: 'Файлы', view_image: 'Файлы', edit_file: 'Файлы', write_file: 'Файлы', mcp_manage: 'Расширения', skills_manage: 'Расширения' };
 const groupOf = n => GROUPS[n] || (n.startsWith('telegram_') ? 'Telegram' : 'Интернет');
-const builtins = () => [RUN_TOOL, READ_TOOL, EDIT_TOOL, WRITE_TOOL, SEND_TOOL, ...TG_TOOLS];
+const builtins = () => [RUN_TOOL, READ_TOOL, VIEW_TOOL, EDIT_TOOL, WRITE_TOOL, SEND_TOOL, ...TG_TOOLS];
 /* встроенные включает и выключает только пользователь: агенту об этом нужно знать, чтобы не пытаться обойти */
 for (const t of [...builtins(), ...MANAGE_TOOLS]) BUILTIN.add(t.function.name);
 const isOn = (S, n) => (S.tools || {})[n] !== false;
@@ -88,6 +92,7 @@ function labelFor(n, a) {
   let s;
   if (n === 'run_command') s = a.action || 'Работаю на сервере';
   else if (n === 'send_file') s = 'Отправляю файл: ' + (a.name || String(a.path || '').split('/').pop());
+  else if (n === 'view_image') s = 'Смотрю картинку: ' + String(a.path || '').split('/').pop();
   else if (FILE_TOOLS.has(n)) s = { read_file: 'Читаю файл', edit_file: 'Правлю файл', write_file: 'Пишу файл' }[n] + ': ' + String(a.path || '').replace(/\/+$/, '').split('/').pop();
   else if (n === 'web_search') { const q = Array.isArray(a.search_queries) ? a.search_queries[0] : a.objective; s = 'Ищу в интернете' + (q ? ': ' + q : ''); }
   else if (n === 'web_fetch') { let h = ''; try { h = new URL([].concat(a.urls || [])[0]).hostname.replace(/^www\./, ''); } catch {} s = 'Читаю страницу' + (h ? ': ' + h : ''); }
@@ -172,13 +177,13 @@ export class Chat extends EventEmitter {
     const us = H.map((m, i) => m.role === 'user' ? i : -1).filter(i => i >= 0), from = us.length > 40 ? us[us.length - 40] : 0;
     const out = [];
     for (let i = from; i < H.length; i++) {
-      const { _pf, ...m } = H[i];
+      const { _pf, _vi, ...m } = H[i];
       /* Ollama не принимает историю, где аргументы вызова — не JSON-объект (обрезаны или пустые): шлём {} — модель и так получила ошибку */
       if (m.tool_calls) m.tool_calls = m.tool_calls.map(c => argsOk(c.function.arguments) ? c : { ...c, function: { ...c.function, arguments: '{}' } });
       if (_pf && lvl < 2 && rec.has(i)) {
         const ps = this.loadParts(_pf).filter(p => lvl < 1 || p.type === 'image_url');
         if (ps.length) m.content = [{ type: 'text', text: m.content }, ...ps];
-      }
+      } else if (_vi) m.content += lvl < 2 ? ' (картинка была открыта давно и уже не передаётся — открой её снова, если нужно)' : ' (модель не принимает картинки — изображение не передано, ты его не видишь)';
       out.push(m);
     }
     return out;
@@ -288,7 +293,8 @@ export class Chat extends EventEmitter {
       + (tgOn ? '\n' + (hooks.tg?.statusLine(this.u) || 'Telegram не подключён.') + ' Если пользователь хочет управлять тобой из Telegram или получать уведомления: попроси создать бота у @BotFather (команда /newbot) и прислать токен, затем вызови telegram_connect и дай пользователю ссылку из ответа.' : '')
       + (offB.length ? '\nВыключено пользователем: ' + offB.join(', ') + '. Включить их может только он сам в настройках — ты не можешь.' : '')
       + extra
-      + (this.wire().some(m => Array.isArray(m.content)) ? '\nКартинки и PDF из сообщений пользователя ты видишь напрямую; те же файлы лежат в inbox/, если их нужно обработать.' : '');
+      + (this.wire().some(m => Array.isArray(m.content)) ? '\nКартинки и PDF из сообщений пользователя ты видишь напрямую; те же файлы лежат в inbox/, если их нужно обработать.' : '')
+      + (has('view_image') ? '\nЧтобы увидеть картинку с сервера (фото, скриншот, график), вызови view_image — не гадай по имени файла и не читай её через read_file.' : '');
   }
 
   /* ---------- цикл агента ---------- */
@@ -310,12 +316,13 @@ export class Chat extends EventEmitter {
       if (text) this.push({ kind: 'assistant', text });
       this.doc.save();
       if (!calls.length) return text;
+      ctx.imgs = [];
       for (const tc of calls) {
         let a = {}, bad = false;
         try { a = JSON.parse(tc.function.arguments || '{}') || {}; } catch { bad = true; }
         if (typeof a !== 'object' || Array.isArray(a)) { a = {}; bad = true; }
         const nm = tc.function.name;
-        const e = this.push({ kind: 'tool', name: nm, label: labelFor(nm, a), hint: nm === 'run_command' ? String(a.command || '').slice(0, 2000) : FILE_TOOLS.has(nm) ? String(a.path || '').slice(0, 500) : '', state: 'run' });
+        const e = this.push({ kind: 'tool', name: nm, label: labelFor(nm, a), hint: nm === 'run_command' ? String(a.command || '').slice(0, 2000) : FILE_TOOLS.has(nm) || nm === 'view_image' ? String(a.path || '').slice(0, 500) : '', state: 'run' });
         this.emit('tool', e);
         let out;
         try {
@@ -331,10 +338,14 @@ export class Chat extends EventEmitter {
         this.doc.save();
         chk();
       }
+      if (ctx.imgs.length) {
+        H.push({ role: 'user', content: '[Картинки из view_image: ' + ctx.imgs.map(x => x.at).join(', ') + ']', _pf: this.saveParts(ctx.imgs.map(x => x.part)), _vi: 1 });
+        this.doc.save();
+      }
     }
   }
 
-  async tool(nm, a, sig, { web, X }) {
+  async tool(nm, a, sig, { web, X, imgs }) {
     if (nm === 'run_command') {
       if (!a.command) return 'Ошибка: нет параметра command';
       const r = await runCmd({ cmd: String(a.command), cwd: this.doc.v.cwd || userDir(this.u), timeout: a.timeout }, sig);
@@ -343,6 +354,15 @@ export class Chat extends EventEmitter {
       return (r.out || '(нет вывода)') + '\n[код выхода: ' + r.code + ']' + (note ? '\n' + note : '');
     }
     if (FILE_TOOLS.has(nm)) return await this.fileTool(nm, a, sig);
+    if (nm === 'view_image') {
+      if (this.settings().vis === false || this.noVis >= 2) return 'Ошибка: эта модель не видит картинки (или зрение выключено в настройках) — смотреть нечем. Опиши файл по метаданным (run_command: file, identify) или скажи пользователю, что нужна модель со зрением.';
+      if (!String(a.path || '').trim()) return 'Ошибка: нет параметра path';
+      if (imgs.length >= 5) return 'Ошибка: за один шаг — не больше 5 картинок; остальные открой следующим шагом';
+      const r = await fileCmd({ fop: 'image', path: String(a.path), cwd: this.doc.v.cwd || userDir(this.u) }, sig);
+      if (r.err) return 'Ошибка: ' + r.err;
+      imgs.push({ at: r.text, part: { type: 'image_url', image_url: { url: 'data:' + r.type + ';base64,' + r.data } } });
+      return 'Картинка ' + r.text + ' открыта — она в следующем сообщении.';
+    }
     if (nm === 'send_file') {
       const f = await pullFile(a.path, this.doc.v.cwd || userDir(this.u));
       const name = a.name ? String(a.name).replace(/[\\/]/g, '_').slice(0, 120) : f.name;

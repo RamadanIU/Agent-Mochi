@@ -13,6 +13,11 @@ before(async () => {
     const last = body.messages[body.messages.length - 1];
     const u = [...body.messages].reverse().find(x => x.role === 'user');
     const ut = typeof u.content === 'string' ? u.content : u.content[0].text;
+    if (ut.startsWith('посмотри')) return { tools: [{ name: 'view_image', args: { path: 'pic.png' } }, { name: 'view_image', args: { path: 'note.txt' } }] };
+    if (ut.startsWith('[Картинки из view_image')) {
+      const img = u.content.find?.(p => p.type === 'image_url'), tool = body.messages.filter(x => x.role === 'tool').slice(-2);
+      return { text: img ? 'вижу ' + img.image_url.url.slice(0, 22) + ' | ' + tool.map(x => x.content).join(' | ') : 'не вижу' };
+    }
     if (ut.startsWith('спать')) return last.role === 'user' ? { tools: [{ name: 'run_command', args: { action: 'Сплю', command: 'sleep 30; echo проснулась' } }] } : { text: 'остановлена?' };
     if (ut.startsWith('медленно')) return last.role === 'user' ? { tools: [{ name: 'run_command', args: { action: 'Долго', command: 'sleep 2; echo ok > slow.txt' } }] } : { text: 'медленно готово' };
     if (ut.startsWith('украсть')) return last.role === 'user' ? { tools: [{ name: 'run_command', args: { action: 'Ссылка', command: `ln -sf ${process.env.__DATA}/users.json steal.json` } }] } : last.content.includes('steal') || last.content.includes('код выхода') && !last.content.includes('отправлен') && !/рабочей папки/.test(last.content) ? { tools: [{ name: 'send_file', args: { path: 'steal.json' } }] } : { text: 'итог: ' + last.content };
@@ -125,6 +130,31 @@ test('send_file не отдаёт файлы вне рабочей папки (�
   const last = evs.filter(e => e.ev === 'log' && e.d.kind === 'assistant').at(-1).d.text;
   assert.match(last, /рабочей папки/);
   assert.ok(!evs.some(e => e.ev === 'log' && e.d.kind === 'file'));
+});
+
+test('view_image: картинка с диска приходит модели следующим сообщением', async () => {
+  const c = await registered(m, 'ivy');
+  await c.json('/api/settings', { base: model.url, model: 'fake-1' }, 'PUT');
+  const d = path.join(m.env.MOCHI_WORK, 'ivy');
+  fs.mkdirSync(d, { recursive: true });
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  fs.writeFileSync(path.join(d, 'pic.png'), png);
+  fs.writeFileSync(path.join(d, 'note.txt'), 'просто текст');
+  const p = c.events(doneRun, 15000);
+  await sleep(200);
+  await c.json('/api/chat', { text: 'посмотри картинку' });
+  const evs = await p;
+  const last = evs.filter(e => e.ev === 'log' && e.d.kind === 'assistant').at(-1).d.text;
+  assert.match(last, /^вижу data:image\/png;base64,/);
+  assert.match(last, /pic\.png \(\d+ Б\) открыта/);
+  assert.match(last, /Ошибка: note\.txt: не PNG, JPEG, GIF или WebP/);
+  const tools = evs.filter(e => e.ev === 'log' && e.d.kind === 'tool' && e.d.state !== 'run').map(e => e.d);
+  assert.deepEqual(tools.map(t => [t.label, t.state]), [['Смотрю картинку: pic.png', 'ok'], ['Смотрю картинку: note.txt', 'bad']]);
+  /* картинка ушла модели целиком, а в системной подсказке есть про view_image */
+  const req = model.calls.at(-1).body;
+  assert.equal(req.messages.at(-1).content.find(x => x.type === 'image_url').image_url.url, 'data:image/png;base64,' + png.toString('base64'));
+  assert.match(req.messages[0].content, /view_image/);
+  assert.ok(req.tools.some(t => t.function.name === 'view_image'));
 });
 
 test('загрузка файла в inbox и сообщение с ним', async () => {

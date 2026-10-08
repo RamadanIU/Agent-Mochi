@@ -72,7 +72,7 @@ test('выключенные пользователем файловые инс�
   const c = await registered(m, 'nofiles');
   await c.json('/api/settings', { base: model.url, model: 'fake-1' }, 'PUT');
   const cat = (await c.json('/api/tools', undefined, 'GET')).j;
-  assert.deepEqual(cat.builtin.filter(t => t.group === 'Файлы').map(t => t.name), ['read_file', 'edit_file', 'write_file']);
+  assert.deepEqual(cat.builtin.filter(t => t.group === 'Файлы').map(t => t.name), ['read_file', 'view_image', 'edit_file', 'write_file']);
   await c.json('/api/tools', { tools: { read_file: false, edit_file: false, write_file: false } }, 'PUT');
   const n0 = model.calls.length, p = c.events(doneRun, 20000);
   await c.json('/api/chat', { text: 'ещё раз' });
