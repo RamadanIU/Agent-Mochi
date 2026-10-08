@@ -222,10 +222,7 @@ html.isfs{overflow:hidden}
 .m.a::after{left:8px;box-shadow:4px 0 var(--card),8px 0 var(--card),12px 0 var(--card),0 4px var(--ink),4px 4px var(--card),8px 4px var(--card),12px 4px var(--ink),0 8px var(--ink),4px 8px var(--card),8px 8px var(--ink),0 12px var(--ink),4px 12px var(--ink)}
 .m.u::after{right:8px;box-shadow:-4px 0 var(--acc),-8px 0 var(--acc),-12px 0 var(--acc),0 4px var(--ink),-4px 4px var(--acc),-8px 4px var(--acc),-12px 4px var(--ink),0 8px var(--ink),-4px 8px var(--acc),-8px 8px var(--ink),0 12px var(--ink),-4px 12px var(--ink)}
 .m a{color:inherit;text-decoration:underline dotted 2px;text-underline-offset:4px;overflow-wrap:anywhere}.m.a a{color:var(--acc)}
-.m .hd{color:var(--acc);font-weight:400}
 .m em{font-style:normal;background:linear-gradient(transparent 62%,color-mix(in srgb,var(--acc) 28%,transparent) 0)}
-.li{display:inline-block;width:6px;height:6px;margin:0 8px 0 2px;background:var(--acc);vertical-align:.18em}.m.u .li{background:var(--onacc)}
-.m blockquote{display:inline}
 /* размеры и шрифт сообщений (настройки → Мочи) */
 :root[data-cs="1"] .m{font-size:9px;line-height:1.9}:root[data-cs="3"] .m{font-size:13px;line-height:1.75}
 :root[data-cf=hj] .m{font:24px/1.12 Handjet,"Courier New",monospace}
@@ -371,6 +368,179 @@ dialog.ask{margin:auto;width:calc(100% - 32px);max-width:420px}
 .ask .lnk{color:var(--mut)}
 :root[data-theme=lamp] dialog::backdrop{background:rgba(30,16,6,.62)}
 #c-inst .pi{--ico:var(--i-dl)}
+/* ---------- ответы Мочи: markdown, таблицы, формулы, схемы ---------- */
+:root{--p1:#ff6b9d;--p2:#3fbf95;--p3:#5aa9ff;--p4:#ffbe3d;--p5:#a68bff;--p6:#ff8e6e;
+--hk:#ff8fc0;--hs:#ffd479;--hn:#8fd3ff;--hf:#c9a7ff;--hy:#7ee8d0;--ha:#ffb38a;--hv:#b9ffd6;--b:linear-gradient(currentColor 0 0);
+--i-info:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 8' shape-rendering='crispEdges'%3E%3Cpath fill='%23000' d='M2 0h2v2H2zM1 3h3v1H1zM2 4h2v3H2zM1 7h4v1H1z'/%3E%3C/svg%3E");
+--i-bulb:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 8' shape-rendering='crispEdges'%3E%3Cpath fill='%23000' d='M2 0h3v1H2zM1 1h5v1H1zM0 2h7v2H0zM1 4h5v1H1zM2 5h3v2H2zM3 7h1v1H3z'/%3E%3C/svg%3E");
+--i-bang:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 8' shape-rendering='crispEdges'%3E%3Cpath fill='%23000' d='M1 0h2v5H1zM1 6h2v2H1z'/%3E%3C/svg%3E");
+--i-chk:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'%3E%3Cpath fill='%23000' d='M0 3h2v2H0zM1 4h2v2H1zM2 5h2v2H2zM3 4h2v2H3zM4 3h2v2H4zM5 2h2v2H5zM6 1h2v2H6z'/%3E%3C/svg%3E")}
+:root[data-theme=boy]{--p1:#2f80ff;--p2:#22b8a7;--p3:#ffb020;--p4:#ff5c7a;--p5:#8b6cff;--p6:#5fc15a;--hk:#7cc4ff;--hs:#ffd479;--hn:#ff9fb2;--hf:#b8a6ff;--hy:#7ee8d0;--ha:#ffc27a}
+:root[data-theme=lamp]{--p1:#d9741e;--p2:#6a9f3c;--p3:#c8442f;--p4:#e0b040;--p5:#8a5a3c;--p6:#4f8fa8;--hk:#ffd28a;--hs:#fff0cf;--hn:#ff8a4c;--hf:#ffc46b;--hy:#f7b267;--ha:#ffdca8;--hv:#ffe7b0}
+.md{white-space:normal;overflow-wrap:anywhere}
+.md>:first-child{margin-top:0}.md>:last-child{margin-bottom:0}
+.md p{margin:0 0 .85em}
+/* заголовки — как надписи в старой игре */
+.md h1,.md h2,.md h3,.md h4,.md h5,.md h6{margin:1.3em 0 .75em;font-weight:400;font-size:1em;line-height:1.55}
+.md h1{font-size:1.4em;color:var(--acc);padding-bottom:.55em;text-shadow:2px 2px 0 color-mix(in srgb,var(--ink) 28%,transparent);background:repeating-linear-gradient(90deg,var(--acc) 0 8px,transparent 8px 12px) 0 100%/100% 4px no-repeat}
+.md h2{display:flex;align-items:baseline;gap:.6em;font-size:1.2em}
+.md h2::before{content:"";flex:none;width:.5em;height:.65em;background:var(--acc);clip-path:polygon(0 0,100% 50%,0 100%)}
+.md h3{font-size:1.05em;color:var(--acc)}
+.md h4,.md h5,.md h6{font-size:.85em;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+/* списки: пиксельные маркеры, номера — игровым шрифтом */
+.md ul,.md ol{margin:0 0 .85em;padding-left:1.8em}
+.md li{position:relative;margin:.3em 0}
+.md li>p{margin:0 0 .5em}
+.md li>ul,.md li>ol{margin:.3em 0 .1em}
+.md ul{list-style:none}
+.md ul>li::before{content:"";position:absolute;left:-1.25em;top:.6em;top:calc(.5lh - 3px);width:6px;height:6px;background:var(--acc)}
+.md ul ul>li::before{background:none;box-shadow:inset 0 0 0 2px var(--acc)}
+.md ul ul ul>li::before{width:4px;height:4px;top:calc(.5lh - 2px);background:var(--mut);box-shadow:none}
+.md ol>li::marker{color:var(--acc);font-family:var(--pf);font-size:.8em}
+:root[data-cf=hj] .md ol>li::marker{font-size:.45em}
+.md li.xk{list-style:none;padding-left:.5em}.md li.xk::before{content:none}
+.md li.xk>i:first-child{position:absolute;left:-1.6em;top:.25em;top:calc(.5lh - 7px);width:14px;height:14px;background:var(--bg);box-shadow:var(--sh2)}
+.md li.xk.on>i:first-child{background:var(--acc)}
+.md li.xk.on>i:first-child::after{content:"";position:absolute;inset:3px;background:var(--onacc);-webkit-mask:var(--i-chk) center/contain no-repeat;mask:var(--i-chk) center/contain no-repeat}
+.md li.xk.on{color:var(--mut)}
+/* мелочи в строке */
+.md b,.md strong{font-weight:400;color:color-mix(in srgb,var(--acc) 72%,var(--fg))}.m.u .md b{color:inherit}
+.md h1 b,.md h2 b,.md h3 b,.md .xct b,.md th b{color:inherit}
+.md del,.md s{text-decoration:line-through 2px;text-decoration-color:color-mix(in srgb,currentColor 70%,transparent);opacity:.75}
+.md mark{background:color-mix(in srgb,var(--acc) 30%,transparent);color:inherit;padding:0 .15em}
+.md u,.md ins{text-decoration:underline 2px var(--acc);text-underline-offset:4px}
+.md kbd{display:inline-block;margin:0 .1em;padding:.15em .45em .3em;font:inherit;font-size:.85em;line-height:1.2;background:var(--bg);box-shadow:var(--sh2),inset 0 -3px 0 color-mix(in srgb,var(--ink) 22%,var(--bg))}
+.md sup,.md sub{font-size:.7em;line-height:0}
+.md hr{height:12px;margin:1.3em 0;border:0;opacity:.85;background:var(--heart) center/14px 12px no-repeat,repeating-linear-gradient(90deg,var(--mut) 0 4px,transparent 4px 8px) 0 50%/calc(50% - 16px) 2px no-repeat,repeating-linear-gradient(90deg,var(--mut) 0 4px,transparent 4px 8px) 100% 50%/calc(50% - 16px) 2px no-repeat}
+.md .xi{display:block;max-width:100%;max-height:420px;margin:.5em 0 .9em;background:var(--bg);box-shadow:var(--sh2);image-rendering:auto}
+.md .xil::before{content:"[картинка] ";color:var(--mut)}
+/* цитаты и врезки */
+.md blockquote{display:block;margin:0 0 .85em;padding:.65em .9em .65em 1.2em;color:color-mix(in srgb,var(--fg) 82%,var(--mut));background:repeating-linear-gradient(var(--acc) 0 6px,transparent 6px 10px) 0 0/4px 100% no-repeat,color-mix(in srgb,var(--bg) 70%,transparent)}
+.md blockquote>:last-child,.xcb>:last-child,.xdb>:last-child{margin-bottom:0}
+.xc{--xc:var(--acc);margin:.3em 2px 1em;background:var(--bg);box-shadow:var(--sh2)}
+.xc-tip{--xc:var(--ok)}.xc-important{--xc:var(--p5)}.xc-warning{--xc:#e8961e}.xc-caution{--xc:var(--err)}
+.xct{display:flex;align-items:center;gap:9px;padding:7px 10px;background:var(--xc);color:#fff;font:7px/1.4 var(--pf)}
+.xct i{flex:none;width:12px;height:12px;background:currentColor;-webkit-mask:var(--ico) center/contain no-repeat;mask:var(--ico) center/contain no-repeat;--ico:var(--i-info)}
+.xc-tip .xct i{--ico:var(--i-bulb)}.xc-important .xct i{--ico:var(--i-bang)}.xc-warning .xct i,.xc-caution .xct i{--ico:var(--i-warn)}
+.xcb{padding:.75em .95em}
+/* раскрывашки <details> */
+.md details.xd{margin:.2em 2px 1em;border:0;background:var(--bg);box-shadow:var(--sh2)}
+.md .xd>summary{display:flex;align-items:center;justify-content:flex-start;gap:10px;padding:9px 11px;color:var(--fg);font:inherit;text-transform:none}
+.md .xd>summary::after{content:none}
+.md .xd>summary::before{content:"";flex:none;width:8px;height:10px;background:var(--acc);clip-path:polygon(0 0,100% 50%,0 100%);transition:transform .2s steps(2)}
+.md .xd[open]>summary::before{transform:rotate(90deg)}
+.xdb{padding:2px 12px 12px}
+/* сноски и ссылки-источники [1] */
+.xfn{margin-left:1px;color:var(--acc)}
+.m .md a.xci{display:inline-block;min-width:1.7em;margin:0 .1em;padding:.2em .3em;font-size:.68em;line-height:1.2;text-align:center;vertical-align:.25em;background:var(--acc);color:var(--onacc);text-decoration:none}
+.md .xf{margin:1.1em 0 0;padding:.8em 0 0 1.8em;border-top:2px dashed var(--line);font-size:.85em;color:var(--mut)}
+/* код: подсветка цветами старого монитора */
+.cb pre span{text-shadow:0 0 5px color-mix(in srgb,currentColor 50%,transparent)}
+.hk{color:var(--hk)}.hs{color:var(--hs)}.hn{color:var(--hn)}.hf{color:var(--hf)}.hy{color:var(--hy)}.ha{color:var(--ha)}.hv{color:var(--hv)}
+.hc{color:color-mix(in srgb,var(--tfg) 48%,transparent);text-shadow:none!important}
+.hp,.hm,.hu,.hx{display:inline-block;min-width:100%}
+.hp{color:#a6ffbf;background:rgba(80,255,140,.12)}.hm{color:#ffa3b1;background:rgba(255,80,110,.14)}.hu{color:var(--hn)}.hx{color:var(--hf)}
+/* таблицы — ведомость на «зелёнке» */
+.m.a:has(.xt,.xg){max-width:min(900px,96%)}
+.xt .xsc{overflow-x:auto;background:var(--card);scrollbar-width:thin}
+.xt table{min-width:100%;border-collapse:collapse;font-size:.92em;line-height:1.6}
+.xt th{padding:8px 11px;text-align:left;font-weight:400;white-space:nowrap;color:var(--fg);background:color-mix(in srgb,var(--acc) 20%,var(--card));border-bottom:2px solid var(--ink)}
+.xt td{padding:7px 11px;vertical-align:top;border-top:2px dashed var(--line)}
+.xt tr>:not(:first-child){border-left:2px dashed var(--line)}
+.xt th:not(:first-child){border-left-color:color-mix(in srgb,var(--ink) 25%,transparent)}
+.xt tbody tr:first-child td{border-top:0}
+.xt tbody tr:nth-child(even){background:color-mix(in srgb,var(--bg) 55%,var(--card))}
+.xt tbody tr:hover{background:color-mix(in srgb,var(--acc) 12%,var(--card))}
+.xt .ac{text-align:center}.xt .ar{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.xt td code{white-space:nowrap}
+/* формулы — на тетрадном листке в клетку */
+.xm{font:21px/1 var(--mono);white-space:nowrap}
+.xmw{margin:.3em 2px 1em;padding:14px 16px;overflow-x:auto;text-align:center;box-shadow:var(--sh2);
+background:linear-gradient(color-mix(in srgb,var(--line) 80%,transparent) 2px,transparent 0) 0 0/16px 16px,linear-gradient(90deg,color-mix(in srgb,var(--line) 80%,transparent) 2px,transparent 0) 0 0/16px 16px,var(--bg)}
+.xmd{display:inline-block;font:25px/1.35 var(--mono);white-space:nowrap}
+.md p .xmd{display:block;margin:.4em 0;text-align:center;overflow-x:auto}
+.xm i,.xmd i{font-style:italic}
+.xm sup,.xm sub,.xmd sup,.xmd sub{font-size:.7em;line-height:0}
+.xss{display:inline-flex;flex-direction:column;vertical-align:middle;font-size:.7em;line-height:1.05}.xss sup,.xss sub{font-size:1em;vertical-align:0;line-height:1.05}
+.xfr{display:inline-flex;flex-direction:column;vertical-align:middle;margin:0 .15em;text-align:center}
+.xfr>span{padding:0 .2em;line-height:1.1}.xfr>span:first-child{border-bottom:2px solid currentColor}
+.xm .xfr{font-size:.8em}.xbn>span:first-child{border:0}
+.xsq{white-space:nowrap}.xsq>sup{margin-right:-.25em}.xsb{padding:0 .1em;border-top:2px solid currentColor}
+.xov{border-top:2px solid currentColor}.xun{border-bottom:2px solid currentColor}
+.xbx{display:inline-block;margin:0 .2em;padding:.05em .35em;box-shadow:var(--sh2)}
+.xlm{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;margin:0 .1em;line-height:1.05}.xlm>span{font-size:.62em}.xlm>.xlo{font-size:1em}
+.xbig{font-size:1.45em;line-height:1}
+.xo{margin:0 .2em}.xrm,.xrm i{font-style:normal}.xfnm{margin-right:.15em}.xdbl{font-weight:700}.xcal{font-style:italic}.xph{visibility:hidden}
+.xsp{display:inline-block;width:.2em}.xsp.q{width:1em}.xsp.qq{width:2em}
+.xdl{display:inline-block;transform:scaleY(1.25)}
+.xtag{float:right;margin-left:1em;color:var(--mut)}
+.xmx{display:inline-grid;vertical-align:middle;gap:.1em .8em;margin:0 .15em;padding:.15em .55em;line-height:1.2;text-align:center;background-repeat:no-repeat}
+.xmx.xal{gap:.15em 0;padding:0}.xjr{justify-self:end}.xjl{justify-self:start}
+.xmx.xb{background-image:var(--b),var(--b),var(--b),var(--b),var(--b),var(--b);background-position:0 0,0 0,0 100%,100% 0,100% 0,100% 100%;background-size:2px 100%,6px 2px,6px 2px,2px 100%,6px 2px,6px 2px}
+.xmx.xp{background-image:var(--b),var(--b),var(--b),var(--b),var(--b),var(--b),var(--b),var(--b),var(--b),var(--b);
+background-position:0 50%,2px 2px,4px 0,2px calc(100% - 2px),4px 100%,100% 50%,calc(100% - 2px) 2px,calc(100% - 4px) 0,calc(100% - 2px) calc(100% - 2px),calc(100% - 4px) 100%;
+background-size:2px calc(100% - 12px),2px 4px,2px 2px,2px 4px,2px 2px,2px calc(100% - 12px),2px 4px,2px 2px,2px 4px,2px 2px}
+.xmx.xv{background-image:var(--b),var(--b);background-position:0 0,100% 0;background-size:2px 100%,2px 100%}
+.xmx.xvv{background-image:var(--b),var(--b),var(--b),var(--b);background-position:0 0,4px 0,100% 0,calc(100% - 4px) 0;background-size:2px 100%,2px 100%,2px 100%,2px 100%;padding:.15em .7em}
+.xmx.xbb,.xmx.xcs{background-image:var(--b),var(--b),var(--b),var(--b),var(--b);background-position:4px 0,2px 2px,0 50%,2px calc(100% - 2px),4px 100%;background-size:4px 2px,2px calc(50% - 4px),2px 2px,2px calc(50% - 4px),4px 2px}
+.xmx.xbb{background-image:var(--b),var(--b),var(--b),var(--b),var(--b),var(--b),var(--b),var(--b),var(--b),var(--b);
+background-position:4px 0,2px 2px,0 50%,2px calc(100% - 2px),4px 100%,calc(100% - 4px) 0,calc(100% - 2px) 2px,100% 50%,calc(100% - 2px) calc(100% - 2px),calc(100% - 4px) 100%;
+background-size:4px 2px,2px calc(50% - 4px),2px 2px,2px calc(50% - 4px),4px 2px,4px 2px,2px calc(50% - 4px),2px 2px,2px calc(50% - 4px),4px 2px}
+.xmx.xcs{padding-left:.8em}
+.xmx.xrc{padding-right:.8em;background-image:var(--b),var(--b),var(--b),var(--b),var(--b);background-position:calc(100% - 4px) 0,calc(100% - 2px) 2px,100% 50%,calc(100% - 2px) calc(100% - 2px),calc(100% - 4px) 100%;background-size:4px 2px,2px calc(50% - 4px),2px 2px,2px calc(50% - 4px),4px 2px}
+/* схемы: пиксельный SVG на миллиметровке */
+.xg .xgb{overflow:auto;padding:16px;text-align:center;scrollbar-width:thin;
+background:linear-gradient(color-mix(in srgb,var(--line) 80%,transparent) 2px,transparent 0) 0 0/16px 16px,linear-gradient(90deg,color-mix(in srgb,var(--line) 80%,transparent) 2px,transparent 0) 0 0/16px 16px,var(--bg)}
+.xg svg{display:inline-block;max-width:100%;height:auto;vertical-align:top;overflow:visible}
+.xg .xgs{display:none}.xg.code .xgs{display:block}.xg.code .xgb{display:none}
+.cp[data-k=v] .pi{--ico:var(--i-eye)}
+.xgb text{font-family:var(--pf);font-size:8px;fill:var(--fg)}
+.xgb text.on{fill:var(--onacc)}.xgb text.on2{fill:var(--card)}
+.gn{fill:var(--card);stroke:var(--ink);stroke-width:2}
+.gsh{fill:var(--ink);opacity:.85}
+.k-round,.k-stadium{fill:color-mix(in srgb,var(--acc) 18%,var(--card))}
+.k-dia{fill:color-mix(in srgb,var(--p4) 32%,var(--card))}
+.k-circle,.k-dc{fill:var(--acc)}
+.k-db{fill:color-mix(in srgb,var(--p3) 26%,var(--card))}
+.k-hex{fill:color-mix(in srgb,var(--p5) 26%,var(--card))}
+.k-para,.k-para2,.k-trap,.k-trap2,.k-flag{fill:color-mix(in srgb,var(--p2) 24%,var(--card))}
+.k-sub{fill:color-mix(in srgb,var(--p6) 22%,var(--card))}
+.gx{fill:none;stroke:var(--onacc);stroke-width:2}.gx2{fill:none;stroke:var(--ink);stroke-width:2}
+.ge{fill:none;stroke:var(--ink);stroke-width:2}.ge.dot{stroke-dasharray:4 4}.ge.thk{stroke-width:4}
+.gh{fill:var(--ink)}
+.gl{fill:var(--bg);stroke:var(--ink);stroke-width:2}
+.gsg{fill:color-mix(in srgb,var(--acc) 6%,transparent);stroke:var(--mut);stroke-width:2;stroke-dasharray:6 4}.gsgt{fill:var(--mut)}
+.gll{stroke:var(--mut);stroke-width:2;stroke-dasharray:4 4}
+.gnote{fill:color-mix(in srgb,var(--p4) 30%,var(--card));stroke:var(--ink);stroke-width:2}
+.gfr{fill:none;stroke:var(--mut);stroke-width:2}.gfd{stroke-dasharray:6 4}.gft{fill:var(--mut)}
+.gbx{fill:color-mix(in srgb,var(--acc) 9%,transparent)}
+.gnum{fill:var(--acc)}
+/* pie — полоски «здоровья» */
+.xpie,.xmm,.xtl{display:inline-block;text-align:left;font:8px/1.6 var(--pf);color:var(--fg)}
+.xpie{width:min(100%,420px);padding:14px 16px 16px;background:var(--card);box-shadow:var(--sh2)}
+.xpt{display:block;margin-bottom:12px;font-weight:400}
+.xps{display:flex;height:14px;margin:0 0 6px;background:var(--card);box-shadow:var(--sh2)}
+.xps i{min-width:2px}.xps i+i{box-shadow:-2px 0 0 var(--ink)}
+.xpr{display:grid;grid-template-columns:10px minmax(0,1fr) auto;align-items:center;gap:5px 10px;margin-top:12px}
+.xpr>i{width:10px;height:10px}
+.xpr b{font-weight:400}.xpr small{color:var(--mut);font-size:1em}
+.xpb{grid-column:2/-1;height:10px;background:color-mix(in srgb,var(--line) 70%,var(--card));box-shadow:var(--sh2)}
+.xpb i{display:block;height:100%;-webkit-mask:repeating-linear-gradient(90deg,#000 0 6px,transparent 6px 8px);mask:repeating-linear-gradient(90deg,#000 0 6px,transparent 6px 8px)}
+/* mindmap — дерево с веточками */
+.xmn{display:inline-block;padding:6px 9px;background:var(--card);box-shadow:var(--sh2);border-left:4px solid var(--c,var(--acc))}
+.xmr{padding:8px 12px;background:var(--acc);color:var(--onacc);border:0}
+.md .xg ul{list-style:none;margin:0}.md .xg li{margin:0}
+.md .xmm ul{padding:6px 0 0 14px}
+.md .xmm li{padding:6px 0 0 20px}
+.md .xmm li::before{left:0;top:0;width:14px;height:21px;background:none;box-shadow:none;border-left:2px dashed var(--mut);border-bottom:2px dashed var(--mut)}
+.md .xmm li:not(:last-child)::after{content:"";position:absolute;left:0;top:0;bottom:0;border-left:2px dashed var(--mut)}
+/* timeline — лента событий */
+.xtl{width:min(100%,460px)}
+.xts{margin:14px 0 8px;color:var(--mut);text-transform:uppercase}
+.xtr{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;padding-bottom:12px}
+.xtp{align-self:start;padding:5px 8px;white-space:nowrap;background:var(--c);color:#fff;text-shadow:1px 1px 0 rgba(0,0,0,.3);box-shadow:var(--sh2)}
+.md .xtr ul{padding:0 0 0 12px;border-left:2px dashed var(--mut)}
+.md .xtr li{margin-bottom:8px;padding:4px 8px;background:var(--card);box-shadow:var(--sh2)}.md .xtr li::before{content:none}
 </style>
 </head>
 <body>
@@ -442,12 +612,718 @@ dialog.ask{margin:auto;width:calc(100% - 32px);max-width:420px}
 </dialog>
 
 <script>
+/* ---------- ответы Мочи: markdown ----------
+   Свой разборщик без библиотек: страница работает офлайн и под строгой CSP сервера.
+   Умеет: заголовки, абзацы, списки (вложенные, нумерованные, с галочками), цитаты и врезки > [!NOTE],
+   таблицы, код с подсветкой, формулы LaTeX ($…$, $$…$$, \(…\), \[…\]), сноски, ссылки-источники [1],
+   <details>, <kbd>, ==выделение==, ~~зачёркнутое~~, картинки. Схемы ```mermaid (flowchart, sequence, state,
+   pie, mindmap, timeline) и ```dot рисуются пиксельным SVG/HTML.
+   Ответ перерисовывается целиком на каждый кусочек потока — всё терпит недописанный текст. */
+(()=>{
+const E=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pl=(n,a,b,c)=>{const k=n%100,j=n%10;return n+' '+(k>10&&k<20?c:j===1?a:j>1&&j<5?b:c)};
+const okUrl=u=>!/^[a-z][\w+.-]*:/i.test(u)||/^(https?|mailto|tel):/i.test(u);
+const CB='<button class="cp" data-k="c"><i class="pi"></i>копировать</button>';
+const cache=new Map();
+const memo=(k,f)=>{if(cache.has(k))return cache.get(k);const v=f();if(cache.size>150)cache.delete(cache.keys().next().value);cache.set(k,v);return v};
+
+/* ===== блоки ===== */
+const LI=/^( *)([-*+•]|\d{1,9}[.)])[ \t]+(\S.*)$/;
+const FENCE=/^ {0,3}(`{3,}|~{3,})[ \t]*([\w+#.-]*)/;
+const HR=/^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+const HEAD=/^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/;
+const DELIM=/^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
+const ind=l=>l.match(/^ */)[0].length;
+const isTable=(lines,i)=>lines[i].includes('|')&&i+1<lines.length&&lines[i+1].includes('|')&&DELIM.test(lines[i+1]);
+const starts=(lines,i)=>{const l=lines[i];return FENCE.test(l)||HEAD.test(l)||HR.test(l)||/^ {0,3}>/.test(l)||LI.test(l)||/^\s*(\$\$|\\\[)/.test(l)||/^\s*<details\b[^>]*>/i.test(l)||isTable(lines,i)};
+
+function blocks(lines,ctx,tight){
+  let out='',i=0,para=[];
+  const flush=()=>{if(!para.length)return;const h=inl(para.join('\n'),ctx);out+=tight?h:'<p>'+h+'</p>';para=[]};
+  while(i<lines.length){
+    const l=lines[i];let m;
+    if(!l.trim()){flush();i++;continue}
+    if(m=l.match(FENCE)){
+      flush();const f=m[1],sp=ind(l),body=[],close=new RegExp('^ {0,3}'+(f[0]==='`'?'`':'~')+'{'+f.length+',}[ \\t]*$');let closed=false;
+      for(i++;i<lines.length;i++){if(close.test(lines[i])){closed=true;i++;break}body.push(sp?lines[i].replace(new RegExp('^ {0,'+sp+'}'),''):lines[i])}
+      out+=fence(m[2],body.join('\n'),closed);continue}
+    if(m=l.match(/^\s*(\$\$|\\\[)(.*)$/)){
+      const c=m[1]==='$$'?'$$':'\\]',k=m[2].indexOf(c);
+      if(k>=0&&!m[2].slice(k+2).trim()){flush();out+=mathBlock(m[2].slice(0,k));i++;continue}
+      if(k<0){flush();const body=[m[2]];for(i++;i<lines.length;i++){const q=lines[i].indexOf(c);if(q>=0){body.push(lines[i].slice(0,q));i++;break}body.push(lines[i])}
+        out+=mathBlock(body.join('\n'));continue}}
+    if(m=l.match(HEAD)){flush();const n=m[1].length;out+='<h'+n+'>'+inl(m[2]||'',ctx)+'</h'+n+'>';i++;continue}
+    if(HR.test(l)){flush();out+='<hr>';i++;continue}
+    if(isTable(lines,i)){
+      flush();const head=cells(lines[i]),al=cells(lines[i+1]).map(c=>/^:-+:$/.test(c)?'c':/-:$/.test(c)?'r':'');
+      const rows=[];for(i+=2;i<lines.length&&lines[i].trim()&&lines[i].includes('|')&&!FENCE.test(lines[i]);i++)rows.push(cells(lines[i]));
+      out+=table(head,al,rows,ctx);continue}
+    if(/^ {0,3}>/.test(l)){
+      flush();const q=[];for(;i<lines.length&&/^ {0,3}>/.test(lines[i]);i++)q.push(lines[i].replace(/^ {0,3}> ?/,''));
+      out+=quote(q,ctx);continue}
+    if(/^\s*<details\b[^>]*>/i.test(l)){
+      flush();const body=[];let d=0;
+      for(;i<lines.length;i++){const x=lines[i];body.push(x);d+=(x.match(/<details\b/gi)||[]).length-(x.match(/<\/details>/gi)||[]).length;if(d<=0){i++;break}}
+      let t=body.join('\n');const open=/^\s*<details[^>]*\bopen\b/i.test(t);t=t.replace(/^\s*<details[^>]*>/i,'').replace(/<\/details>\s*$/i,'');
+      let sum='Подробнее';t=t.replace(/^\s*<summary>([\s\S]*?)<\/summary>/i,(x,s)=>{sum=s.trim();return ''});
+      out+='<details class="xd"'+(open?' open':'')+'><summary>'+inl(sum,ctx)+'</summary><div class="xdb">'+blocks(t.split('\n'),ctx)+'</div></details>';continue}
+    if(LI.test(l)){flush();const r=list(lines,i,ctx);out+=r.h;i=r.i;continue}
+    para.push(l);i++}
+  flush();return out}
+
+function cells(l){
+  let s=l.trim();if(s[0]==='|')s=s.slice(1);if(s.endsWith('|')&&!s.endsWith('\\|'))s=s.slice(0,-1);
+  const r=[];let cur='',code=false;
+  for(let k=0;k<s.length;k++){const c=s[k];
+    if(c==='\\'&&s[k+1]==='|'){cur+='|';k++;continue}
+    if(c==='`')code=!code;
+    if(c==='|'&&!code){r.push(cur.trim());cur=''}else cur+=c}
+  r.push(cur.trim());return r}
+
+function table(head,al,rows,ctx){
+  const n=head.length;
+  /* числа — по правому краю, как в ведомости */
+  const num=head.map((_,c)=>!al[c]&&rows.some(r=>(r[c]||'').trim())&&rows.every(r=>{const v=(r[c]||'').replace(/\*\*|[\s\u00a0%₽$€£¥+−~≈×–-]/g,'');return !v||/^\d[\d.,:]*[kKмМ]?$/.test(v)}));
+  const A=c=>al[c]==='c'?' class="ac"':al[c]==='r'||num[c]?' class="ar"':'';
+  const plain=x=>x.replace(/\*\*|__|`|~~/g,'').replace(/\[([^\]]*)\]\([^)]*\)/g,'$1');
+  const tsv=[head,...rows].map(r=>head.map((_,c)=>plain(r[c]||'')).join('\t')).join('\n');
+  return '<div class="cb xt"><div class="ch"><span>таблица · '+pl(rows.length,'строка','строки','строк')+'</span><span class="cbb">'+CB+'</span></div>'
+    +'<div class="xsc"><table><thead><tr>'+head.map((h,c)=>'<th'+A(c)+'>'+inl(h,ctx)+'</th>').join('')+'</tr></thead><tbody>'
+    +rows.map(r=>'<tr>'+head.map((_,c)=>'<td'+A(c)+'>'+inl(r[c]||'',ctx)+'</td>').join('')+'</tr>').join('')
+    +'</tbody></table></div><code class="src" hidden>'+E(tsv)+'</code></div>'}
+
+/* цитаты; > [!NOTE] и родня — окошки-врезки */
+const CALL={note:'Заметка',info:'Заметка',tip:'Совет',hint:'Совет',success:'Получилось',important:'Важно',warning:'Внимание',caution:'Осторожно',danger:'Осторожно',error:'Ошибка',bug:'Ошибка',question:'Вопрос',example:'Пример',todo:'Сделать',quote:'Цитата',abstract:'Кратко',summary:'Кратко'};
+const CK={info:'note',hint:'tip',success:'tip',danger:'caution',error:'caution',bug:'caution',question:'note',example:'note',todo:'important',quote:'note',abstract:'note',summary:'note'};
+function quote(q,ctx){
+  const m=q[0].match(/^\s*\[!(\w+)\][+-]?[ \t]*(.*)$/);
+  if(m&&CALL[m[1].toLowerCase()]){const t=m[1].toLowerCase(),k=CK[t]||t;
+    return '<div class="xc xc-'+k+'"><div class="xct"><i></i><span>'+(m[2].trim()?inl(m[2],ctx):CALL[t])+'</span></div><div class="xcb">'+blocks(q.slice(1),ctx)+'</div></div>'}
+  return '<blockquote>'+blocks(q,ctx)+'</blockquote>'}
+
+/* списки: прощаем отступы в 2 пробела у вложенных (так пишут почти все модели) */
+function list(lines,i,ctx){
+  const m0=lines[i].match(LI),base=m0[1].length,ord=/\d/.test(m0[2]),items=[];let loose=false;
+  while(i<lines.length){
+    const m=lines[i].match(LI);
+    if(!m||m[1].length>base+1||/\d/.test(m[2])!==ord)break;
+    const co=m[1].length+m[2].length+1,body=[m[3]];let blank=false,ci=0;
+    for(i++;i<lines.length;){
+      const x=lines[i];
+      if(!x.trim()){let j=i+1;while(j<lines.length&&!lines[j].trim())j++;
+        if(j<lines.length&&ind(lines[j])>base+1){for(;i<j;i++)body.push('');blank=true;continue}break}
+      if(ind(x)>base+1){if(!ci)ci=Math.min(ind(x),co);body.push(x.replace(new RegExp('^ {0,'+ci+'}'),''));i++;continue}
+      if(!blank&&!starts(lines,i)){body.push(x.trim());i++;continue}
+      break}
+    if(blank&&body.slice(1).some(x=>x&&!LI.test(x)))loose=true;
+    items.push(body);
+    let j=i;while(j<lines.length&&!lines[j].trim())j++;
+    if(j>i){const n=lines[j]&&lines[j].match(LI);if(n&&n[1].length<=base+1&&/\d/.test(n[2])===ord){loose=true;i=j;continue}break}}
+  const tag=ord?'ol':'ul',st=ord?parseInt(m0[2]):1;
+  return {i,h:'<'+tag+(st!==1?' start="'+st+'"':'')+'>'+items.map(b=>{
+    const t=b[0].match(/^\[([ xX])\][ \t]+(.*)$/);let cls='';
+    if(t){b=[t[2],...b.slice(1)];cls=' class="xk'+(t[1]===' '?'':' on')+'"'}
+    return '<li'+cls+'>'+(t?'<i></i>':'')+blocks(b,ctx,!loose)+'</li>'}).join('')+'</'+tag+'>'}}
+
+/* ===== строки ===== */
+const IMG=/!\[([^\]\n]*)\]\(\s*<?([^\s)>]+)>?(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g;
+const LINK=/\[((?:[^\[\]\n]|\[[^\]\n]*\])+)\]\(\s*<?([^\s()<>]+(?:\([^\s()]*\)[^\s()<>]*)*)>?(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g;
+const a=(u,t,c)=>'<a href="'+E(u)+'" target="_blank" rel="noopener noreferrer"'+(c?' class="'+c+'"':'')+'>'+t+'</a>';
+function inl(s,ctx){
+  const keep=[],K=h=>'\u0000'+(keep.push(h)-1)+'\u0000';
+  s=String(s).replace(/\u0000/g,'')
+    .replace(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g,(m,b,c)=>K('<code>'+E(c.replace(/^ ([\s\S]*) $/,'$1'))+'</code>'))
+    .replace(/\\\[([\s\S]+?)\\\]|\$\$([\s\S]+?)\$\$/g,(m,x,y)=>K(math(x||y,1)))
+    .replace(/\\\(([\s\S]+?)\\\)/g,(m,x)=>K(math(x,0)))
+    .replace(/(^|[^\\$\w])\$([^\s$](?:[^$\n]*?[^\s$\\])?)\$(?![\w$])/g,(m,p,x)=>p+K(math(x,0)))
+    .replace(/\\([!-\/:-@\[-`{-~])/g,(m,c)=>K(E(c)))
+    .replace(/<((?:https?|mailto):[^\s<>]+)>/gi,(m,u)=>K(a(u,E(u))))
+    .replace(IMG,(m,t,u)=>!(okUrl(u)||/^data:image\//i.test(u))?m:K(badImg.has(u)?a(u,E(t||u),'xil'):'<img class="xi" src="'+E(u)+'" alt="'+E(t)+'" loading="lazy">'))
+    .replace(LINK,(m,t,u)=>okUrl(u)?K(a(u,emph(E(t)))):m)
+    .replace(/\[\^([^\]\s]+)\]/g,(m,id)=>{if(!ctx.fn.has(id))return m;let n=ctx.fo.indexOf(id)+1;if(!n)n=ctx.fo.push(id);return K('<sup class="xfn">'+n+'</sup>')})
+    .replace(/\[([^\[\]\n]+)\](?:\[([^\]\n]*)\])?/g,(m,t,r)=>{const u=ctx.refs.size&&ctx.refs.get((r||t).toLowerCase());if(!u)return m;return K(/^\d+$/.test(t)?a(u,E(t),'xci'):a(u,emph(E(t))))})
+    .replace(/\b(?:https?:\/\/|www\.)[^\s<>"'\u0000]+/gi,u=>{let t='';
+      for(;;){const c=u.slice(-1);if(/[.,!?:;»”'"*_]/.test(c)||(c===')'&&(u.match(/\(/g)||[]).length<(u.match(/\)/g)||[]).length)){t=c+t;u=u.slice(0,-1)}else break}
+      return K(a(/^www\./i.test(u)?'https://'+u:u,E(u)))+t});
+  s=E(s).replace(/&lt;br\s*\/?&gt;/gi,'<br>')
+    .replace(/&lt;(kbd|sub|sup|u|mark|s|del|ins|b|i|strong|em|small)&gt;([\s\S]*?)&lt;\/\1&gt;/gi,(m,t,c)=>{t=t.toLowerCase();return '<'+t+'>'+c+'</'+t+'>'})
+    .replace(/&lt;!--[\s\S]*?--&gt;/g,'');
+  s=emph(s).replace(/\n/g,'<br>');
+  for(let k=0;k<4&&s.includes('\u0000');k++)s=s.replace(/\u0000(\d+)\u0000/g,(m,i)=>keep[i]);
+  return s}
+const W='\\w\\u00C0-\\u024F\\u0400-\\u04FF';
+const R_B3=/\*\*\*(?=\S)([\s\S]*?\S)\*\*\*/g,R_B=/\*\*(?=\S)([\s\S]*?\S)\*\*/g,R_U2=new RegExp('(^|[^'+W+'])__(?=\\S)([\\s\\S]*?\\S)__(?!['+W+'])','g'),
+  R_I=new RegExp('(^|[^*'+W+'])\\*(?=[^\\s*])([\\s\\S]*?[^\\s*])\\*(?![*'+W+'])','g'),R_U=new RegExp('(^|[^'+W+'])_(?=[^\\s_])([\\s\\S]*?[^\\s_])_(?!['+W+'])','g');
+const emph=s=>s.replace(R_B3,'<b><em>$1</em></b>').replace(R_B,'<b>$1</b>').replace(R_U2,'$1<b>$2</b>').replace(R_I,'$1<em>$2</em>').replace(R_U,'$1<em>$2</em>')
+  .replace(/~~(?=\S)([\s\S]*?\S)~~/g,'<del>$1</del>').replace(/==(?=[^\s=])([^=\n]*?[^\s=])==/g,'<mark>$1</mark>');
+
+/* ===== код ===== */
+function fence(lang,code,closed){
+  const l=lang.toLowerCase();
+  if(!closed)return /^(mermaid|mmd|dot|graphviz)$/.test(l)?codeBox('схема · рисую…',code,''):codeBox(lang,code,l);
+  return memo(l+'\u0001'+code,()=>{
+    if(/^(mermaid|mmd)$/.test(l)){const d=mermaid(code);return d?dgBox(d[0],d[1],code):codeBox('mermaid',code,'')}
+    if(/^(dot|graphviz)$/.test(l)){const d=diagram(()=>graph(dotParse(code)));return d?dgBox('схема',d,code):codeBox(lang,code,'')}
+    if(/^(math|tex-math)$/.test(l))return mathBlock(code);
+    return codeBox(lang,code,l)})}
+const codeBox=(lang,code,l)=>{const one=code&&!code.includes('\n');
+  return '<div class="cb"><div class="ch"><span>'+E(lang||'код')+'</span><span class="cbb">'+(one?'<button class="cp" data-k="t" title="Вставить в терминал"><i class="pi"></i>в терминал</button>':'')+CB+'</span></div><pre><code>'+hl(code,l)+'</code></pre></div>'};
+const dgBox=(kind,body,src)=>'<div class="cb xg"><div class="ch"><span>'+kind+'</span><span class="cbb"><button class="cp" data-k="v"><i class="pi"></i>код</button>'+CB+'</span></div><div class="xgb">'+body+'</div><pre class="xgs"><code class="src">'+E(src)+'</code></pre></div>';
+
+/* подсветка: комментарии, строки, числа, ключевые слова — цветами старого монитора */
+const R=String.raw,DQ=R`"(?:[^"\\\n]|\\.)*"`,SQ=R`'(?:[^'\\\n]|\\.)*'`,BT=R`\x60(?:[^\x60\\]|\\.)*\x60`,EOF=R`(?![\s\S])`,
+  CC=R`//[^\n]*|/\*[\s\S]*?(?:\*/|${EOF})`,HC=R`(?:^|[ \t])#[^\n]*`;
+const KW={
+  c:'auto break case char const continue default do double else enum extern float for goto if inline int long register return short signed sizeof static struct switch typedef union unsigned void volatile while class public private protected virtual template typename namespace using new delete this throw try catch operator friend bool true false nullptr NULL override final constexpr noexcept std string vector',
+  js:'var let const function return if else for while do switch case default break continue new delete typeof instanceof in of class extends super this import export from as async await yield try catch finally throw null undefined true false void static get set interface type enum implements readonly declare keyof namespace abstract private public protected console require module',
+  java:'abstract assert boolean break byte case catch char class const continue default do double else enum extends final finally float for if implements import instanceof int interface long native new package private protected public return short static super switch synchronized this throw throws try void volatile while true false null var val fun when object companion data sealed open override lateinit is in suspend String',
+  cs:'abstract as base bool break byte case catch char class const continue decimal default delegate do double else enum event explicit extern false finally float for foreach if implicit in int interface internal is lock long namespace new null object operator out override params private protected public readonly ref return sealed short static string struct switch this throw true try typeof uint ulong using virtual void while var async await get set yield record',
+  py:'and as assert async await break class continue def del elif else except False finally for from global if import in is lambda None nonlocal not or pass raise return True try while with yield self match case print len range',
+  sh:'if then else elif fi for while until do done case esac in function return exit local export readonly declare unset shift source alias echo cd sudo set trap printf read eval exec',
+  go:'break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var nil true false iota make len append string int error',
+  rs:'as async await break const continue crate dyn else enum extern false fn for if impl in let loop match mod move mut pub ref return self Self static struct super trait true type unsafe use where while Some None Ok Err String Vec Option Result',
+  sql:'select from where and or not insert into values update set delete create table drop alter add index on join left right inner outer full cross group by order having limit offset as distinct union all null is in like between case when then else end primary key foreign references default exists count sum avg min max asc desc view with returning if begin commit rollback',
+  php:'abstract and array as break case catch class clone const continue declare default do echo else elseif empty endif extends final finally fn for foreach function global if implements include isset list namespace new null or print private protected public require return static switch this throw trait true false try unset use var while yield',
+  rb:'alias and begin break case class def defined do else elsif end ensure false for if in module next nil not or redo rescue retry return self super then true undef unless until when while yield require puts attr_accessor',
+  lua:'and break do else elseif end false for function goto if in local nil not or repeat return then true until while',
+  swift:'as break case catch class continue default defer do else enum extension false for func guard if import in init inout internal is let nil private protocol public return self static struct super switch throw throws true try var where while async await',
+  yaml:'true false null yes no on off',
+  docker:'FROM RUN CMD LABEL EXPOSE ENV ADD COPY ENTRYPOINT VOLUME USER WORKDIR ARG ONBUILD STOPSIGNAL HEALTHCHECK SHELL AS'};
+const FAM={
+  c:{c:CC,s:DQ+'|'+SQ,x:[[R`#[ \t]*[a-z]+`,'k']],k:KW.c,t:1},
+  js:{c:CC,s:DQ+'|'+SQ+'|'+BT,k:KW.js,t:1},
+  json:{s:DQ,k:'true false null',key:1},
+  java:{c:CC,s:R`"""[\s\S]*?"""|`+DQ+'|'+SQ,x:[[R`@\w+`,'f']],k:KW.java,t:1},
+  cs:{c:CC,s:R`@?\$?`+DQ+'|'+SQ,k:KW.cs,t:1},
+  py:{c:R`#[^\n]*`,s:R`[rbfu]{0,2}(?:"""[\s\S]*?(?:"""|${EOF})|'''[\s\S]*?(?:'''|${EOF})|${DQ}|${SQ})`,x:[[R`@[\w.]+`,'f']],k:KW.py,t:1},
+  sh:{c:HC,s:DQ+'|'+SQ,x:[[R`\$\{[^}\n]*\}|\$[\w@#?*!$-]+`,'v'],[R`(?:^|[ \t])--?[A-Za-z][\w-]*`,'a']],k:KW.sh},
+  con:{c:HC,s:DQ+'|'+SQ,x:[[R`(?:^|\n)[$#>] `,'k'],[R`\$\w+`,'v']],k:KW.sh},
+  go:{c:CC,s:DQ+'|'+BT+'|'+SQ,k:KW.go,t:1},
+  rs:{c:CC,s:DQ+R`|'(?:[^'\\\n]|\\.)'`,x:[[R`\w+!`,'f'],[R`'\w+`,'hy']],k:KW.rs,t:1},
+  sql:{c:R`--[^\n]*|/\*[\s\S]*?(?:\*/|${EOF})`,s:SQ+'|'+DQ,k:KW.sql,ci:1},
+  php:{c:CC+'|'+R`#[^\n]*`,s:DQ+'|'+SQ,x:[[R`\$\w+`,'v']],k:KW.php,t:1},
+  rb:{c:R`#[^\n]*`,s:DQ+'|'+SQ,x:[[R`:\w+`,'n'],[R`@{1,2}\w+`,'v']],k:KW.rb,t:1},
+  lua:{c:R`--\[\[[\s\S]*?(?:\]\]|${EOF})|--[^\n]*`,s:DQ+'|'+SQ,k:KW.lua},
+  swift:{c:CC,s:DQ,k:KW.swift,t:1},
+  yaml:{c:HC,s:DQ+'|'+SQ,x:[[R`(?:^|\n)[ \t-]*[\w.\/-]+(?=[ \t]*:(?:\s|$))`,'a']],k:KW.yaml},
+  ini:{c:R`(?:^|\n)[ \t]*[#;][^\n]*`,s:DQ+'|'+SQ,x:[[R`(?:^|\n)[ \t]*\[[^\]\n]+\]`,'k'],[R`(?:^|\n)[ \t]*[\w.-]+(?=[ \t]*[=:])`,'a']],k:'true false yes no on off'},
+  docker:{c:HC,s:DQ+'|'+SQ,x:[[R`\$\{[^}\n]*\}|\$\w+`,'v']],k:KW.docker+' '+KW.sh},
+  css:{c:R`/\*[\s\S]*?(?:\*/|${EOF})`,s:DQ+'|'+SQ,x:[[R`#[\da-fA-F]{3,8}\b`,'n'],[R`@[\w-]+`,'k'],[R`[\w-]+(?=[ \t]*:[^:\n{]*[;}\n])`,'a'],[R`-?\d*\.?\d+(?:px|em|rem|%|vh|vw|vmin|vmax|s|ms|deg|fr|ch)?\b`,'n']],k:'important inherit initial none auto'},
+  html:{c:R`<!--[\s\S]*?(?:-->|${EOF})`,s:DQ+'|'+SQ,x:[[R`</?[\w:-]+|/?>`,'k'],[R`[\w:-]+(?==)`,'a']],nw:1}};
+const ALIAS={javascript:'js',jsx:'js',ts:'js',typescript:'js',tsx:'js',mjs:'js',cjs:'js',node:'js',json5:'json',jsonc:'json',python:'py',py3:'py',python3:'py',r:'py',bash:'sh',shell:'sh',zsh:'sh',fish:'sh',ksh:'sh',makefile:'sh',make:'sh',powershell:'sh',ps1:'sh',ps:'sh',bat:'sh',cmd:'sh',perl:'sh',pl:'sh',
+  console:'con',terminal:'con','shell-session':'con',sh_session:'con',h:'c',cpp:'c','c++':'c',cc:'c',hpp:'c',objc:'c',arduino:'c',ino:'c',kotlin:'java',kt:'java',scala:'java',groovy:'java',dart:'java',csharp:'cs','c#':'cs',golang:'go',rust:'rs',
+  mysql:'sql',postgres:'sql',postgresql:'sql',psql:'sql',sqlite:'sql',plsql:'sql',ruby:'rb',yml:'yaml',toml:'ini',conf:'ini',cfg:'ini',env:'ini',dotenv:'ini',properties:'ini',nginx:'ini',apache:'ini',systemd:'ini',dockerfile:'docker',containerfile:'docker',
+  scss:'css',less:'css',sass:'css',xml:'html',svg:'html',vue:'html',xhtml:'html',svelte:'html',patch:'diff'};
+const RX={};
+function rx(f){if(RX[f])return RX[f];const F=FAM[f],g=[];
+  if(F.c)g.push([F.c,'c']);if(F.s)g.push([F.s,'s']);(F.x||[]).forEach(x=>g.push(x));
+  if(!F.nw){g.push([R`\b(?:0[xX][\da-fA-F_]+|0[bB][01_]+|\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?)\b`,'n']);g.push([R`[A-Za-z_$][\w$]*`,'w'])}
+  const kw=new Set(F.ci?F.k.toLowerCase().split(' '):(F.k||'').split(' '));
+  return RX[f]={re:new RegExp(g.map(x=>'('+x[0]+')').join('|'),'g'),cls:g.map(x=>x[1]),kw}}
+function hl(code,l){
+  if(l==='diff')return code.split('\n').map(x=>{const c=/^(\+\+\+|---)\s/.test(x)?'hx':x[0]==='+'?'hp':x[0]==='-'?'hm':x.startsWith('@@')?'hu':'';return c?'<span class="'+c+'">'+E(x)+'</span>':E(x)}).join('\n');
+  const f=FAM[l]?l:ALIAS[l];
+  if(!f||code.length>40000)return E(code);
+  const F=FAM[f],{re,cls,kw}=rx(f);let out='',last=0,m;re.lastIndex=0;
+  while(m=re.exec(code)){
+    const t=m[0];if(!t){re.lastIndex++;continue}
+    let c=cls[m.slice(1).findIndex(x=>x!==undefined)];
+    if(c==='w'){const nx=code[re.lastIndex];c=kw.has(F.ci?t.toLowerCase():t)?'k':nx==='('?'f':F.t&&/^[A-Z][a-z]/.test(t)?'hy':''}
+    else if(c==='s'&&F.key&&/^\s*:/.test(code.slice(re.lastIndex,re.lastIndex+8)))c='a';
+    out+=E(code.slice(last,m.index))+(c?'<span class="'+(c.length>1?c:'h'+c)+'">'+E(t)+'</span>':E(t));last=re.lastIndex}
+  return out+E(code.slice(last))}
+
+/* ===== формулы: маленький TeX в HTML ===== */
+const GR='alpha α beta β gamma γ delta δ epsilon ϵ varepsilon ε zeta ζ eta η theta θ vartheta ϑ iota ι kappa κ lambda λ mu μ nu ν xi ξ pi π varpi ϖ rho ρ varrho ϱ sigma σ varsigma ς tau τ upsilon υ phi ϕ varphi φ chi χ psi ψ omega ω Gamma Γ Delta Δ Theta Θ Lambda Λ Xi Ξ Pi Π Sigma Σ Upsilon Υ Phi Φ Psi Ψ Omega Ω';
+const OPS='times × cdot · div ÷ pm ± mp ∓ ast ∗ star ⋆ circ ∘ bullet • oplus ⊕ ominus ⊖ otimes ⊗ odot ⊙ cup ∪ cap ∩ setminus ∖ wedge ∧ vee ∨ land ∧ lor ∨ le ≤ leq ≤ ge ≥ geq ≥ leqslant ⩽ geqslant ⩾ ne ≠ neq ≠ approx ≈ equiv ≡ sim ∼ simeq ≃ cong ≅ propto ∝ ll ≪ gg ≫ in ∈ notin ∉ ni ∋ subset ⊂ supset ⊃ subseteq ⊆ supseteq ⊇ to → rightarrow → leftarrow ← gets ← Rightarrow ⇒ Leftarrow ⇐ Leftrightarrow ⇔ leftrightarrow ↔ iff ⟺ implies ⟹ impliedby ⟸ mapsto ↦ longrightarrow ⟶ longleftarrow ⟵ Longrightarrow ⟹ uparrow ↑ downarrow ↓ perp ⊥ parallel ∥ mid ∣ nmid ∤ vdash ⊢ models ⊨ coloneqq ≔ triangleq ≜ doteq ≐';
+const SYM='infty ∞ partial ∂ nabla ∇ forall ∀ exists ∃ nexists ∄ emptyset ∅ varnothing ∅ neg ¬ lnot ¬ angle ∠ triangle △ square □ blacksquare ■ Box □ diamond ⋄ checkmark ✓ dagger † ddagger ‡ hbar ℏ ell ℓ Re ℜ Im ℑ aleph ℵ wp ℘ prime ′ degree ° cdots ⋯ ldots … dots … vdots ⋮ ddots ⋱ therefore ∴ because ∵ langle ⟨ rangle ⟩ lfloor ⌊ rfloor ⌋ lceil ⌈ rceil ⌉ vert | lvert | rvert | Vert ‖ lVert ‖ rVert ‖ colon : surd √ clubsuit ♣ heartsuit ♡ spadesuit ♠ flat ♭ sharp ♯ natural ♮ top ⊤ bot ⊥ S § P ¶ copyright © pounds £ euro €';
+const BIG='sum ∑ prod ∏ coprod ∐ int ∫ iint ∬ iiint ∭ oint ∮ bigcup ⋃ bigcap ⋂ bigoplus ⨁ bigotimes ⨂ bigvee ⋁ bigwedge ⋀ bigsqcup ⨆';
+const map=s=>{const o={},a=s.split(' ');for(let i=0;i<a.length;i+=2)o[a[i]]=a[i+1];return o};
+const TG=map(GR),TO=map(OPS),TS=map(SYM),TB=map(BIG);
+const FN=new Set('sin cos tan cot sec csc arcsin arccos arctan sinh cosh tanh coth log ln lg exp deg dim gcd lcm hom ker Pr arg sgn mod bmod tg ctg arctg'.split(' '));
+const LIM=new Set('lim limsup liminf max min sup inf det argmax argmin'.split(' '));
+const BB={R:'ℝ',N:'ℕ',Z:'ℤ',Q:'ℚ',C:'ℂ',P:'ℙ',H:'ℍ',E:'𝔼',F:'𝔽',1:'𝟙'};
+const ACC={hat:'\u0302',widehat:'\u0302',check:'\u030C',tilde:'\u0303',widetilde:'\u0303',bar:'\u0304',vec:'\u20D7',dot:'\u0307',ddot:'\u0308',acute:'\u0301',grave:'\u0300',breve:'\u0306',overrightarrow:'\u20D7'};
+const MAT={matrix:'',smallmatrix:'',pmatrix:'xp',bmatrix:'xb',Bmatrix:'xbb',vmatrix:'xv',Vmatrix:'xvv',cases:'xcs',rcases:'xrc',dcases:'xcs',array:'',aligned:'xal',align:'xal','align*':'xal',alignat:'xal',gathered:'',gather:'','gather*':'',split:'xal',equation:'','equation*':'',eqnarray:'xal',multline:'','multline*':''};
+function math(src,disp){
+  try{return '<span class="'+(disp?'xmd':'xm')+'">'+tex(src.trim(),disp)+'</span>'}
+  catch(e){return '<code>'+E(src)+'</code>'}}
+const mathBlock=t=>t.trim()?'<div class="xmw">'+math(t,1)+'</div>':'';
+function tex(s,disp){
+  let i=0,guard=0,tag='';
+  const sp=()=>{while(i<s.length&&/\s/.test(s[i]))i++};
+  const raw=()=>{sp();if(s[i]!=='{'){if(s[i]==='\\'){const m=s.slice(i).match(/^\\(?:[a-zA-Z]+|.)/);i+=m[0].length;return m[0]}return s[i++]||''}
+    let d=0;const st=++i;for(;i<s.length;i++){if(s[i]==='\\'){i++;continue}if(s[i]==='{')d++;else if(s[i]==='}'){if(!d)break;d--}}return s.slice(st,i++)};
+  const opt=()=>{sp();if(s[i]!=='[')return null;const st=++i;let d=0;for(;i<s.length;i++){if(s[i]==='{')d++;else if(s[i]==='}')d--;else if(s[i]===']'&&!d)break}return s.slice(st,i++)};
+  const sub=t=>tex(t,disp);
+  const at=h=>({h});
+  const delim=()=>{sp();if(s[i]==='\\'){const m=s.slice(i+1).match(/^[a-zA-Z]+|^./)[0];i+=1+m.length;return m==='{'?'{':m==='}'?'}':m==='|'?'‖':TS[m]||TO[m]||(m==='.'?'':m)}const c=s[i++]||'';return c==='.'?'':E(c)};
+  function cmd(){
+    const m=s.slice(i+1).match(/^[a-zA-Z]+|^./);if(!m){i++;return at('\\')}const n=m[0];i+=1+n.length;if(s[i]==='*'&&/^[a-zA-Z]/.test(n))i++;
+    if(n===','||n===':'||n===';'||n===' '||n==='>')return at('<span class="xsp"></span>');
+    if(n==='!')return at('');
+    if(n==='quad'||n==='qquad')return at('<span class="xsp q'+(n.length>4?' qq':'')+'"></span>');
+    if(n==='\\')return at('<br>');
+    if('{}%$#&_'.includes(n))return at(E(n));
+    if(n==='|')return at('‖');
+    if(/^[dtc]?frac$/.test(n)){const p=rd(),q=rd();return at('<span class="xfr"><span>'+p+'</span><span>'+q+'</span></span>')}
+    if(/^[dt]?binom$/.test(n)){const p=rd(),q=rd();return at('(<span class="xfr xbn"><span>'+p+'</span><span>'+q+'</span></span>)')}
+    if(n==='sqrt'){const o=opt(),p=rd();return at('<span class="xsq">'+(o?'<sup>'+sub(o)+'</sup>':'')+'√<span class="xsb">'+p+'</span></span>')}
+    if(/^(text|textrm|textnormal|mbox|hbox|textup|textsf|texttt|textmd)$/.test(n))return at('<span class="xrm">'+E(raw())+'</span>');
+    if(/^(textbf|bf)$/.test(n))return at('<b class="xrm">'+E(raw())+'</b>');
+    if(/^(textit|emph)$/.test(n))return at('<i>'+E(raw())+'</i>');
+    if(/^(mathrm|operatorname|mathsf|mathtt|rm)$/.test(n)){const r=raw();return at('<span class="xrm">'+sub(r)+'</span>')}
+    if(/^(mathbf|boldsymbol|bm|pmb)$/.test(n))return at('<b>'+rd()+'</b>');
+    if(/^(mathit|mathnormal)$/.test(n))return at(rd());
+    if(n==='mathbb'||n==='Bbb'){const r=raw();return at([...r].map(c=>BB[c]?BB[c]:'<span class="xdbl">'+E(c)+'</span>').join(''))}
+    if(/^(mathcal|mathscr|mathfrak)$/.test(n))return at('<span class="xcal">'+E(raw())+'</span>');
+    if(ACC[n]){const h=sub(raw()),c=h.match(/^(<i>)?([^<&])(<\/i>)?$/);return at(c?(c[1]||'')+c[2]+ACC[n]+(c[3]||''):'<span class="xov">'+h+'</span>')}
+    if(/^(overline|underline)$/.test(n))return at('<span class="'+(n[0]==='o'?'xov':'xun')+'">'+rd()+'</span>');
+    if(/^(overbrace|underbrace)$/.test(n))return at('<span class="'+(n[0]==='o'?'xov':'xun')+'">'+rd()+'</span>');
+    if(/^(boxed|fbox|framebox)$/.test(n))return at('<span class="xbx">'+rd()+'</span>');
+    if(/^(overset|stackrel|underset)$/.test(n)){const p=rd(),q=rd();return at(n==='underset'?'<span class="xlm"><span class="xlo">'+q+'</span><span>'+p+'</span></span>':'<span class="xlm"><span>'+p+'</span><span class="xlo">'+q+'</span></span>')}
+    if(/^(color|textcolor|colorbox)$/.test(n)){raw();return n==='color'?at(''):at(rd())}
+    if(/^(phantom|hphantom|vphantom)$/.test(n)){return at('<span class="xph">'+rd()+'</span>')}
+    if(/^(hspace|vspace|label|hspace\*|kern|mkern|mskip)$/.test(n)){raw();return at('')}
+    if(n==='tag'||n==='tag*'){tag=sub(raw());return at('')}
+    if(/^(left|right|bigl|bigr|Bigl|Bigr|biggl|biggr|Biggl|Biggr|big|Big|bigg|Bigg|middle)$/.test(n))return at('<span class="xdl">'+delim()+'</span>');
+    if(/^(displaystyle|textstyle|scriptstyle|limits|nolimits|nonumber|notag|centering|quad\*|small|large|Large|normalsize)$/.test(n))return at('');
+    if(n==='not'){sp();const r=rd();return at(r==='='?'≠':r.replace(/(<\/span>)?$/,'\u0338$1'))}
+    if(n==='begin'){const env=raw().trim();return at(envr(env))}
+    if(n==='end'){raw();return at('')}
+    if(TB[n])return {h:'<span class="xbig">'+TB[n]+'</span>',big:1};
+    if(LIM.has(n))return {h:'<span class="xrm">'+n.replace('arg','arg ')+'</span>',big:1};
+    if(FN.has(n))return at('<span class="xrm xfnm">'+n+'</span>');
+    if(TG[n])return at(/^[A-Z]/.test(n)?TG[n]:'<i>'+TG[n]+'</i>');
+    if(TO[n])return at('<span class="xo">'+TO[n]+'</span>');
+    if(TS[n])return at(TS[n]);
+    return at('<span class="xrm">'+E(n)+'</span>')}
+  function envr(env){
+    const k=MAT[env]??'';if(env==='array'||env==='alignat')raw();
+    const rows=[[]];
+    for(;i<s.length&&guard++<20000;){
+      const cell=seq('env');rows[rows.length-1].push(cell);
+      if(s.startsWith('&',i)){i++;continue}
+      if(s.startsWith('\\\\',i)){i+=2;opt();rows.push([]);continue}
+      if(s.startsWith('\\end',i)){i+=4;raw();break}
+      break}
+    if(rows.length>1&&rows[rows.length-1].every(c=>!c))rows.pop();
+    const n=Math.max(...rows.map(r=>r.length));
+    return '<span class="xmx '+k+'" style="grid-template-columns:repeat('+n+',auto)">'+rows.map(r=>Array.from({length:n},(_,c)=>'<span'+(k==='xal'?' class="'+(c%2?'xjl':'xjr')+'"':k==='xcs'||k==='xrc'?' class="xjl"':'')+'>'+(r[c]||'')+'</span>').join('')).join('')+'</span>'}
+  function rd(){sp();if(i>=s.length)return '';if(s[i]==='{'){i++;return seq('}')}if(s[i]==='\\')return cmd().h;return ch(s[i++])}
+  function ch(c){
+    if(/[a-zA-Z]/.test(c))return '<i>'+c+'</i>';
+    if(c==='-')return '<span class="xo">−</span>';
+    if('+=<>'.includes(c))return '<span class="xo">'+E(c)+'</span>';
+    if(c==='~')return ' ';
+    if(c===',')return ',<span class="xsp"></span>';
+    return E(c)}
+  function seq(stop){
+    const A=[];
+    while(i<s.length&&guard++<20000){
+      const c=s[i];
+      if(c==='}'&&stop==='}'){i++;break}
+      if(stop==='env'&&(c==='&'||s.startsWith('\\\\',i)||s.startsWith('\\end',i)))break;
+      if(/\s/.test(c)){i++;continue}
+      if(c==='^'||c==='_'){i++;const v=rd();let p=A[A.length-1];if(!p)A.push(p={h:''});if(c==='^')p.sup=v;else p.sub=v;continue}
+      if(c==="'"){i++;let p=A[A.length-1];if(!p)A.push(p={h:''});p.h+='′';continue}
+      if(c==='{'){i++;A.push({h:seq('}')});continue}
+      if(c==='-'&&!A.length){i++;A.push({h:'−'});continue}
+      A.push(c==='\\'?cmd():{h:ch(s[i++])})}
+    return A.map(a=>{
+      if(a.big&&disp&&(a.sup||a.sub))return '<span class="xlm">'+(a.sup?'<span>'+a.sup+'</span>':'')+'<span class="xlo">'+a.h+'</span>'+(a.sub?'<span>'+a.sub+'</span>':'')+'</span>';
+      if(a.sup!=null&&a.sub!=null)return a.h+'<span class="xss"><sup>'+a.sup+'</sup><sub>'+a.sub+'</sub></span>';
+      return a.h+(a.sup!=null?'<sup>'+a.sup+'</sup>':'')+(a.sub!=null?'<sub>'+a.sub+'</sub>':'')}).join('')}
+  const h=seq(null);
+  return h+(tag?'<span class="xtag">('+tag+')</span>':'')}
+
+/* ===== схемы ===== */
+const FS=8,LH=14;
+const tw=s=>{let w=0;for(const c of s)w+=c.codePointAt(0)>0x2e7f?FS*1.75:FS;return w};
+function wrap(t,max=18){
+  const out=[];
+  for(const p of String(t).split('\n')){let line='';
+    for(const w of p.split(/\s+/)){if(!w)continue;
+      if(!line)line=w;else if(line.length+1+w.length<=max)line+=' '+w;else{out.push(line);line=w}
+      while(line.length>max+6){out.push(line.slice(0,max));line=line.slice(max)}}
+    out.push(line)}
+  while(out.length>1&&!out[out.length-1])out.pop();
+  return out.length?out:['']}
+const lab=t=>String(t||'').replace(/<br\s*\/?>/gi,'\n').replace(/\\n/g,'\n').replace(/<\/?[a-z][^>]*>/gi,'').replace(/\*\*|__|`/g,'')
+  .replace(/#quot;/g,'"').replace(/#(\d+);/g,(m,n)=>String.fromCodePoint(+n)).replace(/fa:fa-[\w-]+\s*/g,'').replace(/^["']|["']$/g,'').trim();
+const TX=(x,y,lines,c,anchor)=>lines.map((l,k)=>'<text class="gt'+(c?' '+c:'')+'" x="'+x+'" y="'+(y-(lines.length-1)*LH/2+k*LH)+'" text-anchor="'+(anchor||'middle')+'" dominant-baseline="central">'+E(l)+'</text>').join('');
+const svg=(w,h,body,label)=>'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" style="min-width:'+Math.round(w*.75)+'px" shape-rendering="crispEdges" role="img" aria-label="'+E(label||'схема')+'">'+body+'</svg>';
+const diagram=f=>{try{return f()}catch(e){return null}};
+
+function mermaid(src){
+  const s=src.replace(/^\s*%%.*$/gm,'').replace(/^\s*---[\s\S]*?---\s*/,'').trim(),h=(s.match(/^\S+/)||[''])[0].toLowerCase();
+  const d=f=>diagram(f);let r;
+  if(/^(graph|flowchart)/.test(h))r=['схема',d(()=>graph(flowParse(s)))];
+  else if(/^statediagram/.test(h))r=['состояния',d(()=>graph(stateParse(s)))];
+  else if(h==='sequencediagram')r=['диалог',d(()=>sequence(s))];
+  else if(h==='pie')r=['диаграмма',d(()=>pie(s))];
+  else if(h==='mindmap')r=['карта мыслей',d(()=>mindmap(s))];
+  else if(h==='timeline')r=['хронология',d(()=>timeline(s))];
+  return r&&r[1]?r:null}
+
+/* flowchart: узлы, формы и стрелки */
+const SHP=[['(((',')))','dc'],['([','])','stadium'],['[[',']]','sub'],['[(',')]','db'],['((','))','circle'],['{{','}}','hex'],['[/','/]','para'],['[\\','\\]','para2'],['[/','\\]','trap'],['[\\','/]','trap2'],['>',']','flag'],['[',']','rect'],['(',')','round'],['{','}','dia']];
+function flowParse(src){
+  const lines=src.split('\n'),G={dir:'TD',nodes:new Map(),edges:[],groups:[]},head=lines[0].match(/^\s*\S+\s+(TB|TD|BT|RL|LR)/i);
+  if(head)G.dir=head[1].toUpperCase().replace('TB','TD');
+  const stack=[];
+  const node=(id,label,shape)=>{let n=G.nodes.get(id);if(!n){n={id,label:id,shape:'rect',g:stack[stack.length-1]};G.nodes.set(id,n)}
+    if(label!=null){n.label=lab(label);n.shape=shape}stack.forEach(g=>g.m.add(n));return n};
+  for(let raw of lines.slice(1)){
+    const l=raw.trim().replace(/;\s*$/,'');if(!l)continue;let m;
+    if(/^(classDef|class|style|linkStyle|click|direction|accTitle|accDescr)\b/.test(l))continue;
+    if(m=l.match(/^subgraph\s+(?:"([^"]+)"|([^\s\[]+))?\s*(?:\[\s*"?([^\]"]*)"?\s*\])?\s*(.*)$/)){const g={id:m[2]||m[1]||'',t:lab(m[3]||m[1]||m[4]||m[2]||''),m:new Set()};G.groups.push(g);stack.push(g);continue}
+    if(l==='end'){stack.pop();continue}
+    let p=0;
+    const ws=()=>{while(p<l.length&&/\s/.test(l[p]))p++};
+    const one=()=>{ws();const im=l.slice(p).match(/^[^\s\[\](){}<>&|"'=;:~-]+(?:-+[^\s\[\](){}<>&|"'=;:~.>-]+)*/);if(!im)return null;
+      const id=im[0];p+=id.length;let label=null,shape='rect';
+      for(const[o,c,k]of SHP){if(!l.startsWith(o,p))continue;
+        let q=p+o.length;while(l[q]===' ')q++;let t;
+        if(l[q]==='"'){const e=l.indexOf('"',q+1);if(e<0)continue;t=l.slice(q+1,e);q=e+1;while(l[q]===' ')q++;if(!l.startsWith(c,q))continue;q+=c.length}
+        else{const e=l.indexOf(c,q);if(e<0)continue;t=l.slice(q,e);q=e+c.length}
+        label=t;shape=k;p=q;break}
+      const cl=l.slice(p).match(/^:::[\w-]+/);if(cl)p+=cl[0].length;
+      return node(id,label,shape)};
+    const group=()=>{const ns=[];for(;;){const n=one();if(!n)break;ns.push(n);ws();if(l[p]==='&'){p++;continue}break}return ns};
+    const edge=()=>{ws();const r=l.slice(p);let m,e;
+      if(m=r.match(/^(<?)(--|==|-\.)(?![->.=])\s*(.*?)\s*(-{2,}>|-{3,}|={2,}>|={3,}|\.-+>|\.-+|-{2,}[ox]|={2,}[ox])(?=[\s\w"'(\[{&\u0080-\uffff]|$)/)){e={t:m[1],body:m[2]+m[4],label:m[3],tf:1}}
+      else if(m=r.match(/^(<?)(-{2,}|={2,}|-\.+-|~{3,})([>ox]?)/)){e={t:m[1],body:m[2]+m[3]};const q=r.slice(m[0].length).match(/^\s*\|([^|]*)\|/);if(q){e.label=q[1];p+=q[0].length}}
+      if(!e)return null;p+=m[0].length;const b=e.body;
+      e.st=b.includes('~')?'inv':b.includes('.')?'dot':b.includes('=')?'thk':'';e.hd=/[>ox]$/.test(b)?b.slice(-1):'';e.tl=e.t?'>':'';
+      const dl=(b.match(/[-=]/g)||[]).length,dt=(b.match(/\./g)||[]).length;
+      e.len=e.tf?1:Math.min(4,Math.max(1,dt?dt:dl-(e.hd?1:2)));return e};
+    let L=group();if(!L.length)continue;
+    for(;;){const e=edge();if(!e)break;const R=group();if(!R.length)break;
+      L.forEach(a=>R.forEach(b=>G.edges.push({a,b,label:e.label?lab(e.label):'',st:e.st,hd:e.hd,tl:e.tl,len:e.len})));L=R}}
+  return G}
+
+function stateParse(src){
+  const G={dir:'TD',nodes:new Map(),edges:[],groups:[]},sc=[''];let note=false;
+  const id=x=>x==='[*]'?null:x;
+  const node=(x,side)=>{if(x==='[*]'){const k=(side?'__e':'__s')+sc[sc.length-1];if(!G.nodes.has(k))G.nodes.set(k,{id:k,label:'',shape:side?'end':'start'});return G.nodes.get(k)}
+    if(!G.nodes.has(x))G.nodes.set(x,{id:x,label:x,shape:'round'});return G.nodes.get(x)};
+  for(let l of src.split('\n').slice(1)){l=l.trim();let m;if(!l)continue;
+    if(note){if(/^end\s+note$/i.test(l))note=false;continue}
+    if(/^note\b/i.test(l)){if(!l.includes(':'))note=true;continue}
+    if(m=l.match(/^direction\s+(TB|TD|BT|RL|LR)/i)){if(sc.length===1)G.dir=m[1].toUpperCase().replace('TB','TD');continue}
+    if(/^(classDef|class|style|--)/.test(l))continue;
+    if(m=l.match(/^state\s+"([^"]+)"\s+as\s+(\S+)/)){node(m[2]).label=lab(m[1]);continue}
+    if(m=l.match(/^state\s+(\S+)\s*<<(choice|fork|join)>>/)){node(m[1]).shape=m[2]==='choice'?'dia':'bar';node(m[1]).label='';continue}
+    if(m=l.match(/^state\s+(\S+)\s*\{/)){node(m[1]);sc.push(m[1]);continue}
+    if(l==='}'){sc.pop();if(!sc.length)sc.push('');continue}
+    if(m=l.match(/^(\S+)\s*-->\s*(\S+)\s*(?::\s*(.*))?$/)){G.edges.push({a:node(m[1],0),b:node(m[2],1),label:lab(m[3]||''),st:'',hd:'>',tl:'',len:1});continue}
+    if(m=l.match(/^(\S+)\s*:\s*(.+)$/)){const n=node(m[1]);n.label=n.label===n.id?lab(m[2]):n.label+'\n'+lab(m[2]);continue}
+    if(m=l.match(/^state\s+(\S+)$/)){node(m[1]);continue}
+    if(/^[\w-]+$/.test(l))node(l)}
+  return G}
+
+function dotParse(src){
+  const G={dir:'TD',nodes:new Map(),edges:[],groups:[]},T=[];
+  const re=/"((?:[^"\\]|\\.)*)"|(->|--)|([\w.\u0080-\uffff]+)|([\[\]{};=,])|\/\/[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/|\s+/g;let m;
+  while(m=re.exec(src)){if(m[1]!=null)T.push({v:m[1].replace(/\\"/g,'"'),q:1});else if(m[2]||m[3]||m[4])T.push({v:m[2]||m[3]||m[4]})}
+  let p=0;const pk=()=>T[p]&&T[p].v,id=t=>t&&(t.q||/^[\w.\u0080-\uffff]+$/.test(t.v));
+  const attrs=()=>{const o={};if(pk()!=='[')return o;p++;while(p<T.length&&pk()!==']'){const k=T[p++].v;if(pk()==='='){p++;o[k]=T[p++]?.v}if(pk()===','||pk()===';')p++}p++;return o};
+  const SH={box:'rect',rect:'rect',rectangle:'rect',square:'rect',record:'rect',ellipse:'round',oval:'round',circle:'circle',doublecircle:'dc',diamond:'dia',hexagon:'hex',cylinder:'db',parallelogram:'para',point:'start',plaintext:'rect',note:'rect',Mrecord:'round',component:'sub'};
+  const node=v=>{if(!G.nodes.has(v))G.nodes.set(v,{id:v,label:v,shape:'round'});return G.nodes.get(v)};
+  while(p<T.length&&pk()!=='{')p++;p++;
+  while(p<T.length){
+    const t=T[p];if(!t)break;
+    if(['{','}',';'].includes(t.v)&&!t.q){p++;continue}
+    if(!t.q&&/^(graph|node|edge)$/.test(t.v)&&T[p+1]&&T[p+1].v==='['){p++;const o=attrs();if(t.v==='graph'&&o.rankdir)G.dir=o.rankdir.toUpperCase().replace('TB','TD');continue}
+    if(!t.q&&/^(subgraph|strict|digraph)$/.test(t.v)){p++;if(id(T[p])&&T[p].v!=='{')p++;continue}
+    if(id(t)&&T[p+1]&&T[p+1].v==='='&&!t.q){if(t.v==='rankdir')G.dir=String(T[p+2]?.v||'TD').toUpperCase().replace('TB','TD');p+=3;continue}
+    if(!id(t)){p++;continue}
+    const chain=[node(t.v)];p++;const ops=[];
+    while(pk()==='->'||pk()==='--'){ops.push(T[p].v);p++;if(!id(T[p]))break;chain.push(node(T[p].v));p++}
+    const o=attrs();
+    if(chain.length===1){const n=chain[0];if(o.label!=null)n.label=lab(o.label.replace(/\\[nlr]/g,'\n'));if(o.shape&&SH[o.shape])n.shape=SH[o.shape];continue}
+    for(let k=0;k+1<chain.length;k++)G.edges.push({a:chain[k],b:chain[k+1],label:lab((o.label||'').replace(/\\[nlr]/g,'\n')),st:/dash|dot/.test(o.style||'')?'dot':/bold/.test(o.style||'')?'thk':'',hd:ops[k]==='->'?'>':'',tl:o.dir==='both'?'>':'',len:1})}
+  return G}
+
+/* раскладка: слои по длинному пути, порядок — барицентрами, ровные рёбра под прямыми углами */
+function nsize(n){
+  const L=n.L=n.shape==='start'||n.shape==='end'||n.shape==='bar'?[]:wrap(n.label),w=L.length?Math.max(...L.map(tw)):0,h=L.length*LH;
+  let W,H;
+  switch(n.shape){
+    case 'dia':W=w+h*1.5+30;H=h+w*.4+22;break;
+    case 'circle':case 'dc':W=H=Math.max(w+26,h+26,44);break;
+    case 'start':case 'end':W=H=18;break;
+    case 'bar':W=64;H=8;break;
+    case 'hex':W=w+46;H=h+20;break;
+    case 'para':case 'para2':case 'trap':case 'trap2':case 'flag':W=w+44;H=h+20;break;
+    default:W=Math.max(w+26,52);H=h+20}
+  n.w=Math.ceil(W/2)*2;n.h=Math.ceil(H/2)*2}
+function graph(G){
+  const N=[...G.nodes.values()];if(!N.length||N.length>160)throw 0;
+  const hz=G.dir==='LR'||G.dir==='RL';
+  N.forEach(n=>{nsize(n);n.cs=hz?n.h:n.w;n.ms=hz?n.w:n.h});
+  const ED=G.edges.filter(e=>e.a!==e.b),loops=G.edges.filter(e=>e.a===e.b);
+  /* циклы: обратные рёбра разворачиваем */
+  const out=new Map(N.map(n=>[n,[]])),st=new Map();ED.forEach(e=>out.get(e.a).push(e));
+  const dfs=v=>{st.set(v,1);for(const e of out.get(v)){const s=st.get(e.b);if(s===1)e.rev=1;else if(!s)dfs(e.b)}st.set(v,2)};
+  N.forEach(n=>{if(!st.get(n))dfs(n)});
+  ED.forEach(e=>{e.u=e.rev?e.b:e.a;e.v=e.rev?e.a:e.b});
+  /* слои */
+  const deg=new Map(N.map(n=>[n,0])),dn0=new Map(N.map(n=>[n,[]]));
+  ED.forEach(e=>{deg.set(e.v,deg.get(e.v)+1);dn0.get(e.u).push(e)});
+  N.forEach(n=>n.r=0);const q=N.filter(n=>!deg.get(n));
+  while(q.length){const v=q.shift();for(const e of dn0.get(v)){e.v.r=Math.max(e.v.r,v.r+e.len);deg.set(e.v,deg.get(e.v)-1);if(!deg.get(e.v))q.push(e.v)}}
+  N.forEach(n=>{const o=dn0.get(n);if(o.length&&!ED.some(e=>e.v===n))n.r=Math.max(n.r,Math.min(...o.map(e=>e.v.r-e.len)))});
+  const RN=Math.max(...N.map(n=>n.r))+1,L=Array.from({length:RN},()=>[]);
+  N.forEach(n=>L[n.r].push(n));
+  /* фиктивные узлы для длинных рёбер; подпись едет на среднем */
+  const segs=[];
+  ED.forEach(e=>{e.ch=[];let p=e.u;const span=e.v.r-e.u.r,mid=e.u.r+Math.ceil((span-1)/2);
+    if(e.label){e.L=wrap(e.label,16);e.lw=Math.max(...e.L.map(tw))+12;e.lh=e.L.length*LH+6}
+    for(let r=e.u.r+1;r<e.v.r;r++){const d={dm:1,r,e,cs:8,ms:0};if(e.label&&r===mid){d.lab=1;d.cs=hz?e.lh:e.lw;d.ms=hz?e.lw:e.lh}
+      L[r].push(d);e.ch.push(d);segs.push({u:p,v:d,e});p=d}
+    segs.push({u:p,v:e.v,e})});
+  const all=L.flat(),up=new Map(all.map(x=>[x,[]])),dn=new Map(all.map(x=>[x,[]]));
+  segs.forEach(s=>{dn.get(s.u).push(s.v);up.get(s.v).push(s.u)});
+  L.forEach(l=>l.forEach((x,k)=>x.o=k));
+  const cross=()=>{let c=0;for(let r=0;r+1<RN;r++){const es=[];L[r].forEach(x=>dn.get(x).forEach(y=>es.push([x.o,y.o])));
+    for(let a=0;a<es.length;a++)for(let b=a+1;b<es.length;b++)if((es[a][0]-es[b][0])*(es[a][1]-es[b][1])<0)c++}return c};
+  let best=L.map(l=>l.slice()),bc=cross();
+  for(let it=0;it<16&&bc;it++){const d=it%2===0;
+    for(let r=d?1:RN-2;d?r<RN:r>=0;r+=d?1:-1){const nb=d?up:dn;
+      L[r].forEach(x=>{const ns=nb.get(x);x.b=ns.length?ns.reduce((s,y)=>s+y.o,0)/ns.length:x.o});
+      L[r].sort((a,b)=>a.b-b.b||a.o-b.o);L[r].forEach((x,k)=>x.o=k)}
+    const c=cross();if(c<bc){bc=c;best=L.map(l=>l.slice())}}
+  best.forEach((l,r)=>{L[r]=l;l.forEach((x,k)=>x.o=k)});
+  /* поперечные координаты: как можно ближе к соседям, без наложений */
+  const gap=(a,b)=>a.dm&&b.dm?10:a.dm||b.dm?16:hz?24:30;
+  const place=(l,want)=>{const bl=[];
+    for(const x of l){let b={m:[x],w:x.cs,s:want(x)-x.cs/2,n:1};b.X=b.s;
+      while(bl.length){const p=bl[bl.length-1],g=gap(p.m[p.m.length-1],b.m[0]);if(p.X+p.w+g<=b.X)break;bl.pop();
+        const sh=p.w+g;b={m:p.m.concat(b.m),w:sh+b.w,s:p.s+b.s-sh*b.n,n:p.n+b.n};b.X=b.s/b.n}
+      bl.push(b)}
+    bl.forEach(b=>{let x0=b.X;b.m.forEach((x,k)=>{if(k)x0+=gap(b.m[k-1],x);x.x=x0+x.cs/2;x0+=x.cs})})};
+  L.forEach(l=>place(l,x=>0));
+  const avg=ns=>ns.length?ns.reduce((s,y)=>s+y.x,0)/ns.length:null;
+  for(let it=0;it<10;it++){
+    for(let r=1;r<RN;r++)place(L[r],x=>avg(up.get(x))??x.x);
+    for(let r=RN-2;r>=0;r--)place(L[r],x=>avg(dn.get(x))??x.x)}
+  for(let r=0;r<RN;r++)place(L[r],x=>avg(up.get(x).concat(dn.get(x)))??x.x);
+  /* по главной оси: толщина слоёв и промежутки (шире, если в них подписи) */
+  const th=L.map(l=>Math.max(0,...l.map(x=>x.ms))),gp=Array(RN).fill(hz?44:40);
+  segs.forEach(s=>{const e=s.e;if(e.label&&!e.ch.length)gp[e.u.r]=Math.max(gp[e.u.r],(hz?e.lw:e.lh)+26)});
+  const y0=[];let yy=0;for(let r=0;r<RN;r++){y0[r]=yy;yy+=th[r]+gp[r]}const HM=yy-gp[RN-1];
+  all.forEach(x=>x.y=y0[x.r]+th[x.r]/2);
+  /* порты: рёбра расходятся по стороне узла */
+  const port=(n,list,key)=>{const ps=list.filter(s=>s[key===0?'u':'v']===n).sort((a,b)=>(key===0?a.v.x-b.v.x:a.u.x-b.u.x));
+    const pin=n.shape==='dia'||n.shape==='circle'||n.shape==='dc'||n.shape==='start'||n.shape==='end',k=ps.length,spc=pin?0:Math.min(14,(n.cs-14)/Math.max(1,k-1));
+    ps.forEach((s,j)=>s[key===0?'px':'qx']=Math.round(n.x+(j-(k-1)/2)*spc))};
+  N.forEach(n=>{port(n,segs,0);port(n,segs,1)});
+  /* дорожки в промежутках, чтобы горизонтали не слипались */
+  const tracks=Array.from({length:RN},()=>[]);
+  segs.forEach(s=>{s.ax=s.u.dm?s.u.x:s.px;s.bx=s.v.dm?s.v.x:s.qx;if(Math.abs(s.ax-s.bx)>1)tracks[s.u.r].push(s)});
+  tracks.forEach((t,r)=>{t.sort((a,b)=>Math.min(a.ax,a.bx)-Math.min(b.ax,b.bx)||a.bx-b.bx);const k=t.length,mid=y0[r]+th[r]+gp[r]/2,sp=Math.min(6,(gp[r]-24)/Math.max(1,k));
+    t.forEach((s,j)=>s.my=Math.round(mid+(j-(k-1)/2)*sp))});
+  const tf=G.dir==='LR'?(x,y)=>[y,x]:G.dir==='RL'?(x,y)=>[HM-y,x]:G.dir==='BT'?(x,y)=>[x,HM-y]:(x,y)=>[x,y];
+  /* рёбра → ломаные */
+  const pathOf=e=>{const pts=[],chain=[e.u,...e.ch,e.v];
+    for(let k=0;k+1<chain.length;k++){const s=segs.find(z=>z.e===e&&z.u===chain[k]),u=s.u,v=s.v;
+      const ay=u.dm?u.y+th[u.r]/2:u.y+u.ms/2,by=v.dm?v.y-th[v.r]/2:v.y-v.ms/2;
+      if(u.dm&&!pts.length)pts.push([u.x,u.y-th[u.r]/2]);
+      pts.push([s.ax,ay]);if(s.my!=null){pts.push([s.ax,s.my],[s.bx,s.my])}pts.push([s.bx,by])}
+    return pts};
+  let o='',lb='',nd='',grp='';const B=[1e9,1e9,-1e9,-1e9];
+  const bx=(x,y,w,h)=>{B[0]=Math.min(B[0],x-w/2);B[1]=Math.min(B[1],y-h/2);B[2]=Math.max(B[2],x+w/2);B[3]=Math.max(B[3],y+h/2)};
+  N.forEach(n=>{[n.X,n.Y]=tf(n.x,n.y);bx(n.X,n.Y,n.w+4,n.h+4)});
+  ED.forEach(e=>{if(e.st==='inv')return;
+    let p=pathOf(e).map(([x,y])=>tf(x,y));if(e.rev)p.reverse();
+    p=p.filter((q,k)=>!k||q[0]!==p[k-1][0]||q[1]!==p[k-1][1]);
+    const H=[];
+    if(e.hd)H.push(head(p,e.hd,1));if(e.tl)H.push(head(p,'>',0));
+    p.forEach(q=>bx(q[0],q[1],8,8));
+    o+='<path class="ge'+(e.st?' '+e.st:'')+'" d="M'+p.map(q=>q.map(Math.round).join(' ')).join('L')+'"/>'+H.join('');
+    if(e.L){let c;const d=e.ch.find(x=>x.lab);
+      if(d)c=tf(d.x,d.y);
+      else{const s=segs.find(z=>z.e===e),off=s.ax-s.u.x,nd=(hz?e.lh:e.lw)/2+6;
+        c=s.my!=null?tf((s.ax+s.bx)/2,s.my):tf(Math.abs(off)>1?s.ax+Math.sign(off)*nd:s.ax,(s.u.y+s.u.ms/2+s.v.y-s.v.ms/2)/2);
+        if(s.my!=null&&Math.abs(s.ax-s.bx)<(hz?e.lh:e.lw)+8)c=tf(s.bx,(s.my+s.v.y-s.v.ms/2)/2)}
+      bx(c[0],c[1],e.lw,e.lh);
+      lb+='<rect class="gl" x="'+Math.round(c[0]-e.lw/2)+'" y="'+Math.round(c[1]-e.lh/2)+'" width="'+e.lw+'" height="'+e.lh+'"/>'+TX(Math.round(c[0]),Math.round(c[1]),e.L,'gtl')}});
+  loops.forEach(e=>{const n=e.a,x=n.X+n.w/2,y=n.Y,L=e.label?wrap(e.label,14):[];
+    o+='<path class="ge'+(e.st?' '+e.st:'')+'" d="M'+x+' '+(y-6)+'h16v12h-12"/>'+head([[x+16,y+6],[x+4,y+6]],'>',1);
+    if(L.length){const w=Math.max(...L.map(tw));lb+=TX(x+22,y,L,'gtl','start');bx(x+24+w/2,y,w+4,L.length*LH)}bx(x+10,y,24,16)});
+  N.forEach(n=>{const on=n.shape==='circle'||n.shape==='dc'?' on':'';
+    nd+=shape(n,n.X+3,n.Y+3,'gsh')+shape(n,n.X,n.Y,'gn k-'+n.shape)+TX(n.X,n.Y,n.L,on)});
+  /* подграфы: рамка, если в неё не попал чужой узел */
+  (G.groups||[]).forEach(g=>{const m=[...g.m];if(!m.length)return;
+    const x1=Math.min(...m.map(n=>n.X-n.w/2))-12,y1=Math.min(...m.map(n=>n.Y-n.h/2))-26,x2=Math.max(...m.map(n=>n.X+n.w/2))+14,y2=Math.max(...m.map(n=>n.Y+n.h/2))+14;
+    if(N.some(n=>!g.m.has(n)&&n.X+n.w/2>x1&&n.X-n.w/2<x2&&n.Y+n.h/2>y1&&n.Y-n.h/2<y2))return;
+    const t=g.t||g.id;grp+='<rect class="gsg" x="'+x1+'" y="'+y1+'" width="'+(x2-x1)+'" height="'+(y2-y1)+'"/>'+(t?'<rect class="gsgt" x="'+x1+'" y="'+y1+'" width="'+(tw(t)+12)+'" height="16"/>'+TX(x1+6,y1+8,[t],'on2','start'):'');
+    bx((x1+x2)/2,(y1+y2)/2,x2-x1,y2-y1)});
+  const M=14,W=Math.ceil(B[2]-B[0]+2*M),Hh=Math.ceil(B[3]-B[1]+2*M),dx=Math.round(M-B[0]),dy=Math.round(M-B[1]);
+  return svg(W,Hh,'<g transform="translate('+dx+' '+dy+')">'+grp+o+lb+nd+'</g>')}
+function head(p,k,end){
+  let a=end?p[p.length-1]:p[0],j=end?p.length-2:1,b=p[j];
+  while(b&&b[0]===a[0]&&b[1]===a[1]){j+=end?-1:1;b=p[j]}if(!b)return '';
+  const dx=Math.sign(a[0]-b[0]),dy=Math.sign(a[1]-b[1]),x=a[0],y=a[1];
+  if(k==='o')return '<rect class="gh" x="'+(x-dx*5-4)+'" y="'+(y-dy*5-4)+'" width="8" height="8"/>';
+  if(k==='x')return '<path class="ge" d="M'+(x-dx*6-4)+' '+(y-dy*6-4)+'l8 8m0 -8l-8 8"/>';
+  const P=[[x,y],[x-dx*9-dy*5,y-dy*9-dx*5],[x-dx*9+dy*5,y-dy*9+dx*5]];
+  return '<polygon class="gh" points="'+P.map(q=>q.join(',')).join(' ')+'"/>'}
+function shape(n,x,y,c){
+  const w=n.w,h=n.h,l=x-w/2,t=y-h/2,r=l+w,b=t+h,sh=c==='gsh';
+  const P=a=>'<polygon class="'+c+'" points="'+a.map(q=>q.map(Math.round).join(',')).join(' ')+'"/>';
+  const ch=k=>P([[l+k,t],[r-k,t],[r,t+k],[r,b-k],[r-k,b],[l+k,b],[l,b-k],[l,t+k]]);
+  const rc='<rect class="'+c+'" x="'+l+'" y="'+t+'" width="'+w+'" height="'+h+'"/>';
+  switch(n.shape){
+    case 'round':return ch(5);
+    case 'stadium':return ch(Math.min(h/2,12));
+    case 'circle':return ch(w*.29);
+    case 'dc':return ch(w*.29)+(sh?'':P([[l+w*.29,t+5],[r-w*.29,t+5],[r-5,t+w*.29],[r-5,b-w*.29],[r-w*.29,b-5],[l+w*.29,b-5],[l+5,b-w*.29],[l+5,t+w*.29]]).replace(c,'gx'));
+    case 'dia':return P([[x,t],[r,y],[x,b],[l,y]]);
+    case 'hex':return P([[l+12,t],[r-12,t],[r,y],[r-12,b],[l+12,b],[l,y]]);
+    case 'para':return P([[l+10,t],[r,t],[r-10,b],[l,b]]);
+    case 'para2':return P([[l,t],[r-10,t],[r,b],[l+10,b]]);
+    case 'trap':return P([[l+10,t],[r-10,t],[r,b],[l,b]]);
+    case 'trap2':return P([[l,t],[r,t],[r-10,b],[l+10,b]]);
+    case 'flag':return P([[l,t],[r,t],[r,b],[l,b],[l+10,y]]);
+    case 'start':return sh?'':ch(5).replace(c,'gh');
+    case 'end':return sh?'':ch(5).replace(c,'gn')+P([[l+6,t+4],[r-6,t+4],[r-4,t+6],[r-4,b-6],[r-6,b-4],[l+6,b-4],[l+4,b-6],[l+4,t+6]]).replace(c,'gh');
+    case 'bar':return sh?'':rc.replace(c,'gh');
+    case 'sub':return rc+(sh?'':'<path class="gx2" d="M'+(l+7)+' '+t+'v'+h+'M'+(r-7)+' '+t+'v'+h+'"/>');
+    case 'db':return rc+(sh?'':'<path class="gx2" d="M'+l+' '+(t+7)+'h'+w+'M'+l+' '+(t+11)+'h'+w+'"/>');
+    default:return rc}}
+
+/* sequenceDiagram: кто кому что сказал */
+function sequence(src){
+  const P=new Map(),S=[];let auto=0;
+  const part=(id,label,kind)=>{id=id.trim();if(!id)throw 0;let p=P.get(id);if(!p)P.set(id,p={id,label:id,kind:'p',i:P.size});if(label)p.label=lab(label);if(kind)p.kind=kind;return p};
+  for(let l of src.split('\n').slice(1)){l=l.trim();if(!l)continue;let m;
+    if(m=l.match(/^(participant|actor)\s+(.+?)(?:\s+as\s+(.+))?$/i)){part(m[2],m[3],m[1].toLowerCase()==='actor'?'a':'p');continue}
+    if(/^autonumber\b/i.test(l)){auto=1;continue}
+    if(/^(activate|deactivate|title|accTitle|accDescr|create|destroy|links?|properties|details)\b/i.test(l))continue;
+    if(m=l.match(/^note\s+(left of|right of|over)\s+([^:]+?)\s*:\s*(.*)$/i)){S.push({t:'n',pos:m[1].toLowerCase(),ps:m[2].split(',').map(x=>part(x)),text:lab(m[3])});continue}
+    if(m=l.match(/^(loop|alt|opt|par|critical|break|rect|box)\b\s*(.*)$/i)){S.push({t:'o',k:m[1].toLowerCase(),text:/^(rect|box)$/i.test(m[1])?'':lab(m[2])});continue}
+    if(m=l.match(/^(else|and|option)\b\s*(.*)$/i)){S.push({t:'e',text:lab(m[2])});continue}
+    if(/^end$/i.test(l)){S.push({t:'c'});continue}
+    if(m=l.match(/^(.+?)\s*(<<-->>|<<->>|-->>|->>|--x|-x|--\)|-\)|-->|->)\s*[+-]?\s*(.+?)\s*:\s*(.*)$/))S.push({t:'m',a:part(m[1]),b:part(m[3]),ar:m[2],text:lab(m[4])})}
+  const ps=[...P.values()],n=ps.length;if(!n)throw 0;
+  ps.forEach(p=>{p.L=wrap(p.label,16);p.w=Math.max(84,Math.max(...p.L.map(tw))+26);p.h=p.L.length*LH+18});
+  const gap=[];for(let k=0;k+1<n;k++)gap[k]=ps[k].w/2+ps[k+1].w/2+28;
+  let xl=0,xr=0;
+  const need=(lo,hi,w)=>{let s=0;for(let k=lo;k<hi;k++)s+=gap[k];if(s<w)for(let k=lo;k<hi;k++)gap[k]+=(w-s)/(hi-lo)};
+  S.forEach(s=>{
+    if(s.t==='m'){s.L=wrap(s.text,26);const w=Math.max(...s.L.map(tw))+30;
+      if(s.a===s.b){if(s.a.i+1<n)need(s.a.i,s.a.i+1,w+44);else xr=Math.max(xr,w+44)}else need(Math.min(s.a.i,s.b.i),Math.max(s.a.i,s.b.i),w)}
+    if(s.t==='n'){s.L=wrap(s.text,24);s.w=Math.max(...s.L.map(tw))+20;const a=s.ps[0],b=s.ps[s.ps.length-1];
+      if(s.pos==='over'&&a!==b)need(Math.min(a.i,b.i),Math.max(a.i,b.i),s.w-40);
+      else if(s.pos==='left of'){if(a.i)need(a.i-1,a.i,s.w+ps[a.i-1].w/2+16);else xl=Math.max(xl,s.w+12)}
+      else if(s.pos==='right of'){if(a.i+1<n)need(a.i,a.i+1,s.w+ps[a.i+1].w/2+16);else xr=Math.max(xr,s.w+12)}}});
+  const X=[];X[0]=14+Math.max(ps[0].w/2,xl);for(let k=1;k<n;k++)X[k]=Math.round(X[k-1]+gap[k-1]);
+  const HH=Math.max(...ps.map(p=>p.h))+(ps.some(p=>p.kind==='a')?26:0);
+  let y=14+HH+22,o='',bk='',num=0,xmin=0,xmax=X[n-1]+ps[n-1].w/2+xr;const fr=[];
+  const ext=(lo,hi)=>{xmin=Math.min(xmin,lo);xmax=Math.max(xmax,hi);fr.forEach(g=>{g.lo=Math.min(g.lo,lo);g.hi=Math.max(g.hi,hi)})};
+  S.forEach(s=>{
+    if(s.t==='m'){const x1=X[s.a.i],x2=X[s.b.i],dot=s.ar.includes('--'),k=s.ar.replace(/^<</,'').replace(/^-+/,'');
+      if(auto)num++;
+      if(s.a===s.b){const w=Math.max(...s.L.map(tw)),hL=s.L.length*LH;
+        o+=TX(x1+38,y+hL/2,s.L,'gtl','start');const yy=y+hL+4;
+        o+='<path class="ge'+(dot?' dot':'')+'" d="M'+x1+' '+(yy-12)+'h28v16h-22"/>'+head([[x1+28,yy+4],[x1+2,yy+4]],'>',1);
+        ext(x1-30,x1+44+w);y=yy+28}
+      else{const d=Math.sign(x2-x1),hL=s.L.length*LH;
+        o+=TX((x1+x2)/2,y+hL/2,s.L,'gtl');y+=hL+8;
+        ext(Math.min(x1,x2)-30,Math.max(x1,x2)+30);
+        o+='<path class="ge'+(dot?' dot':'')+'" d="M'+x1+' '+y+'H'+(x2-d*(k==='>>'?6:2))+'"/>';
+        if(k==='>>')o+=head([[x1,y],[x2-d*2,y]],'>',1);
+        else if(k==='x')o+=head([[x1,y],[x2-d*2,y]],'x',1);
+        else if(k===')')o+='<path class="ge" d="M'+(x2-d*10)+' '+(y-5)+'L'+(x2-d*3)+' '+y+'L'+(x2-d*10)+' '+(y+5)+'"/>';
+        if(s.ar.startsWith('<<'))o+=head([[x1+d*2,y],[x2,y]],'>',0);
+        if(auto)o+='<rect class="gnum" x="'+(x1-9)+'" y="'+(y-7)+'" width="18" height="14"/>'+TX(x1,y,[String(num)],'on');
+        y+=22}}
+    if(s.t==='n'){const a=X[s.ps[0].i],b=X[s.ps[s.ps.length-1].i],h=s.L.length*LH+12;let x1,w=s.w;
+      if(s.pos==='over'){w=Math.max(w,Math.abs(b-a)+40);x1=(a+b)/2-w/2}else if(s.pos==='left of')x1=a-14-w;else x1=a+14;
+      x1=Math.round(x1);ext(x1-6,x1+w+6);
+      o+='<rect class="gsh" x="'+(x1+3)+'" y="'+(y+3)+'" width="'+w+'" height="'+h+'"/><rect class="gnote" x="'+x1+'" y="'+y+'" width="'+w+'" height="'+h+'"/>'+TX(Math.round(x1+w/2),y+h/2,s.L);y+=h+16}
+    if(s.t==='o'){fr.push({k:s.k,text:s.text,y0:y,el:[],lo:1e9,hi:-1e9});y+=34}
+    if(s.t==='e'&&fr.length){fr[fr.length-1].el.push({y,text:s.text});y+=32}
+    if(s.t==='c'&&fr.length){const f=fr.pop();y+=4;
+      const lo=Math.round((f.lo<1e9?f.lo:X[0]-40)-10),hi=Math.round((f.hi>-1e9?f.hi:X[n-1]+40)+10),w=hi-lo,tl=tw(f.k)+14;
+      ext(lo-8,hi+8);
+      if(f.k==='rect'||f.k==='box')bk='<rect class="gbx" x="'+lo+'" y="'+f.y0+'" width="'+w+'" height="'+(y-f.y0)+'"/>'+bk;
+      else{bk+='<rect class="gfr" x="'+lo+'" y="'+f.y0+'" width="'+w+'" height="'+(y-f.y0)+'"/><polygon class="gft" points="'+lo+','+f.y0+' '+(lo+tl+6)+','+f.y0+' '+(lo+tl+6)+','+(f.y0+10)+' '+(lo+tl)+','+(f.y0+16)+' '+lo+','+(f.y0+16)+'"/>'
+          +TX(lo+7,f.y0+8,[f.k],'on2','start')+(f.text?TX(lo+tl+14,f.y0+8,['['+f.text+']'],'gtl','start'):'');
+        f.el.forEach(e=>{bk+='<path class="gfr gfd" d="M'+lo+' '+e.y+'h'+w+'"/>'+(e.text?TX(lo+10,e.y+12,['['+e.text+']'],'gtl','start'):'')})}
+      y+=12}});
+  const top=14,bot=y+8,ll=ps.map((p,k)=>'<path class="gll" d="M'+X[k]+' '+(top+HH)+'V'+bot+'"/>').join('');
+  const box=(p,k,y0)=>{const x=X[k]-p.w/2,yy=y0+HH-p.h;
+    return (p.kind==='a'?actor(X[k],yy-25):'')+'<rect class="gsh" x="'+(x+3)+'" y="'+(yy+3)+'" width="'+p.w+'" height="'+p.h+'"/><rect class="gn" x="'+x+'" y="'+yy+'" width="'+p.w+'" height="'+p.h+'"/>'+TX(X[k],yy+p.h/2,p.L)};
+  const hdr=ps.map((p,k)=>box(p,k,top)+box(p,k,bot)).join(''),dx=Math.max(0,-Math.floor(xmin)+6);
+  return svg(Math.ceil(xmax+dx+14),bot+HH+18,'<g transform="translate('+dx+' 0)">'+bk+ll+o+hdr+'</g>','диаграмма последовательности')}
+const actor=(x,y)=>'<path class="gh" d="M'+(x-4)+' '+y+'h8v8h-8zM'+(x-1)+' '+(y+8)+'h2v8h-2zM'+(x-7)+' '+(y+10)+'h14v2h-14zM'+(x-3)+' '+(y+16)+'h2v6h-2zM'+(x+1)+' '+(y+16)+'h2v6h-2z"/>';
+
+/* pie → полоски-«здоровье», как в старых играх */
+function pie(src){
+  const ls=src.split('\n');let title=(ls[0].match(/\btitle\s+(.+)$/i)||[])[1]||'';const it=[];
+  for(const l of ls.slice(1)){let m;if(m=l.trim().match(/^title\s+(.+)$/i)){title=m[1];continue}
+    if(m=l.trim().match(/^"([^"]*)"\s*:\s*([\d.]+)/))it.push([lab(m[1]),+m[2]])}
+  const sum=it.reduce((s,x)=>s+x[1],0);if(!it.length||!(sum>0))return null;
+  const mx=Math.max(...it.map(x=>x[1])),c=k=>'var(--p'+(k%6+1)+')',pc=v=>{const p=v/sum*100;return (p>=10||p===0?Math.round(p):p.toFixed(1))+'%'};
+  return '<div class="xpie">'+(title?'<b class="xpt">'+E(lab(title))+'</b>':'')
+    +'<div class="xps">'+it.map((x,k)=>x[1]?'<i style="flex:'+x[1]+';background:'+c(k)+'" title="'+E(x[0])+'"></i>':'').join('')+'</div>'
+    +it.map((x,k)=>'<div class="xpr"><i style="background:'+c(k)+'"></i><span>'+E(x[0])+'</span><b>'+pc(x[1])+'<small> · '+(+x[1].toFixed(2))+'</small></b><span class="xpb"><i style="width:'+(x[1]/mx*100).toFixed(1)+'%;background:'+c(k)+'"></i></span></div>').join('')+'</div>'}
+
+/* mindmap → дерево с пиксельными веточками */
+function mindmap(src){
+  const rows=src.split('\n').slice(1).filter(l=>l.trim()&&!/^\s*::icon\(/.test(l));if(!rows.length)return null;
+  const txt=t=>{t=t.trim().replace(/:::.*$/,'');const m=t.match(/^[\w-]*\s*(\(\(|\)\)|\(-|\{\{|\[|\(|\))([\s\S]*?)(\)\)|\(\(|-\)|\}\}|\]|\)|\()$/);return lab(m?m[2]:t)};
+  const root={t:txt(rows[0]),c:[],d:-1},st=[root];
+  rows.slice(1).forEach(l=>{const d=ind(l.replace(/\t/g,'    ')),n={t:txt(l),c:[],d};while(st.length>1&&st[st.length-1].d>=d)st.pop();st[st.length-1].c.push(n);st.push(n)});
+  const ul=(ns,lv)=>ns.length?'<ul>'+ns.map((n,k)=>'<li'+(lv===1?' style="--c:var(--p'+(k%6+1)+')"':'')+'><span class="xmn">'+E(n.t)+'</span>'+ul(n.c,lv+1)+'</li>').join('')+'</ul>':'';
+  return '<div class="xmm"><span class="xmn xmr">'+E(root.t)+'</span>'+ul(root.c,1)+'</div>'}
+
+/* timeline → лента событий */
+function timeline(src){
+  let title='',h='',cur=null,k=0;const out=[];
+  for(let l of src.split('\n').slice(1)){l=l.trim();let m;if(!l)continue;
+    if(m=l.match(/^title\s+(.+)$/i)){title=m[1];continue}
+    if(m=l.match(/^section\s+(.+)$/i)){out.push('<div class="xts">'+E(lab(m[1]))+'</div>');continue}
+    const p=l.split(/\s*:\s*/);
+    if(l.startsWith(':')&&cur){p.slice(1).forEach(x=>x&&cur.push(x));continue}
+    cur=p.slice(1).filter(Boolean);out.push({t:p[0],ev:cur,k:k++})}
+  if(!out.some(x=>typeof x==='object'))return null;
+  return '<div class="xtl">'+(title?'<b class="xpt">'+E(lab(title))+'</b>':'')+out.map(x=>typeof x==='string'?x:'<div class="xtr" style="--c:var(--p'+(x.k%6+1)+')"><span class="xtp">'+E(lab(x.t))+'</span><ul>'+x.ev.map(e=>'<li>'+E(lab(e))+'</li>').join('')+'</ul></div>').join('')+'</div>'}
+
+/* ===== всё вместе ===== */
+function md(src){
+  src=String(src||'').replace(/\r\n?/g,'\n').replace(/\t/g,'    ');
+  const ctx={refs:new Map(),fn:new Map(),fo:[]},lines=[];let fen=null;
+  for(const l of src.split('\n')){
+    const f=l.match(/^ {0,3}(`{3,}|~{3,})/);
+    if(f){if(!fen)fen=f[1];else if(f[1][0]===fen[0]&&f[1].length>=fen.length&&!l.trim().slice(f[1].length).trim())fen=null;lines.push(l);continue}
+    let m;
+    if(!fen&&(m=l.match(/^ {0,3}\[\^([^\]]+)\]:\s?(.*)$/))){ctx.fn.set(m[1],m[2]);continue}
+    if(!fen&&(m=l.match(/^ {0,3}\[([^\]^][^\]]*)\]:\s*<?((?:https?:\/\/|www\.|mailto:|\/|\.\/|#)\S*?)>?(?:\s+["'(].*)?\s*$/))){ctx.refs.set(m[1].toLowerCase(),/^www\./i.test(m[2])?'https://'+m[2]:m[2]);continue}
+    lines.push(l)}
+  let h=blocks(lines,ctx);
+  if(ctx.fo.length)h+='<ol class="xf">'+ctx.fo.map(id=>'<li>'+inl(ctx.fn.get(id),ctx)+'</li>').join('')+'</ol>';
+  return '<div class="md">'+h+'</div>'}
+/* картинка не загрузилась (чужой сайт, а на сервере Мочи — CSP) — показываем ссылкой */
+const badImg=new Set();
+document.addEventListener('error',e=>{const im=e.target;if(!(im instanceof HTMLImageElement)||!im.classList.contains('xi'))return;
+  const u=im.getAttribute('src');badImg.add(u);im.outerHTML=a(u,E(im.alt||u),'xil')},true);
+window.md=md;
+})();
+</script>
+<script>
 const $=s=>document.querySelector(s);
 /* режим сервера: страницу отдаёт сервер Мочи (server/), агент и Linux живут там — см. server/public/client.js */
 const SRV=!!document.querySelector('meta[name=mochi-server]');
 /* сеть: wisp — полноценный TCP (HTTPS, git); relay — запасной вариант. Порядок = приоритет */
 const DEF_RELAYS='wisps://wisp.mercurywork.shop/v86/\nwss://relay.widgetry.org/';
 const relayList=s=>[...new Set(String(s||'').split(/[\s,;]+/).map(x=>x.trim()).filter(x=>/^(wisps?|wss?):\/\/[^\s\/]+/i.test(x)).map(x=>x.replace(/^[a-z]+:/i,m=>m.toLowerCase())))];
+/* что умеет показывать чат — модель должна знать, чтобы рисовать таблицы и схемы, а не ASCII-картинки */
+const FMT='Оформление: чат показывает Markdown — заголовки, списки, таблицы, цитаты и врезки (> [!NOTE], > [!TIP], > [!WARNING]), `код` и блоки кода с языком, формулы LaTeX ($…$, $$…$$) и схемы в блоке ```mermaid (flowchart, sequenceDiagram, stateDiagram, pie, mindmap, timeline). Пользуйся этим, только когда правда помогает: сравнение — таблицей, процесс или связи — схемой, вычисления — формулой. Короткий ответ оставляй простым текстом.';
 const DEF={base:'https://api.openai.com/v1',key:'',model:'gpt-4o-mini',
  sys:'Тебя зовут Мочи — ты милый пиксельный зверёк-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к Linux (Alpine, musl, BusyBox, x86 32-бит; пакеты ставятся через apk add, если есть сеть) через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. В поле action кратко и по-человечески пиши, что делаешь. Команды делай короткими, вывод усекается. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.',
  img:'https://i.copy.sh/buildroot-bzimage68.bin',mem:128,net:DEF_RELAYS,search:true};
@@ -1145,17 +2021,6 @@ $('#term').addEventListener('click',()=>{if(!String(getSelection()).length&&matc
 /* ---------- Чат ---------- */
 const hist=[];let ctl=null;
 const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-/* маленький markdown: код, ссылки, жирный, курсив, заголовки, списки */
-function md(src){const keep=[],K=h=>'\u0000'+(keep.push(h)-1)+'\u0000';
-  let s=esc(src).replace(/```([\w+.#-]*)[^\n]*\n?([\s\S]*?)(?:```[ \t]*\n?|$)/g,(m,l,c)=>{c=c.replace(/\n$/,'');const one=c&&!c.includes('\n');
-    return K('<div class="cb"><div class="ch"><span>'+(l||'код')+'</span><span class="cbb">'+(one?'<button class="cp" data-k="t" title="Вставить в терминал"><i class="pi"></i>в терминал</button>':'')+'<button class="cp" data-k="c"><i class="pi"></i>копировать</button></span></div><pre><code>'+c+'</code></pre></div>')});
-  s=s.replace(/`([^`\n]+)`/g,(m,c)=>K('<code>'+c+'</code>'))
-   .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)"]+)\)/g,(m,t,u)=>K('<a href="'+u+'" target="_blank" rel="noopener">'+t+'</a>'))
-   .replace(/https?:\/\/(?:(?!&[lg]t;)[^\s<"'\u0000])+/g,u=>{const t=u.match(/[.,!?:;)]+$/),v=t?u.slice(0,-t[0].length):u;return K('<a href="'+v+'" target="_blank" rel="noopener">'+v+'</a>')+(t?t[0]:'')})
-   .replace(/^#{1,4} +(.+)$/gm,'<b class="hd">$1</b>')
-   .replace(/^([ \t]*)[-*•] +/gm,'$1<i class="li"></i>')
-   .replace(/\*\*([^*\n]+)\*\*/g,'<b>$1</b>').replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s.,!?:;)]|$)/g,'$1<em>$2</em>');
-  return s.replace(/\u0000(\d+)\u0000/g,(m,i)=>keep[i])}
 const hhmm=()=>new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
 const WHO={u:'Ты',a:'Мочи'};
 /* автопрокрутка только если ты внизу: можно спокойно читать старое */
@@ -1192,7 +2057,8 @@ $('#msgs').addEventListener('click',async e=>{
   const b=e.target.closest('.cp');if(!b)return;
   const m=b.closest('.m'),k=b.dataset.k;
   if(k==='s'){window.mochiSay&&mochiSay(m._raw||m._b.innerText);return}
-  const code=k==='a'?'':b.closest('.cb').querySelector('code').textContent.replace(/\n$/,'');
+  if(k==='v'){const on=b.closest('.cb').classList.toggle('code');b.lastChild.textContent=on?'схема':'код';return}
+  const cb=b.closest('.cb'),code=k==='a'?'':(cb.querySelector('.src')||cb.querySelector('pre code')).textContent.replace(/\n$/,'');
   if(k==='t'){$('#tin').value=code;navTo('term');$('#tin').focus();return}
   const t=k==='a'?(m._raw||m._b.innerText):code;
   try{await navigator.clipboard.writeText(t)}catch(x){const a=document.createElement('textarea');a.value=t;a.style.cssText='position:fixed;opacity:0';document.body.append(a);a.select();try{document.execCommand('copy')}catch(y){}a.remove()}
@@ -1382,7 +2248,7 @@ async function loop(sig,g){
     const msgs=wire(),hasM=msgs.some(m=>Array.isArray(m.content));
     const sys=cfg.sys+'\nСегодня '+new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'})+'.'
       +(web.length?'\nУ тебя есть поиск в интернете (web_search, web_fetch): используй его для новостей, свежих данных и всего, что могло измениться; на простые вопросы отвечай сразу. Источники называй по имени сайта, без длинных ссылок.':'')
-      +'\n'+netPrompt()+' Файлы пользователя загружаются в /mnt/inbox (точные пути указаны в его сообщении). Чтобы отдать файл пользователю, создай его (лучше в /mnt/outbox) и вызови send_file — в чате появится кнопка «Скачать»; не выводи содержимое файлов текстом вместо этого. Несколько файлов упаковывай в архив. Имена с пробелами бери в кавычки.'+(hasM?'\nКартинки и PDF из сообщений пользователя ты видишь напрямую, без инструментов; те же файлы лежат в Linux (/mnt/inbox), если их нужно обработать.':'');
+      +'\n'+FMT+'\n'+netPrompt()+' Файлы пользователя загружаются в /mnt/inbox (точные пути указаны в его сообщении). Чтобы отдать файл пользователю, создай его (лучше в /mnt/outbox) и вызови send_file — в чате появится кнопка «Скачать»; не выводи содержимое файлов текстом вместо этого. Несколько файлов упаковывай в архив. Имена с пробелами бери в кавычки.'+(hasM?'\nКартинки и PDF из сообщений пользователя ты видишь напрямую, без инструментов; те же файлы лежат в Linux (/mnt/inbox), если их нужно обработать.':'');
     const r=await fetch(cfg.base+'/chat/completions',apiInit(cfg.base,cfg.key,{method:'POST',headers:{'Content-Type':'application/json'},signal:sig,
       body:JSON.stringify({model:cfg.model,messages:[{role:'system',content:sys},...msgs],tools:[RUN_TOOL,SEND_TOOL,...web],stream:true})}));
     if(!r.ok){const et=(await r.text().catch(()=>'')).slice(0,300);chk();
@@ -1876,7 +2742,7 @@ function voiceFor(lang){const p=lang.slice(0,2).toLowerCase(),l=voices.filter(v=
   return l.find(v=>GOOD.test(v.name))||l.find(v=>v.localService)||l[0]||null}
 function langOf(t){const cy=(t.match(/[а-яёіїє]/gi)||[]).length,la=(t.match(/[a-z]/gi)||[]).length,v=vl();
   return cy>=la?(/^(ru|uk)/.test(v)?v:'ru-RU'):(/^(ru|uk)/.test(v)?'en-US':v)}
-function plain(t){return String(t||'').replace(/```[\s\S]*?```/g,' ').replace(/`([^`]*)`/g,'$1').replace(/\[([^\]]*)\]\([^)]*\)/g,'$1')
+function plain(t){return String(t||'').replace(/```[\s\S]*?(```|$)/g,' ').replace(/\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]/g,' ').replace(/^\s*\|?\s*:?-{3,}[-:|\s]*$/gm,' ').replace(/^\s*[-*_]{3,}\s*$/gm,' ').replace(/\[\^?\d+\]/g,' ').replace(/[$\\]/g,' ').replace(/`([^`]*)`/g,'$1').replace(/\[([^\]]*)\]\([^)]*\)/g,'$1')
   .replace(/https?:\/\/\S+/g,' ').replace(/(^|\s)[:;]-?[)(DP](?=\s|$)/g,' ').replace(/[*_#>|~^]+/g,' ').replace(/\p{Extended_Pictographic}/gu,'').replace(/\s+/g,' ').trim()}
 function chunks(t){const out=[];
   for(const s of t.match(/[^.!?…]+[.!?…]*\s*/g)||[t]){let x=s.trim();
