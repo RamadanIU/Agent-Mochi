@@ -16,7 +16,9 @@ import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic
 export const DEF_SYS = 'Тебя зовут Мочи — ты милый пиксельный зверёк-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. В поле action кратко и по-человечески пиши, что делаешь. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
 /* что умеет показывать веб-чат — модель должна знать, чтобы рисовать таблицы и схемы, а не ASCII-картинки */
 const FMT = 'Оформление: чат показывает Markdown — заголовки, списки, таблицы, цитаты и врезки (> [!NOTE], > [!TIP], > [!WARNING]), `код` и блоки кода с языком, формулы LaTeX ($…$, $$…$$) и схемы в блоке ```mermaid (flowchart, sequenceDiagram, stateDiagram, pie, mindmap, timeline). Пользуйся этим, только когда правда помогает: сравнение — таблицей, процесс или связи — схемой, вычисления — формулой. Короткий ответ оставляй простым текстом.';
-export const DEF_SETTINGS = { base: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', sys: DEF_SYS, search: true, vis: true };
+export const DEF_SETTINGS = { base: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', sys: DEF_SYS, search: true, vis: true, stepLimit: true, maxSteps: CFG.maxSteps };
+/* лимит шагов подряд (настройки → Модель): число от 1 до MAX_STEPS */
+export const MAX_STEPS = 10000;
 
 /* к модулю Telegram (он подключается сам, чтобы не было кольцевых импортов) */
 export const hooks = { tg: null };
@@ -303,9 +305,9 @@ export class Chat extends EventEmitter {
     const chk = () => { if (sig.aborted || g !== this.gen) throw abortErr(); };
     const H = this.doc.v.hist, run = this.doc.v.run;
     for (;;) {
-      if (run.steps >= CFG.maxSteps) throw new Error('Мочи сделала ' + CFG.maxSteps + ' шагов подряд и остановилась, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить.');
-      run.steps++;
       const S = this.settings(), on = t => isOn(S, t.function.name);
+      if (S.stepLimit !== false && run.steps >= S.maxSteps) throw new Error('Мочи сделала ' + S.maxSteps + ' шагов подряд и остановилась, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить. Лимит шагов меняется в настройках → Модель.');
+      run.steps++;
       const web0 = S.search ? await webTools() : [], web = web0.filter(on); chk();
       const offB = [...builtins(), ...web0, ...MANAGE_TOOLS].filter(t => !on(t)).map(t => t.function.name);
       const X = await agentExt(this, S.tools); chk();

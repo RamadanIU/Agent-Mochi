@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { CFG } from './config.js';
 import { ensureDir, flushAll } from './store.js';
 import * as A from './auth.js';
-import { getChat, resumeAll, DEF_SETTINGS, toolCatalog, setTools } from './agent.js';
+import { getChat, resumeAll, DEF_SETTINGS, MAX_STEPS, toolCatalog, setTools } from './agent.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
 import * as X from './ext.js';
 import { putInbox, storeCopy, getFile, dropFiles, userDir, safeName } from './files.js';
@@ -129,9 +129,10 @@ function stream(req, res, u) {
 }
 
 /* ---------- настройки модели (ключ наружу не отдаём) ---------- */
-const pubSettings = c => { const { key, ...s } = c.settings(); return { ...s, hasKey: !!key }; };
+const pubSettings = c => { const { key, ...s } = c.settings(); return { ...s, hasKey: !!key, maxStepsDef: DEF_SETTINGS.maxSteps }; };
 function putSettings(c, b) {
-  const s = c.set.v;
+  const s = c.set.v, steps = b.maxSteps === undefined ? undefined : Math.round(+b.maxSteps);
+  if (steps !== undefined && !(steps >= 1 && steps <= MAX_STEPS)) throw new HttpErr(400, 'Лимит шагов — от 1 до ' + MAX_STEPS);
   if (b.base !== undefined) {
     const base = String(b.base).trim().replace(/\/+$/, '');
     if (base && !/^https?:\/\/[^\s]+$/i.test(base)) throw new HttpErr(400, 'Адрес API должен начинаться с http:// или https://');
@@ -143,6 +144,8 @@ function putSettings(c, b) {
   if (b.sys !== undefined) s.sys = String(b.sys).trim().slice(0, 20000) || DEF_SETTINGS.sys;
   if (b.search !== undefined) s.search = !!b.search;
   if (b.vis !== undefined) { s.vis = !!b.vis; c.noVis = 0; }
+  if (b.stepLimit !== undefined) s.stepLimit = !!b.stepLimit;
+  if (steps !== undefined) s.maxSteps = steps;
   c.set.save();
 }
 /* провайдеры, у которых /models открыт всем: по нему не понять, подходит ли ключ */
