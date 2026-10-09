@@ -19,6 +19,7 @@ import * as TG from './telegram.js';
 import { TERM_PREFIX, proxyHttp, proxyUpgrade } from './term.js';
 import * as U from './update.js';
 import * as AC from './access.js';
+import { fsCmd, fsGet, fsUpload, agentInfo } from './runner-client.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const VERSION = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8')).version;
@@ -197,6 +198,117 @@ const updInfo = u => ({ ...U.summary(), status: U.updateStatus(), version: VERSI
 /* доступ агента: users — сколько людей получат root вместе с ним (агент и терминал у всех общие) */
 const accInfo = async u => ({ ...await AC.accessInfo(u), users: A.listUsers().length, busy: A.listUsers().filter(x => getChat(x).running).length });
 
+/* ---------- проводник: файловая система сервера от имени агента (см. fsx.js) ----------
+   Всё идёт через исполнитель (mochi-agent): у проводника ровно те же права, что у агента и терминала,
+   а данные сервера Мочи ему недоступны. Отдача байтов — с диапазонами (перемотка видео) и ETag. */
+const FS_CODE = { ENOENT: 404, EACCES: 403, EPERM: 403, EEXIST: 409, ENOTEMPTY: 409, ENOSPC: 507, EDQUOT: 507 };
+const fsErr = r => new HttpErr(FS_CODE[r.code] || 400, r.err, { fcode: r.code || null });
+/* что можно показать прямо в браузере; остальное — как текст (только для fetch) или скачиванием */
+const FS_TYPES = {
+  png: 'image/png', apng: 'image/apng', jpg: 'image/jpeg', jpeg: 'image/jpeg', jfif: 'image/jpeg', jpe: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
+  avif: 'image/avif', bmp: 'image/bmp', ico: 'image/x-icon', cur: 'image/x-icon', svg: 'image/svg+xml', tif: 'image/tiff', tiff: 'image/tiff',
+  heic: 'image/heic', heif: 'image/heif', jxl: 'image/jxl',
+  mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg', mkv: 'video/x-matroska', '3gp': 'video/3gpp', mpg: 'video/mpeg', mpeg: 'video/mpeg', avi: 'video/x-msvideo',
+  mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav', flac: 'audio/flac', weba: 'audio/webm', mid: 'audio/midi', midi: 'audio/midi',
+  pdf: 'application/pdf', ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2',
+};
+const etagOf = sig => '"' + crypto.createHash('sha1').update(String(sig)).digest('hex').slice(0, 20) + '"';
+const fsq = (u, url, extra) => ({ path: url.searchParams.get('path') || '', cwd: userDir(u), ...extra });
+/* запрос оборвался — отменяем долгую операцию (поиск, подсчёт размера) */
+const onAbort = (req, res) => { const ac = new AbortController(); res.on('close', () => { if (!res.writableFinished) ac.abort(); }); return ac.signal; };
+
+async function fsRaw(req, res, u, url) {
+  const p = url.searchParams.get('path') || '', dl = url.searchParams.get('dl') === '1';
+  /* один диапазон: bytes=a-b, bytes=a-, bytes=-n */
+  const rm = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || '').trim());
+  let want = null;
+  if (rm && (rm[1] || rm[2])) want = rm[1] ? { start: +rm[1], end: rm[2] ? +rm[2] : undefined } : { last: +rm[2] };
+  if (want && want.end !== undefined && want.end < want.start) want = null;
+  let r = await fsGet({ path: p, cwd: userDir(u), ...(want || {}) });
+  if (r.err) throw fsErr(r);
+  const etag = etagOf(r.head.sig);
+  /* файл поменялся с тех пор, как браузер начал его читать по кусочкам, — отдаём целиком */
+  if (want && req.headers['if-range'] && req.headers['if-range'] !== etag) {
+    r.stream.destroy(); want = null;
+    r = await fsGet({ path: p, cwd: userDir(u) });
+    if (r.err) throw fsErr(r);
+  }
+  const { head, stream } = r, size = head.size;
+  if (req.headers['if-none-match'] === etag && !want) { stream.destroy(); res.writeHead(304, { ...SEC, etag }); return res.end(); }
+  if (want && want.start !== undefined && want.start >= size && size > 0) {
+    stream.destroy();
+    res.writeHead(416, { ...SEC, 'content-range': `bytes */${size}` }); return res.end();
+  }
+  const ext = String(head.name).split('.').pop().toLowerCase();
+  const type = dl ? 'application/octet-stream' : FS_TYPES[ext] || 'text/plain; charset=utf-8';
+  const inline = !dl && !!FS_TYPES[ext];
+  /* ?v=время-размер — версия файла в адресе (миниатюры): такой ответ можно держать в кэше браузера */
+  const h = { ...SEC, 'content-type': type, 'accept-ranges': 'bytes', etag, 'cache-control': url.searchParams.get('v') ? 'private, max-age=86400' : 'private, no-cache', 'cross-origin-resource-policy': 'same-origin',
+    'content-disposition': `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(head.name)}` };
+  /* скрипты из файлов сервера не исполняются никогда: песочница без скриптов (у PDF её нет — встроенный просмотрщик в песочнице не открывается) */
+  if (ext !== 'pdf' || dl) h['content-security-policy'] = "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox";
+  const part = !!want && size > 0;
+  h['content-length'] = size ? head.end - head.start + 1 : 0;
+  if (part) h['content-range'] = `bytes ${head.start}-${head.end}/${size}`;
+  if (head.root) h['x-mochi-root'] = '1';
+  res.writeHead(part ? 206 : 200, h);
+  if (req.method === 'HEAD') { stream.destroy(); return res.end(); }
+  res.on('close', () => stream.destroy());
+  stream.on('error', () => res.destroy());
+  stream.pipe(res);
+}
+
+async function fsApi(req, res, u, url) {
+  const p = url.pathname, M = req.method;
+  switch (p) {
+    case '/api/fs/info': {
+      if (M !== 'GET') break;
+      const i = await agentInfo();
+      return json(res, 200, { home: userDir(u), work: CFG.work, agent: i.user || 'mochi-agent', root: !!i.sudo, accessCtl: CFG.accessCtl, admin: !!u.admin, maxUpload: CFG.maxUpload });
+    }
+    case '/api/fs/list': case '/api/fs/stat': case '/api/fs/search': case '/api/fs/du': case '/api/fs/archive': {
+      if (M !== 'GET') break;
+      const fop = p.slice(8), q = fsq(u, url, fop === 'search' ? { q: url.searchParams.get('q') || '', hidden: url.searchParams.get('hidden') === '1' } : {});
+      const r = await fsCmd({ ...q, fop }, fop === 'search' || fop === 'du' ? onAbort(req, res) : undefined);
+      if (r.err) throw fsErr(r);
+      return json(res, 200, r);
+    }
+    case '/api/fs/op': {
+      if (M !== 'POST') break;
+      const b = await jbody(req, 12 * 2 ** 20);
+      if (!['mkdir', 'newfile', 'rename', 'copy', 'move', 'delete', 'chmod', 'write', 'extract', 'pack'].includes(b.fop)) throw new HttpErr(400, 'неизвестная операция');
+      const q = { fop: b.fop, cwd: userDir(u) };
+      for (const k of ['path', 'name', 'dest', 'content', 'expect', 'mode']) if (b[k] != null) q[k] = typeof b[k] === 'number' ? b[k] : String(b[k]);
+      if (Array.isArray(b.paths)) q.paths = b.paths.slice(0, 5000).map(String);
+      if (b.create) q.create = true;
+      const r = await fsCmd(q);
+      if (r.err) throw fsErr(r);
+      return json(res, 200, r);
+    }
+    case '/api/fs/raw': if (M === 'GET' || M === 'HEAD') return fsRaw(req, res, u, url); break;
+    case '/api/fs/tar': {
+      if (M !== 'GET') break;
+      const r = await fsGet({ path: url.searchParams.get('path') || '', cwd: userDir(u), tar: true });
+      if (r.err) throw fsErr(r);
+      res.writeHead(200, { ...SEC, 'content-type': 'application/gzip', 'cache-control': 'no-store', 'content-security-policy': "default-src 'none'; sandbox",
+        'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(r.head.name)}` });
+      res.on('close', () => r.stream.destroy());
+      r.stream.on('error', () => res.destroy());
+      return void r.stream.pipe(res);
+    }
+    case '/api/fs/upload': {
+      if (M !== 'PUT' && M !== 'POST') break;
+      const n = +req.headers['content-length'];
+      if (!(n >= 0) || req.headers['content-length'] == null) throw new HttpErr(411, 'нужен размер файла');
+      if (n > CFG.maxUpload) throw new HttpErr(413, 'файл больше ' + Math.round(CFG.maxUpload / 2 ** 20) + ' МБ');
+      const r = await fsUpload({ dir: url.searchParams.get('dir') || '', name: url.searchParams.get('name') || '', size: n, over: url.searchParams.get('over') === '1', cwd: userDir(u) }, req);
+      if (r.err) { req.resume(); throw fsErr(r); }
+      return json(res, 200, r);
+    }
+  }
+  throw new HttpErr(404, 'нет такого метода');
+}
+
 /* ---------- маршруты ---------- */
 async function api(req, res, url) {
   const p = url.pathname, M = req.method;
@@ -230,6 +342,7 @@ async function api(req, res, url) {
     return json(res, 200, { user: A.publicUser(u), version: VERSION, build: U.buildId(), publicUrl: CFG.publicUrl || null });
   }
   if (!u) throw new HttpErr(401, 'нужен вход');
+  if (p.startsWith('/api/fs/')) return fsApi(req, res, u, url);
   const chat = getChat(u);
 
   switch (p) {
@@ -383,7 +496,7 @@ async function handle(req, res) {
     const code = e.status || 500;
     if (code === 500) console.error('http:', req.method, p, e);
     if (res.headersSent) return res.destroy();
-    json(res, code, { error: code === 500 ? 'внутренняя ошибка сервера' : e.message, ...(e.field ? { field: e.field } : {}), ...(e.upstream ? { upstream: e.upstream } : {}) });
+    json(res, code, { error: code === 500 ? 'внутренняя ошибка сервера' : e.message, ...(e.field ? { field: e.field } : {}), ...(e.upstream ? { upstream: e.upstream } : {}), ...(e.fcode ? { code: e.fcode } : {}) });
   }
 }
 

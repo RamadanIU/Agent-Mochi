@@ -22,7 +22,7 @@ const OUT_MAX = 40000, LINE_MAX = 2000, DEF_LIMIT = 1000, DIR_MAX = 200, SNIP = 
 
 const soft = m => Object.assign(new Error(m), { soft: true });
 const kb = n => n < 1024 ? n + ' Б' : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' КБ' : (n / 1048576).toFixed(1) + ' МБ';
-const sigOf = st => [st.dev, st.ino, st.size, st.mtimeMs].join(':');
+export const sigOf = st => [st.dev, st.ino, st.size, st.mtimeMs].join(':');
 const num = (n, w) => String(n).padStart(w);
 const plural = (n, one, few, many) => { const a = n % 10, b = n % 100; return n + ' ' + (a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 12 || b > 14) ? few : many); };
 const lines = (a, b) => a === b ? 'строка ' + (a + 1) : `строки ${a + 1}–${b + 1}`;
@@ -39,7 +39,7 @@ export function resolvePath(p, cwd) {
 
 /* ---------- текст ---------- */
 const UTF8 = new TextDecoder('utf-8', { fatal: true });
-function decode(buf) {
+export function decode(buf) {
   if (buf.subarray(0, 8192).includes(0)) {
     const u16 = (buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff);
     return { bin: u16 ? 'текст в UTF-16 — сначала сконвертируй в UTF-8: iconv -f UTF-16 -t UTF-8' : 'двоичный файл' };
@@ -52,7 +52,7 @@ function decode(buf) {
   if (crlf) text = text.replace(/\r\n/g, '\n');
   return { text, bom, crlf, utf8 };
 }
-const encode = (text, d) => {
+export const encode = (text, d) => {
   const b = Buffer.from(d.crlf ? text.replace(/\n/g, '\r\n') : text, 'utf8');
   return d.bom ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), b]) : b;
 };
@@ -131,7 +131,7 @@ async function mkParents(dir) {
 /* атомарно: временный файл рядом + rename (файл никогда не бывает «полузаписан»).
    На месте пишем, если у файла несколько жёстких ссылок или он чужой (rename сменил бы владельца),
    а также если в саму папку писать нельзя, а в файл — можно. */
-async function atomicWrite(file, data, st) {
+export async function atomicWrite(file, data, st) {
   const mode = st ? st.mode & 0o7777 : 0o666;
   if (!st || (st.nlink < 2 && (!process.getuid || st.uid === process.getuid()))) {
     const tmp = path.join(path.dirname(file), '.' + path.basename(file).slice(0, 100) + '.' + crypto.randomBytes(4).toString('hex') + '.tmp');

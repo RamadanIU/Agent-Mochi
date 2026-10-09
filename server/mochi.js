@@ -2,6 +2,7 @@
 /* mochi serve   — веб-сервер и агент (пользователь mochi)
    mochi runner  — исполнитель команд агента (пользователь mochi-agent)
    mochi fileop  — файловая операция агента от root (через sudo, при полном доступе)
+   mochi fsop | fsget | fsput — то же для проводника: операция, чтение байтов, загрузка файла
    mochi invite [дней] | users | passwd <имя> | admin <имя> [off] | deluser <имя> | status — управление (root) */
 import net from 'node:net';
 import crypto from 'node:crypto';
@@ -56,6 +57,36 @@ switch (cmd) {
     const { fileOp } = await import('./lib/fileops.js');
     let q; try { q = JSON.parse(s); } catch { q = null; }
     process.stdout.write(JSON.stringify(q && typeof q === 'object' ? await fileOp(q) : { err: 'неверный запрос' }) + '\n');
+    break;
+  }
+  /* проводник от root (см. agentFs* в runner.js): fsop — JSON → JSON; fsget — JSON → заголовок и байты;
+     fsput — заголовок и байты → JSON */
+  case 'fsop': {
+    let s = '';
+    for await (const c of process.stdin) s += c;
+    const { fsOp } = await import('./lib/fsx.js');
+    let q; try { q = JSON.parse(s); } catch { q = null; }
+    process.stdout.write(JSON.stringify(q && typeof q === 'object' ? await fsOp(q) : { err: 'неверный запрос' }) + '\n');
+    break;
+  }
+  case 'fsget': {
+    let s = '';
+    for await (const c of process.stdin) s += c;
+    const { fsOpen } = await import('./lib/fsx.js');
+    let q; try { q = JSON.parse(s); } catch { q = null; }
+    const r = q && typeof q === 'object' ? await fsOpen(q) : { err: 'неверный запрос' };
+    if (r.err) { process.stdout.write(JSON.stringify(r) + '\n'); break; }
+    process.stdout.write(JSON.stringify(r.head) + '\n');
+    const { pipeline } = await import('node:stream/promises');
+    await pipeline(r.stream, process.stdout).catch(() => {});
+    break;
+  }
+  case 'fsput': {
+    const { fsPut } = await import('./lib/fsx.js');
+    const { readHead } = await import('./lib/rawio.js');
+    let r;
+    try { const { head, stream } = await readHead(process.stdin); r = await fsPut(head, stream); } catch (e) { r = { err: e.message }; }
+    process.stdout.write(JSON.stringify(r) + '\n');
     break;
   }
   default:

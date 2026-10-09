@@ -6,6 +6,10 @@
      → {id, op:'spawn', cmd, cwd, env}      ← {id, op:'line', line}…  ← {id, op:'exit', code, err}
      → {id, op:'write', data}               (долгий процесс со stdin/stdout — stdio-серверы MCP)
      → {id, op:'file', fop, path, cwd, …}  ← {id, op:'file', text | err, real, sig, …}   (read_file / edit_file / write_file / view_image)
+     → {id, op:'fs', fop, path, …}          ← {id, op:'fs', …}   (проводник: список, поиск, копирование… — см. fsx.js)
+   Проводнику нужны и сырые байты — для них отдельное соединение, где первая строка — запрос:
+     → {op:'get', path, start, end, tar}    ← заголовок JSON {name, size, sig…} или {err}, дальше байты файла, потом конец
+     → {op:'put', dir, name, size, over}, затем ровно size байт   ← {path, name, size} или {err}
    Каждая команда — новый bash: текущая папка сохраняется между вызовами (её возвращаем), stdin — /dev/null.
    Прерывание/таймаут убивают всю группу процессов. */
 import { spawn, execFileSync } from 'node:child_process';
@@ -17,7 +21,10 @@ import crypto from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
 import { CFG } from './config.js';
+import { pipeline } from 'node:stream';
 import { fileOp, resolvePath } from './fileops.js';
+import { fsOp, fsOpen, fsPrepPut, fsPut } from './fsx.js';
+import { readHead, bodyOf, lines } from './rawio.js';
 import { mirror } from './mirror.js';
 
 const SHELL = ['/bin/bash', '/usr/bin/bash'].find(p => fs.existsSync(p)) || '/bin/sh';
@@ -164,12 +171,15 @@ const MOCHI_JS = fileURLToPath(new URL('../mochi.js', import.meta.url));
 const DENIED = new Set(['EACCES', 'EPERM']);
 const rootFiles = () => (CFG.agentSudo || !CFG.dev) && process.getuid?.() !== 0 && sysInfo().sudo;
 
-function fileOpAsRoot(q) {
+/* sudo node mochi.js <cmd>: запрос — на stdin; ответ — JSON на stdout (fsget — заголовок и байты, см. agentFsOpen) */
+function spawnRoot(cmd) {
+  return spawn(CFG.sudo, ['-n', '--', process.execPath, MOCHI_JS, cmd], { cwd: os.homedir(), stdio: ['pipe', 'pipe', 'pipe'] });
+}
+function rootJson(cmd, q, body) {
   return new Promise((ok, no) => {
     let ch, out = '', err = '';
-    try { ch = spawn(CFG.sudo, ['-n', '--', process.execPath, MOCHI_JS, 'fileop'], { cwd: os.homedir(), stdio: ['pipe', 'pipe', 'pipe'] }); }
-    catch (e) { return no(e); }
-    const t = setTimeout(() => { try { ch.kill('SIGKILL'); } catch {} }, 120e3);
+    try { ch = spawnRoot(cmd); } catch (e) { return no(e); }
+    const t = body ? null : setTimeout(() => { try { ch.kill('SIGKILL'); } catch {} }, 120e3);
     ch.stdout.on('data', d => { out += d; });
     ch.stderr.on('data', d => { err = (err + d).slice(-2000); });
     ch.stdin.on('error', () => {});
@@ -179,9 +189,13 @@ function fileOpAsRoot(q) {
       let r = null; try { r = JSON.parse(out); } catch {}
       if (r && typeof r === 'object') ok(r); else no(new Error(cleanOut(err).trim().split('\n').pop() || 'sudo завершился с кодом ' + code));
     });
-    ch.stdin.end(JSON.stringify(q));
+    if (!body) return ch.stdin.end(JSON.stringify(q));
+    /* загрузка от root: заголовок, потом байты */
+    ch.stdin.write(JSON.stringify(q) + '\n');
+    pipeline(body, ch.stdin, e => { if (e) try { ch.kill('SIGKILL'); } catch {} });
   });
 }
+const fileOpAsRoot = q => rootJson('fileop', q);
 
 export async function agentFileOp(q) {
   const r = await fileOp(q);
@@ -194,30 +208,93 @@ export async function agentFileOp(q) {
   return { ...r2, root: true };
 }
 
+/* ---------- проводник (fsx.js) с тем же повтором от root ----------
+   Пути заранее делаем абсолютными: у root другой HOME. Удалять и уносить домашнюю папку агента нельзя и от root. */
+const denied = r => DENIED.has(r.code) || (Array.isArray(r.errors) && r.errors.some(e => DENIED.has(e.code)));
+function fsAbs(q) {
+  const a = { ...q, keep: [os.homedir()] };
+  for (const k of ['path', 'dest', 'dir']) if (typeof a[k] === 'string' && a[k].trim()) a[k] = resolvePath(a[k], q.cwd);
+  if (Array.isArray(a.paths)) a.paths = a.paths.filter(x => typeof x === 'string').map(x => resolvePath(x, q.cwd));
+  delete a.signal; delete a.id; delete a.op;
+  return a;
+}
+
+export async function agentFsOp(q) {
+  const a = fsAbs(q), r = await fsOp({ ...a, signal: q.signal });
+  if (!denied(r) || !rootFiles()) return r;
+  try {
+    if (!Array.isArray(r.errors)) return { ...await rootJson('fsop', a), root: true };
+    /* несколько путей: от root повторяем только те, где не хватило прав */
+    const again = r.errors.filter(e => DENIED.has(e.code)).map(e => e.path);
+    const r2 = await rootJson('fsop', { ...a, paths: again });
+    if (r2.err) return r;
+    return { done: [...r.done, ...(r2.done || []).map(x => ({ ...x, root: true }))], errors: [...r.errors.filter(e => !DENIED.has(e.code)), ...(r2.errors || [])], root: true };
+  } catch (e) { return { ...r, err: r.err ? r.err + ` (повторить от root не вышло: ${e.message})` : r.err }; }
+}
+
+/* поток байтов: {head, stream} или {err} */
+export async function agentFsOpen(q) {
+  const a = fsAbs(q), r = await fsOpen(a);
+  if (!DENIED.has(r.code) || !rootFiles()) return r;
+  let ch;
+  try { ch = spawnRoot('fsget'); } catch { return r; }
+  ch.stdin.on('error', () => {}); ch.stderr.resume();
+  ch.on('error', () => {});
+  ch.stdin.end(JSON.stringify(a));
+  try {
+    const { head, stream } = await readHead(ch.stdout);
+    if (head.err) { try { ch.kill('SIGKILL'); } catch {} return head; }
+    stream.once('close', () => { try { ch.kill('SIGKILL'); } catch {} });
+    return { head: { ...head, root: true }, stream };
+  } catch (e) { try { ch.kill('SIGKILL'); } catch {} return { ...r, err: r.err + ` (повторить от root не вышло: ${e.message})` }; }
+}
+
+/* загрузка: права проверяются до чтения тела — не хватило, тело целиком уходит root-помощнику */
+export async function agentFsPut(q, src) {
+  const a = fsAbs(q), prep = await fsPrepPut(a);
+  if (!DENIED.has(prep.code) || !rootFiles()) return fsPut(a, src, prep);
+  try { return { ...await rootJson('fsput', a, src), root: true }; }
+  catch (e) { src.resume?.(); return { ...prep, err: prep.err + ` (повторить от root не вышло: ${e.message})` }; }
+}
+
+/* сырое соединение: get — отдать байты, put — принять ровно size байт и ответить итогом */
+async function rawConn(conn, m, rest) {
+  conn.on('error', () => {});
+  if (m.op === 'get') {
+    const r = await agentFsOpen(m);
+    if (r.err || !r.stream) return conn.end(JSON.stringify({ err: r.err || 'не открылся', code: r.code }) + '\n');
+    conn.write(JSON.stringify(r.head) + '\n');
+    pipeline(r.stream, conn, () => {});
+    return;
+  }
+  const r = await agentFsPut(m, bodyOf(conn, rest, Math.max(0, Math.floor(+m.size || 0))));
+  if (!conn.destroyed) conn.end(JSON.stringify(r) + '\n');
+}
+
 /* ---------- служба: unix-сокет ---------- */
 export function startRunner(sock) {
   try { fs.unlinkSync(sock); } catch {}
   const srv = net.createServer(conn => {
     const jobs = new Map();
-    let buf = '';
+    let first = true;
     const send = o => { if (!conn.destroyed) conn.write(JSON.stringify(o) + '\n'); };
-    conn.on('data', d => {
-      buf += d.toString('utf8');
-      if (buf.length > 32 * 2 ** 20) { conn.destroy(); return; }
-      let i;
-      while ((i = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, i); buf = buf.slice(i + 1);
-        let m; try { m = JSON.parse(line); } catch { continue; }
-        if (m.op === 'exec' && !jobs.has(m.id)) {
-          jobs.set(m.id, execCommand(m, r => { jobs.delete(m.id); send({ id: m.id, op: 'done', ...r }); }));
-        } else if (m.op === 'spawn' && !jobs.has(m.id)) {
-          jobs.set(m.id, spawnProcess(m, line => send({ id: m.id, op: 'line', line }), (code, err) => { jobs.delete(m.id); send({ id: m.id, op: 'exit', code, err }); }));
-        } else if (m.op === 'file') {
-          agentFileOp(m).then(r => send({ ...r, id: m.id, op: 'file' }), e => send({ id: m.id, op: 'file', err: e.message }));
-        } else if (m.op === 'write') jobs.get(m.id)?.write?.(m.data);
-        else if (m.op === 'kill') jobs.get(m.id)?.kill();
-        else if (m.op === 'info') send({ id: m.id, op: 'info', ...sysInfo() });
-      }
+    lines(conn, (m, rest) => {
+      /* сырое соединение проводника — только первым сообщением */
+      if (first && (m.op === 'get' || m.op === 'put')) { rawConn(conn, m, rest).catch(() => conn.destroy()); return true; }
+      first = false;
+      if (m.op === 'exec' && !jobs.has(m.id)) {
+        jobs.set(m.id, execCommand(m, r => { jobs.delete(m.id); send({ id: m.id, op: 'done', ...r }); }));
+      } else if (m.op === 'spawn' && !jobs.has(m.id)) {
+        jobs.set(m.id, spawnProcess(m, line => send({ id: m.id, op: 'line', line }), (code, err) => { jobs.delete(m.id); send({ id: m.id, op: 'exit', code, err }); }));
+      } else if (m.op === 'file') {
+        agentFileOp(m).then(r => send({ ...r, id: m.id, op: 'file' }), e => send({ id: m.id, op: 'file', err: e.message }));
+      } else if (m.op === 'fs' && !jobs.has(m.id)) {
+        const ac = new AbortController();
+        jobs.set(m.id, { kill: () => ac.abort() });
+        agentFsOp({ ...m, signal: ac.signal }).then(r => r, e => ({ err: e.message })).then(r => { jobs.delete(m.id); send({ ...r, id: m.id, op: 'fs' }); });
+      } else if (m.op === 'write') jobs.get(m.id)?.write?.(m.data);
+      else if (m.op === 'kill') jobs.get(m.id)?.kill();
+      else if (m.op === 'info') send({ id: m.id, op: 'info', ...sysInfo() });
     });
     /* сервер отключился (перезапуск) — его команды больше никто не ждёт */
     const drop = () => { for (const j of jobs.values()) j.kill(); jobs.clear(); };
