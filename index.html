@@ -353,10 +353,10 @@ background:var(--card) repeating-linear-gradient(var(--ink) 0 2px,transparent 2p
 .f .fx input{flex:1;min-width:0;width:auto}
 .eye{flex:none;width:40px;height:40px;margin:0 4px 0 0;padding:0;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--ink);box-shadow:var(--sh4)}
 .eye .pi{width:20px;height:16px;--ico:var(--i-eye)}.eye[aria-pressed=true]{background:var(--acc);color:var(--onacc)}
-#mh{display:flex;align-items:baseline;gap:8px;margin:10px 4px 0;font-size:8px;line-height:1.7}
-#mh::before{content:"";flex:none;width:8px;height:8px;background:var(--mut)}
-#mh[data-s=ok]::before{background:var(--ok)}#mh[data-s=err]::before{background:var(--err)}#mh[data-s=wait]::before{background:var(--acc);animation:blk .5s steps(1) infinite}
-#mh[data-s=err]{color:var(--err)}
+#mh,#sh{display:flex;align-items:baseline;gap:8px;margin:10px 4px 0;font-size:8px;line-height:1.7}#sh[hidden]{display:none}
+#mh::before,#sh::before{content:"";flex:none;width:8px;height:8px;background:var(--mut)}
+#mh[data-s=ok]::before{background:var(--ok)}#mh[data-s=err]::before,#sh[data-s=err]::before{background:var(--err)}#mh[data-s=wait]::before{background:var(--acc);animation:blk .5s steps(1) infinite}
+#mh[data-s=err],#sh[data-s=err]{color:var(--err)}
 .note{display:block;margin-top:22px;padding:10px 12px;background:var(--bg);color:var(--mut);font-size:8px;line-height:1.8;box-shadow:var(--sh2)}
 .wfoot{flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px calc(14px + env(safe-area-inset-bottom,0px));background:var(--card);border-top:4px solid var(--ink)}
 .wfoot .lnk{margin:0;padding:8px 2px}
@@ -938,6 +938,8 @@ background:repeating-conic-gradient(color-mix(in srgb,var(--line) 70%,var(--card
     <label class="f">Модель<input id="c-model" autocapitalize="off" autocomplete="off" spellcheck="false"></label><div id="ml" hidden></div><small id="mh"></small>
     <label class="sw"><span>Поиск в интернете<small>Модель сама ищет свежие данные и читает страницы</small></span><input type="checkbox" role="switch" id="c-search"></label>
     <label class="sw"><span>Показывать файлы модели<small>Картинки и PDF уходят прямо в модель. Выключи, если она не умеет их читать</small></span><input type="checkbox" role="switch" id="c-vis"></label>
+    <label class="sw"><span>Ограничение шагов<small>Мочи останавливается после стольких шагов подряд, чтобы не зациклиться. Выключи — будет работать до конца или до «Стоп»</small></span><input type="checkbox" role="switch" id="c-lim"></label>
+    <label class="f" id="f-steps">Шагов подряд, не больше<input id="c-steps" type="number" min="1" max="10000" step="1" inputmode="numeric"></label><small id="sh" hidden></small>
     <details>
       <summary>Характер Мочи</summary>
       <label class="f">Инструкция для модели<textarea id="c-sys"></textarea></label>
@@ -1675,11 +1677,13 @@ const relayList=s=>[...new Set(String(s||'').split(/[\s,;]+/).map(x=>x.trim()).f
 const FMT='Оформление: чат показывает Markdown — заголовки, списки, таблицы, цитаты и врезки (> [!NOTE], > [!TIP], > [!WARNING]), `код` и блоки кода с языком, формулы LaTeX ($…$, $$…$$) и схемы в блоке ```mermaid (flowchart, sequenceDiagram, stateDiagram, pie, mindmap, timeline). Пользуйся этим, только когда правда помогает: сравнение — таблицей, процесс или связи — схемой, вычисления — формулой. Короткий ответ оставляй простым текстом.';
 const DEF={base:'https://api.openai.com/v1',key:'',model:'gpt-4o-mini',
  sys:'Тебя зовут Мочи — ты милый пиксельный зверёк-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к Linux (Alpine, musl, BusyBox, x86 32-бит; пакеты ставятся через apk add, если есть сеть) через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. В поле action кратко и по-человечески пиши, что делаешь. Команды делай короткими, вывод усекается. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.',
- img:'https://i.copy.sh/buildroot-bzimage68.bin',mem:128,net:DEF_RELAYS,search:true};
+ img:'https://i.copy.sh/buildroot-bzimage68.bin',mem:128,net:DEF_RELAYS,search:true,stepLimit:true,maxSteps:40};
+/* лимит шагов подряд: целое от 1 до MAXSTEPS_CAP, иначе null */
+const MAXSTEPS_CAP=10000,stepsOk=v=>{const n=Math.round(+v);return String(v).trim()&&n>=1&&n<=MAXSTEPS_CAP?n:null};
 let cfg={...DEF};
 try{Object.assign(cfg,JSON.parse(localStorage.getItem('llmlinux')||'{}'))}catch(e){}
 /* защита от испорченных/старых настроек */
-cfg.mem=+cfg.mem||128;if(typeof cfg.img!=='string'||!cfg.img.trim())cfg.img=DEF.img;if(typeof cfg.sys!=='string'||!cfg.sys.trim())cfg.sys=DEF.sys;if(typeof cfg.base!=='string'||!cfg.base.trim())cfg.base=DEF.base;cfg.base=cfg.base.trim().replace(/\/+$/,'');
+cfg.mem=+cfg.mem||128;cfg.maxSteps=stepsOk(cfg.maxSteps)||DEF.maxSteps;if(typeof cfg.img!=='string'||!cfg.img.trim())cfg.img=DEF.img;if(typeof cfg.sys!=='string'||!cfg.sys.trim())cfg.sys=DEF.sys;if(typeof cfg.base!=='string'||!cfg.base.trim())cfg.base=DEF.base;cfg.base=cfg.base.trim().replace(/\/+$/,'');
 const save=()=>{try{localStorage.setItem('llmlinux',JSON.stringify(cfg))}catch(e){}};
 if(!(cfg.v>=5)){if(/^Ты помощник с доступом к маленькому Linux/.test(cfg.sys)||cfg.sys==="Ты помощник с доступом к Linux (Alpine, musl, BusyBox, x86 32-бит; пакеты ставятся через apk add, если есть сеть) через инструмент run_command. Используй его, чтобы проверять факты, а не угадывать. В поле action кратко и по-человечески пиши, что делаешь. Команды делай короткими, вывод усекается. В ответе не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.")cfg.sys=DEF.sys;cfg.v=5;save()}
 /* v6: вместо одного relay — список серверов; старый relay остаётся запасным */
@@ -1735,17 +1739,21 @@ function corsHint(base){const u=apiUrl(base);if(u&&/(^|\.)ollama\.com$/i.test(u.
 const prov=$('#c-prov'),memSel=$('#c-mem');
 for(const k of [...Object.keys(PRESETS),CUSTOM])prov.add(new Option(k,k));
 const F={base:'#c-base',key:'#c-key',model:'#c-model',sys:'#c-sys',img:'#c-img'};
-function syncSet(){const p=prov.value;$('#f-base').hidden=p!==CUSTOM;$('#f-key').hidden=LOCAL.includes(p);$('#f-net').hidden=$('#netchk').hidden=!$('#c-neton').checked;netInfo()}
+function syncSet(){const p=prov.value;$('#f-steps').hidden=!$('#c-lim').checked;$('#sh').hidden=true;$('#f-base').hidden=p!==CUSTOM;$('#f-key').hidden=LOCAL.includes(p);$('#f-net').hidden=$('#netchk').hidden=!$('#c-neton').checked;netInfo()}
 function fill(s){
   for(const k in F)$(F[k]).value=s[k]||'';
   prov.value=Object.keys(PRESETS).find(k=>PRESETS[k]===s.base)||CUSTOM;
-  $('#c-sfx').checked=s.sfx!==false;$('#c-key').type='password';$('#c-eye').setAttribute('aria-pressed','false');$('#c-search').checked=s.search!==false;$('#c-vis').checked=s.vis!==false;$('#c-tts').checked=s.tts!==false;$('#c-vlang').value=s.vlang||(window.mochiGuess?mochiGuess():'ru-RU');$('#c-neton').checked=!!s.net;$('#c-net').value=relayList(s.net||DEF.net).join('\n');
+  $('#c-sfx').checked=s.sfx!==false;$('#c-key').type='password';$('#c-eye').setAttribute('aria-pressed','false');$('#c-search').checked=s.search!==false;$('#c-vis').checked=s.vis!==false;$('#c-lim').checked=s.stepLimit!==false;$('#c-steps').value=s.maxSteps||DEF.maxSteps;$('#c-tts').checked=s.tts!==false;$('#c-vlang').value=s.vlang||(window.mochiGuess?mochiGuess():'ru-RU');$('#c-neton').checked=!!s.net;$('#c-net').value=relayList(s.net||DEF.net).join('\n');
   memSel.innerHTML='';for(const v of [...new Set([...MEMS,+s.mem||128])].sort((a,b)=>a-b))memSel.add(new Option(v>=1024?v/1024+' ГБ':v+' МБ',v));
   memSel.value=String(+s.mem||128);syncSet()}
 /* сменили провайдера — модель из старого списка там, скорее всего, не найдётся: loadModels подберёт новую */
 let provNew=false;
 prov.onchange=()=>{if(prov.value!==CUSTOM)$('#c-base').value=PRESETS[prov.value];provNew=true;syncSet();loadModels()};
-$('#c-neton').onchange=syncSet;
+$('#c-neton').onchange=$('#c-lim').onchange=syncSet;
+/* лимит шагов: пустое или вне 1…10000 не сохраняем, а показываем ошибку у поля */
+function readSteps(){const n=stepsOk($('#c-steps').value),h=$('#sh');
+  if(n||!$('#c-lim').checked){h.hidden=true;return{stepLimit:$('#c-lim').checked,maxSteps:n||undefined}}
+  stab('ai');h.hidden=false;h.textContent='Шагов подряд — целое число от 1 до '+MAXSTEPS_CAP;h.dataset.s='err';$('#c-steps').focus();return null}
 const stabs=[...document.querySelectorAll('.stabs button')];
 function stab(p){stabs.forEach(b=>{const on=b.dataset.p===p;b.classList.toggle('on',on);b.setAttribute('aria-selected',on);b.tabIndex=on?0:-1});
   document.querySelectorAll('.spane').forEach(x=>x.hidden=x.id!=='p-'+p);$('.sbody').scrollTop=0}
@@ -1758,6 +1766,7 @@ $('#c-eye').onclick=()=>{const k=$('#c-key'),on=k.type==='password';k.type=on?'t
 $('#dlg').addEventListener('close',()=>{window.__keepForm=!!window.__fsClose;window.__fsClose=false});
 $('#c-x').onclick=()=>$('#dlg').close();
 $('#c-save').onclick=()=>{
+  const st=readSteps();if(!st)return;cfg.stepLimit=st.stepLimit;if(st.maxSteps)cfg.maxSteps=st.maxSteps;
   const old=[cfg.mem,!!cfg.net,cfg.img].join(),oldNet=cfg.net;
   for(const k in F)cfg[k]=$(F[k]).value.trim();
   if(!cfg.img)cfg.img=DEF.img;if(!cfg.sys)cfg.sys=DEF.sys;if(!cfg.base)cfg.base=DEF.base;
@@ -2585,14 +2594,13 @@ const RUN_TOOL={type:'function',function:{name:'run_command',description:'Вып
    action:{type:'string',description:'Что ты делаешь сейчас — для пользователя: 2–6 слов на его языке, например «Проверяю версию ядра». Без команд и технических деталей.'},
    command:{type:'string',description:'Команда'},
    timeout:{type:'number',description:'Таймаут, сек (по умолчанию 120, максимум 600; тяжёлое — node, apk, компиляция — ставь больше)'}},required:['action','command']}}};
-const MAXSTEPS=40;
 const abortErr=()=>Object.assign(new Error('остановлено'),{name:'AbortError'});
 const apiErr=e=>Object.assign(new Error(typeof e==='string'?e:(e&&e.message)||'ошибка модели'),{detail:e&&typeof e==='object'?JSON.stringify(e).slice(0,300):''});
 /* sig — отмена этого ответа; g — «поколение» чата: после очистки старый цикл ничего не пишет в новую историю */
 async function loop(sig,g){
   const chk=()=>{if(sig.aborted||g!==gen)throw abortErr()};
   for(let step=0;;step++){
-    if(step>=MAXSTEPS)throw new Error('Мочи сделала '+MAXSTEPS+' шагов подряд и остановилась, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить.');
+    if(cfg.stepLimit!==false&&step>=cfg.maxSteps)throw new Error('Мочи сделала '+cfg.maxSteps+' шагов подряд и остановилась, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить. Лимит шагов меняется в настройках → Модель.');
     think(true);const web=cfg.search?await mcpTools():[];chk();think(true);
     const msgs=wire(),hasM=msgs.some(m=>Array.isArray(m.content));
     const sys=cfg.sys+'\nСегодня '+new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'})+'.'

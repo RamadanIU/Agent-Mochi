@@ -247,7 +247,7 @@ async function started() {
 }
 function mirror() {
   if (!srvSet) return;
-  Object.assign(cfg, { base: srvSet.base, model: srvSet.model, sys: srvSet.sys, search: srvSet.search, vis: srvSet.vis, key: '' });
+  Object.assign(cfg, { base: srvSet.base, model: srvSet.model, sys: srvSet.sys, search: srvSet.search, vis: srvSet.vis, stepLimit: srvSet.stepLimit, maxSteps: srvSet.maxSteps, key: '' });
 }
 
 /* ---------- отправка ---------- */
@@ -306,12 +306,13 @@ openSet = function (p) {
 };
 $('#c-reset').onclick = async () => {
   if (!await ask('Сброс', 'Вернуть настройки как было с завода? Ключ API тоже сотрётся. Применится после «Сохранить».', null, 'Сбросить')) return;
-  fill(DEF); $('#c-sys').value = ''; $('#c-key').placeholder = 'sk-…'; clearKey = true;
+  fill(DEF); $('#c-sys').value = ''; $('#c-steps').value = srvSet?.maxStepsDef || DEF.maxSteps; $('#c-key').placeholder = 'sk-…'; clearKey = true;
 };
 $('#c-save').onclick = async () => {
+  const st = readSteps(); if (!st) return;
   cfg.tts = $('#c-tts').checked; cfg.sfx = $('#c-sfx').checked; cfg.vlang = $('#c-vlang').value;
   if (!cfg.tts && window.mochiStop) mochiStop();
-  const body = { base: $('#c-base').value.trim(), model: $('#c-model').value.trim(), sys: $('#c-sys').value.trim(), search: $('#c-search').checked, vis: $('#c-vis').checked };
+  const body = { base: $('#c-base').value.trim(), model: $('#c-model').value.trim(), sys: $('#c-sys').value.trim(), search: $('#c-search').checked, vis: $('#c-vis').checked, ...st };
   const k = $('#c-key').value.trim();
   if (k) body.key = k; else if (clearKey) body.clearKey = true;
   try {

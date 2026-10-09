@@ -18,6 +18,7 @@ before(async () => {
       const img = u.content.find?.(p => p.type === 'image_url'), tool = body.messages.filter(x => x.role === 'tool').slice(-2);
       return { text: img ? 'вижу ' + img.image_url.url.slice(0, 22) + ' | ' + tool.map(x => x.content).join(' | ') : 'не вижу' };
     }
+    if (ut.startsWith('цикл')) return body.messages.slice(body.messages.lastIndexOf(u)).filter(x => x.role === 'tool').length < 4 ? { tools: [{ name: 'run_command', args: { action: 'Кручусь', command: 'true' } }] } : { text: 'цикл готов' };
     if (ut.startsWith('спать')) return last.role === 'user' ? { tools: [{ name: 'run_command', args: { action: 'Сплю', command: 'sleep 30; echo проснулась' } }] } : { text: 'остановлена?' };
     if (ut.startsWith('медленно')) return last.role === 'user' ? { tools: [{ name: 'run_command', args: { action: 'Долго', command: 'sleep 2; echo ok > slow.txt' } }] } : { text: 'медленно готово' };
     if (ut.startsWith('украсть')) return last.role === 'user' ? { tools: [{ name: 'run_command', args: { action: 'Ссылка', command: `ln -sf ${process.env.__DATA}/users.json steal.json` } }] } : last.content.includes('steal') || last.content.includes('код выхода') && !last.content.includes('отправлен') && !/рабочей папки/.test(last.content) ? { tools: [{ name: 'send_file', args: { path: 'steal.json' } }] } : { text: 'итог: ' + last.content };
@@ -101,6 +102,25 @@ test('live-поток: дельты текста, шаги и окончание
   assert.ok(evs.some(e => e.ev === 'log' && e.d.kind === 'tool' && e.d.state === 'run'));
   assert.ok(evs.some(e => e.ev === 'run' && e.d.running === true));
   /* второе сообщение во время работы — 409 */
+});
+
+test('лимит шагов: из настроек, выключается', async () => {
+  const c = await registered(m, 'lim');
+  assert.equal((await c.json('/api/settings', { maxSteps: 0 }, 'PUT')).status, 400);
+  assert.equal((await c.json('/api/settings', { maxSteps: 'много' }, 'PUT')).status, 400);
+  const s = (await c.json('/api/settings', { base: model.url, model: 'fake-1', maxSteps: 2 }, 'PUT')).j;
+  assert.equal(s.stepLimit, true); assert.equal(s.maxSteps, 2); assert.equal(s.maxStepsDef, 100);
+  let p = c.events(doneRun);
+  await sleep(200);
+  await c.json('/api/chat', { text: 'цикл' });
+  let evs = await p;
+  assert.match(evs.filter(e => e.ev === 'log' && e.d.kind === 'error').at(-1).d.text, /2 шагов подряд/);
+  assert.equal((await c.json('/api/settings', { stepLimit: false }, 'PUT')).j.stepLimit, false);
+  p = c.events(doneRun);
+  await sleep(200);
+  await c.json('/api/chat', { text: 'цикл ещё' });
+  evs = await p;
+  assert.equal(evs.filter(e => e.ev === 'log' && e.d.kind === 'assistant').at(-1).d.text, 'цикл готов');
 });
 
 test('остановка убивает команду', async () => {
