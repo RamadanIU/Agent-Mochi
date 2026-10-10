@@ -1,10 +1,8 @@
-/* Мочи: офлайн-кэш. Страница — «сначала сеть» (обновления приходят сразу),
-   движок v86 и ядро Linux — «сначала кэш» (качаются один раз). Запросы к модели не трогаем.
-   На сервере Мочи /api/, /term/ и /srv/ не кэшируются вовсе. */
-const V = 'mochi-v2';
+/* Мочи: офлайн-кэш страницы — «сначала сеть» (обновления приходят сразу), из кэша — только если сервер
+   не ответил. /api/, /term/ и /srv/ не кэшируются вовсе. */
+const V = 'mochi-v3';
 const CORE = ['./', './index.html', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-192.png', './icons/maskable-512.png'];
-const HEAVY = [/^https:\/\/cdn\.jsdelivr\.net\/npm\/v86@/, /^https:\/\/i\.copy\.sh\//];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(V).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
@@ -22,7 +20,7 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  /* режим сервера: API, поток событий и терминал — всегда напрямую */
+  /* API, поток событий и терминал — всегда напрямую */
   if (url.origin === location.origin && /\/(api|term|srv)\//.test(url.pathname)) return;
 
   if (url.origin === location.origin) {
@@ -35,12 +33,5 @@ self.addEventListener('fetch', e => {
       return res;
     }).catch(() => cached().then(r => r || Response.error())));
     return;
-  }
-
-  if (HEAVY.some(r => r.test(req.url)) && !req.headers.has('range')) {
-    e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => {
-      if (okToStore(req, res)) { const cp = res.clone(); caches.open(V).then(c => c.put(req, cp)); }
-      return res;
-    })));
   }
 });

@@ -75,20 +75,10 @@ function sameOrigin(req) {
 }
 const userOf = req => A.sessionUser(cookies(req)[COOKIE]);
 
-/* ---------- страница: внедряем режим сервера, CSP с хешами встроенных скриптов ----------
-   Образ Alpine и BIOS внутри index.html нужны только браузерной версии (эмулятору v86): на сервере Linux настоящий.
-   Это 3,6 МБ из 3,8 в сжатом виде — без них страница весит ~190 КБ и открывается за доли секунды, а не за 10–20 с на медленной сети */
-export function stripImages(src) {
-  for (const k of ["const BIOS='", ",VGA='", "const ALP='"]) {
-    const i = src.indexOf(k), a = i + k.length, b = i < 0 ? -1 : src.indexOf("'", a);
-    if (b - a > 256 && /^[A-Za-z0-9+/=]+$/.test(src.slice(a, a + 256))) src = src.slice(0, a) + src.slice(b);
-  }
-  return src;
-}
+/* ---------- страница: подключаем client.js, CSP с хешами встроенных скриптов ---------- */
 let page = null;
 function loadPage() {
-  const src = stripImages(fs.readFileSync(path.join(CFG.web, 'index.html'), 'utf8'))
-    .replace('<head>', '<head>\n<meta name="mochi-server" content="1">')
+  const src = fs.readFileSync(path.join(CFG.web, 'index.html'), 'utf8')
     .replace(/<\/body>(?![\s\S]*<\/body>)/, '<script src="srv/client.js"></script>\n</body>');
   const hashes = [...src.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => `'sha256-${crypto.createHash('sha256').update(m[1]).digest('base64')}'`);
   const csp = ["default-src 'self'", `script-src 'self' ${hashes.join(' ')}`, "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:", "font-src 'self' data:",

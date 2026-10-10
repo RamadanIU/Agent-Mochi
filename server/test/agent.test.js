@@ -201,11 +201,10 @@ test('после перезапуска сервера незаконченна�
   assert.match(all, /Сервер перезапускался/);
 });
 
-test('страница отдаётся с режимом сервера и строгим CSP', async () => {
+test('страница отдаётся с client.js и строгим CSP', async () => {
   const r = await fetch(m.base + '/');
   const t = await r.text();
-  assert.match(t, /<meta name="mochi-server" content="1">/);
-  assert.match(t, /srv\/client\.js/);
+  assert.match(t, /<script src="srv\/client\.js"><\/script>/);
   const csp = r.headers.get('content-security-policy');
   assert.match(csp, /script-src 'self' 'sha256-/);
   assert.doesNotMatch(csp, /script-src[^;]*unsafe-inline/);
