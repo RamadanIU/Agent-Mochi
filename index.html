@@ -889,9 +889,236 @@ background:repeating-conic-gradient(color-mix(in srgb,var(--line) 70%,var(--card
 .fx-code,.fx-hex{font-variant-ligatures:none}
 .fx-win:focus{outline:none}
 .fx-prev.tbl .md{max-width:none}
+
+/* ===== экран загрузки: окошко с Мочи и «BIOS»-экраном шагов, пока страница и сервер просыпаются (скрипт — в начале <body>) ===== */
+#boot{position:fixed;inset:0;z-index:97;display:flex;padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain;
+background:var(--bg) conic-gradient(var(--line) 25%,transparent 0 50%,var(--line) 0 75%,transparent 0) 0 0/32px 32px}
+#boot.out{animation:bout .32s steps(4) forwards;pointer-events:none}
+#boot.out .bw{animation:bwout .32s steps(4) forwards}
+@keyframes bout{to{opacity:0}}
+@keyframes bwout{to{transform:translateY(-10px) scale(.94)}}
+@keyframes bwin{from{transform:translateY(12px);opacity:0}}
+.bw{width:min(460px,100%);margin:auto;background:var(--card);border:4px solid var(--ink);box-shadow:8px 8px 0 var(--ink);animation:bwin .24s steps(3)}
+.bw .wbar b{font-size:8px}
+.bb{padding:16px 18px 18px}
+.bh{position:relative;display:flex;align-items:center;gap:14px}
+.bh .ht{left:52px;bottom:84px}
+#boot-pet{flex:none;width:120px;height:108px;margin:-6px -6px -6px -10px;image-rendering:pixelated;cursor:pointer;touch-action:manipulation}
+.bsay{flex:1;min-width:0;min-height:58px;position:relative;margin:4px;padding:10px 12px;display:flex;align-items:center;background:var(--bg);font:9px/1.7 var(--pf);box-shadow:var(--sh4);overflow-wrap:anywhere}
+.bsay::before{content:"";position:absolute;left:-8px;top:20px;width:8px;height:8px;background:var(--bg);box-shadow:-4px 0 var(--ink),0 -4px var(--ink),0 4px var(--ink)}
+#boot-say::after{content:"_";color:var(--acc);animation:blk .6s steps(1) infinite}
+.bsr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.bbar{height:26px;margin:18px 4px 0;padding:5px;background:var(--bg);box-shadow:var(--sh4)}
+.bbar i{display:block;height:100%;width:0;background:repeating-linear-gradient(90deg,var(--acc) 0 8px,transparent 8px 11px);transition:width .2s steps(3)}
+#boot[data-s=wait] .bbar i{background:repeating-linear-gradient(90deg,var(--mut) 0 8px,transparent 8px 11px)}
+.bnum{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:12px 4px 0;color:var(--mut);font:7px/1.7 var(--pf)}
+.bnum b{flex:none;color:var(--acc);font:12px/1 var(--pf);font-weight:400}
+.bnum span{text-align:right}
+.bcrt{position:relative;margin:18px 4px 0;padding:10px 14px 12px;overflow:hidden;background:var(--tbg);color:var(--tfg);font:19px/1.12 var(--mono);text-shadow:0 0 6px var(--glow);box-shadow:var(--sh4)}
+.bcrt::before{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:repeating-linear-gradient(to bottom,transparent 0 2px,rgba(0,0,0,.32) 2px 3px,transparent 3px 4px)}
+.bcrt::after{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;background:radial-gradient(ellipse 80% 75% at 50% 50%,transparent 55%,rgba(0,0,0,.5) 100%);animation:flk 7s steps(1) infinite}
+.bcrt .bt{display:flex;justify-content:space-between;gap:10px;margin-bottom:4px;opacity:.6;white-space:nowrap}
+.bcrt .bt span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis}
+#boot-log{margin:0;padding:0;list-style:none}
+#boot-log li{display:flex;align-items:baseline;gap:6px;white-space:nowrap}
+#boot-log .bl{flex:none}
+#boot-log .bf{flex:1;min-width:8px;overflow:hidden;opacity:.4}
+#boot-log .bf::before{content:"................................................................"}
+#boot-log .bd{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+#boot-log .bs{flex:none;min-width:4.6ch;text-align:right}
+#boot-log li[data-s=todo]{opacity:.32}
+#boot-log li[data-s=run] .bs{animation:blk .8s steps(1) infinite}
+#boot-log li[data-s=wait],#boot-log li.berr{color:#ff8fa3;text-shadow:0 0 6px rgba(255,90,120,.55)}
+#boot-log li.berr{white-space:normal;overflow-wrap:anywhere}
+.bcrt .bc::after{content:"";display:inline-block;width:.55em;height:.9em;vertical-align:-.1em;background:var(--tfg);box-shadow:0 0 6px var(--glow);animation:blk 1s steps(1) infinite}
+.bwhy{margin:18px 4px 0;padding:10px 12px 11px;background:var(--bg);box-shadow:var(--sh2);font:8px/1.8 var(--pf)}
+.bwhy b{display:block;margin-bottom:4px;color:var(--acc);font-weight:400}
+.bwhy[data-k=warn] b{color:var(--err)}
+.bwhy[hidden],.bact[hidden],.bact [hidden]{display:none}
+.bact{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.bact .pbtn.sm{flex:1 1 auto}
+@media(max-width:400px){.bb{padding:14px 12px 16px}#boot-pet{width:80px;height:72px;margin:-4px -4px -4px -6px}.bh .ht{left:30px;bottom:56px}.bcrt{padding:9px 10px 11px;font-size:17px}}
 </style>
 </head>
 <body>
+<div id="boot" aria-busy="true">
+ <div class="bw">
+  <div class="wbar"><span></span><b id="boot-t">Мочи просыпается</b><span></span></div>
+  <div class="bb">
+   <div class="bh"><canvas id="boot-pet" width="40" height="36" title="Погладить Мочи" aria-hidden="true"></canvas><p class="bsay"><span id="boot-say" aria-hidden="true">Протираю глазки…</span><span class="bsr" id="boot-sr" role="status"></span></p></div>
+   <div class="bbar" id="boot-bar" role="progressbar" aria-label="Загрузка Мочи" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+   <div class="bnum"><b id="boot-pct">0%</b><span id="boot-eta">считаю, сколько ждать…</span></div>
+   <div class="bcrt"><div class="bt" aria-hidden="true"><span>MOCHI BIOS</span><span id="boot-host"></span></div><ol id="boot-log" aria-label="Шаги загрузки"></ol><div class="bc" aria-hidden="true"></div></div>
+   <div class="bwhy" id="boot-why" role="alert" hidden><b></b><span></span></div>
+   <div class="bact" id="boot-act" hidden><button class="pbtn sm" type="button" id="boot-retry" hidden>Повторить сейчас</button><button class="pbtn sm" type="button" id="boot-reload">Обновить страницу</button><button class="pbtn sm" type="button" id="boot-skip" hidden>Открыть как есть</button></div>
+  </div>
+ </div>
+</div>
+<script>
+/* ---------- экран загрузки ----------
+   Пока страница, скрипты и сервер просыпаются, Мочи рассказывает, что сейчас делается, сколько занял каждый шаг и сколько ещё ждать.
+   «Сколько ждать» — по прошлым загрузкам на этом устройстве (медиана пяти последних по каждому шагу), в первый раз — прикидка.
+   Шаги двигают: метки в скриптах ниже (браузерная версия: образ Linux, интерфейс), server/public/client.js (связь, вход,
+   настройки, чат) и DOMContentLoaded. Сервер не отвечает — объясняет почему и пробует снова сама.
+   mochiBoot.go(id[,деталь]) — шаг начался (предыдущие готовы); ok(id[,деталь]); wait(id,причина,секунд) — ждём и повторяем;
+   done([как]) — убрать экран; onRetry — кнопка «Повторить сейчас» (ставит client.js). Мочи здесь — копия холста #pet */
+(()=>{
+const root=document.getElementById('boot');if(!root)return;
+const SRV=!!document.querySelector('meta[name=mochi-server]'),MODE=SRV?'srv':'web',KEY='mochi-boot';
+const el=id=>document.getElementById('boot-'+id),now=()=>performance.now(),pick=a=>a[Math.random()*a.length|0];
+const RM=matchMedia('(prefers-reduced-motion: reduce)');
+const sec=ms=>ms<9950?(ms/1000).toFixed(1).replace('.',',')+' с':Math.round(ms/1000)+' с';
+/* шаги: id, подпись на «BIOS»-экране, сколько длится обычно (мс), подробность, сколько качать (МБ).
+   Пока своей истории нет, время скачивания прикидываем по скорости сети, которую знает браузер (navigator.connection) */
+const DEF=SRV?[['page','СТРАНИЦА',700,'',.2],['link','СЕРВЕР',250],['auth','ВХОД',20],['set','МОДЕЛЬ',200],['chat','ЧАТ',400],['agent','АГЕНТ',20]]
+ :[['page','СТРАНИЦА',800,'',.1],['img','LINUX',5000,'образ ≈3,4 МБ',3.4],['ui','ИНТЕРФЕЙС',250]];
+const NC=navigator.connection,guess=(ms,mb)=>mb&&NC&&NC.downlink>0?Math.round(mb*8/NC.downlink*1000+Math.min(NC.rtt||100,2000)*2):ms;
+let hist={};try{hist=JSON.parse(localStorage.getItem(KEY)||'{}')||{}}catch(e){}
+const mine=hist[MODE]&&typeof hist[MODE]==='object'?hist[MODE]:{};
+const med=a=>{const s=a.slice().sort((x,y)=>x-y);return s[s.length>>1]};
+const S=DEF.map(([id,label,ms,d,mb])=>{const h=Array.isArray(mine[id])?mine[id].filter(x=>x>=0&&x<6e5):[];
+ return{id,label,exp:h.length?med(h):guess(ms,mb),known:h.length>0,s:'todo',t0:0,t1:0,d:d||'',waited:false,slow:false}});
+const known=S.every(x=>x.known),usual=S.reduce((a,x)=>a+x.exp,0);
+S[0].s='run'; /* страница грузится с начала перехода: performance.now() отсчитывается от него */
+
+const SAY={page:['Раскладываю пиксели…','Несу странички…','Протираю экранчик…','Собираю интерфейс по кусочкам…'],
+ img:['Несу целый Linux — он тяжёленький!','Тащу образ Linux, уф…','Пакую Alpine в лапки…'],
+ ui:['Почти! Расставляю кнопочки…','Включаю чат и голос…'],
+ link:['Стучусь на сервер…','Тук-тук, сервер?','Зову сервер…'],auth:['Проверяю пропуск…'],
+ set:['Вспоминаю, какая у меня модель…','Достаю настройки…'],chat:['Листаю нашу переписку…','Вспоминаю, о чём болтали…'],
+ agent:['Смотрю, чем я занята…'],slow:['Сеть сегодня неторопливая…','Чуть дольше обычного, потерпи~','Ещё капельку…'],
+ down:['Сервер молчит… постучу ещё!','Ой, сервер не отвечает. Пробую снова!'],restart:['Сервер просыпается — подожду его!','Сервер перезапускается, жду~'],
+ offline:['Кажется, пропал интернет…'],http:['Сервер ответил ошибкой… пробую ещё'],stream:['Чат не открылся, переподключаюсь…'],
+ script:['Ой, кусочек меня не загрузился… жду сервер'],stuck:['Ой, я застряла…'],
+ done:['Готово! ^_^','Я тут! Поехали~','Проснулась!','Всё готово!']};
+const MOOD={page:'work',img:'work',ui:'work',link:'look',auth:'think',set:'think',chat:'work',agent:'think',slow:'think',
+ down:'sad',restart:'sleepy',offline:'sad',http:'sad',stream:'think',script:'sad',stuck:'dizzy',done:'happy'};
+/* почему долго: подсказка у медленного шага и при ожидании сервера */
+const WHY={page:SRV?'Страница идёт дольше обычного — похоже, медленная сеть между тобой и сервером.':'В браузерной версии внутри страницы целый Linux (~3,8 МБ). Со второго раза она берётся из кэша.',
+ img:'Образ Linux весит ~3,4 МБ — на медленной сети это несколько секунд. Потом он берётся из кэша.',
+ ui:'Браузер разбирает скрипты — на слабом устройстве это чуть дольше.',
+ link:'Сервер отвечает медленно: он занят или далеко.',auth:'',set:'Сервер долго отдаёт настройки — похоже, он занят.',
+ chat:'Длинную переписку дольше передавать и рисовать — особенно на слабом телефоне.',agent:'',
+ down:'Сервер не отвечает. Если Мочи только что обновлялась или перезапускалась, это около минуты.',
+ restart:'Сервер Мочи перезапускается: HTTPS на месте, а сама Мочи ещё просыпается (после обновления — около минуты).',
+ offline:'Нет интернета. Как только связь появится, продолжу сама.',http:'Сервер ответил ошибкой.',
+ stream:'Поток событий чата не открылся — переподключаюсь.',
+ script:'Не загрузился скрипт сервера (srv/client.js) — сервер не ответил. Жду его и обновлю страницу сама.',
+ stuck:'Загрузка застряла. Можно обновить страницу или открыть Мочи как есть.'};
+
+/* ---------- отрисовка ---------- */
+const log=el('log');
+for(const x of S){const li=document.createElement('li');
+ li.innerHTML='<span class="bl"></span><span class="bf" aria-hidden="true"></span><span class="bd"></span><span class="bs"></span>';
+ li.firstChild.textContent=x.label;x.li=li;log.append(li)}
+el('host').textContent=location.host||'локально';
+let shown=0,last=0,waitUntil=0,finished=false,err='',hidden=document.visibilityState==='hidden',stuck=false,said='',typeT=0,petOn=false,cur=S[0];
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')hidden=true});
+function say(t){if(!t||t===said)return;said=t;clearInterval(typeT);const s=el('say');el('sr').textContent=t;
+ if(RM.matches){s.textContent=t;return}
+ let i=0;s.textContent='';typeT=setInterval(()=>{s.textContent=t.slice(0,++i);if(i>=t.length)clearInterval(typeT)},22)}
+const pet=(m,ms)=>{try{if(window.petSet){petSet(m,'',ms||0,true);petOn=true}}catch(e){}};
+const feel=k=>{pet(MOOD[k]||'think');say(pick(SAY[k]||SAY.page))};
+function why(k,extra,warn){const w=el('why'),t=WHY[k]||'';if(!t&&!extra){w.hidden=true;return}
+ w.dataset.k=warn?'warn':'info';w.firstChild.textContent=warn?'Что случилось':'Почему долго?';
+ w.lastChild.textContent=t+(extra?(t?' ':'')+extra:'');w.hidden=false}
+function acts(retry,skip){el('act').hidden=false;el('retry').hidden=!retry;el('skip').hidden=!skip}
+const unslow=()=>{if(el('why').dataset.k==='info')el('why').hidden=true};
+function calm(){el('why').hidden=true;el('act').hidden=true;root.dataset.s='';el('t').textContent='Мочи просыпается';stuck=false}
+const SPIN='|/-\\';
+function paint(){
+ const t=now();let done=0,total=0,rem=0,over=0;
+ for(const x of S){const c=x.li.children;x.li.dataset.s=x.s;c[2].textContent=x.d;
+  if(x.s==='ok'){const d=x.t1-x.t0;done+=d;total+=d;c[3].textContent=d<50?'OK':sec(d).replace(' ','')}
+  else if(x.s==='todo'){total+=x.exp;rem+=x.exp;c[3].textContent=''}
+  else{const e=t-x.t0;done+=e;total+=e<x.exp?x.exp:e*1.15+250;rem+=Math.max(0,x.exp-e);over=e-x.exp;
+   c[3].textContent=x.s==='wait'?'ЖДУ':SPIN[(t/110|0)%4]}}
+ const p=finished?100:Math.min(99,Math.max(shown,Math.floor(done/Math.max(total,1)*100)));
+ if(p!==shown||finished){shown=p;el('bar').firstChild.style.width=p+'%';el('bar').setAttribute('aria-valuenow',p);el('pct').textContent=p+'%'}
+ let eta;
+ if(finished)eta='загрузилась за '+sec(t)+(known&&t>usual*1.6&&t-usual>1500?' · обычно '+sec(usual):'');
+ else if(cur.s==='wait')eta=waitUntil>t?'повтор через '+Math.ceil((waitUntil-t)/1000)+' с':'пробую снова…';
+ else if(over>1200)eta='дольше обычного · '+(known?'обычно '+sec(usual):'жду…');
+ else eta=(rem<150?'почти готово…':'осталось ≈ '+sec(rem))+(known?' · обычно '+sec(usual):' · первый запуск');
+ el('eta').textContent=eta;
+ if(finished)return;
+ if(!petOn&&window.petSet)pet(MOOD[cur.id]);
+ /* шаг затянулся — объясняем почему; совсем застрял — предлагаем обновить или открыть как есть */
+ if(cur.s==='run'&&!cur.slow&&over>Math.max(1500,cur.exp)){cur.slow=true;if(WHY[cur.id]){why(cur.id);feel('slow')}}
+ const lim=cur.id==='page'||cur.id==='img'?60000:Math.max(15000,cur.exp*4);
+ if(cur.s==='run'&&!stuck&&t-last>lim){stuck=true;el('t').textContent='Мочи застряла';
+  why('stuck',err?'Ошибка: '+err:'',true);acts(!!B.onRetry,document.readyState!=='loading');feel('stuck')}}
+
+/* ---------- шаги ---------- */
+const find=id=>S.find(x=>x.id===id);
+/* сколько страница весила в сети; через service worker браузер знает только распакованный размер — тогда молчим */
+function net(){const n=performance.getEntriesByType&&performance.getEntriesByType('navigation')[0];
+ if(!n||!n.responseEnd||!n.encodedBodySize||n.workerStart>0)return'';
+ if(n.transferSize===0||n.transferSize<2048&&n.encodedBodySize>16384)return'из кэша';
+ const kb=n.encodedBodySize/1024;return kb>=1024?(kb/1024).toFixed(1).replace('.',',')+' МБ':Math.round(kb)+' КБ'}
+function close(x,d){if(x.s==='ok')return;if(x.s==='todo')x.t0=now();x.s='ok';x.t1=Math.max(now(),x.t0);
+ if(d!==undefined)x.d=String(d);else if(x.id==='page'&&!x.d)x.d=net()}
+function upTo(x){for(const y of S){if(y===x)break;close(y)}}
+const B=window.mochiBoot={
+ go(id,d){const x=find(id);if(finished||!x||x.s==='ok')return;upTo(x);
+  if(d!==undefined)x.d=String(d);
+  if(x.s==='todo'){x.s='run';x.t0=now()}else if(x.s==='wait')x.s='run';
+  if(cur!==x&&stuck)calm();
+  if(cur!==x||root.dataset.s==='wait'){if(cur!==x)unslow();cur=x;if(!x.waited)feel(x.id)}
+  last=now();paint()},
+ ok(id,d){const x=find(id);if(finished||!x)return;upTo(x);close(x,d);unslow();
+  cur=S.find(y=>y.s!=='ok')||x;if(cur.s==='todo'){cur.s='run';cur.t0=now();feel(cur.id)}
+  if(root.dataset.s==='wait'||stuck)calm();last=now();paint()},
+ wait(id,k,s,extra){const x=find(id);if(finished||!x||x.s==='ok')return;if(x.s!=='wait')B.go(id);
+  x.s='wait';x.waited=true;cur=x;waitUntil=now()+(s||3)*1000;root.dataset.s='wait';el('t').textContent='Мочи ждёт сервер';
+  why(k,extra||'',true);acts(!!B.onRetry,id==='chat');feel(k);last=now();paint()},
+ done(how){if(finished)return;finished=true;clearInterval(tick);root.setAttribute('aria-busy','false');
+  if(how!=='skip'){const upto=how==='auth'?find('auth'):null;for(const x of S){close(x);if(x===upto)break}}
+  /* в историю — только честные шаги: без ожиданий, повторов и фоновой вкладки */
+  if(how!=='skip'&&!hidden){for(const x of S)if(x.s==='ok'&&!x.waited){const a=(Array.isArray(mine[x.id])?mine[x.id]:[]).slice(-4);a.push(Math.round(x.t1-x.t0));mine[x.id]=a}
+   hist[MODE]=mine;try{localStorage.setItem(KEY,JSON.stringify(hist))}catch(e){}}
+  const t=now(),quick=how==='auth'||how==='skip'||t<900;
+  if(!quick){calm();el('t').textContent='Готово!';say(pick(SAY.done));pet('happy',2500)}
+  paint();
+  try{console.info('Мочи: загрузка '+sec(t),S.map(x=>x.label.toLowerCase()+' '+(x.s==='ok'?Math.round(x.t1-x.t0)+' мс':'—')+(x.d?' ('+x.d+')':'')).join(', '))}catch(e){}
+  setTimeout(()=>{root.classList.add('out');setTimeout(()=>{cancelAnimationFrame(raf);root.remove()},340)},quick?60:650)},
+ onRetry:null,
+ state:()=>S.map(x=>({id:x.id,s:x.s,ms:x.s==='ok'?Math.round(x.t1-x.t0):null,d:x.d}))};
+
+/* ---------- Мочи: копия холста из верхней панели (там она живёт и меняет настроение) ---------- */
+const cv=el('pet'),g=cv.getContext('2d');let raf=0,drawn=0;
+function mirror(t){raf=requestAnimationFrame(mirror);if(t-drawn<33)return;drawn=t;
+ const src=document.getElementById('pet');if(!src||!src.width)return;
+ if(cv.width!==src.width||cv.height!==src.height){cv.width=src.width;cv.height=src.height}
+ g.clearRect(0,0,cv.width,cv.height);g.drawImage(src,0,0)}
+raf=requestAnimationFrame(mirror);
+cv.addEventListener('click',()=>{const p=document.getElementById('pet');p&&p.click();
+ const h=document.createElement('i');h.className='ht';h.style.left=(cv.offsetWidth*.25+Math.random()*cv.offsetWidth*.5)+'px';cv.parentNode.append(h);setTimeout(()=>h.remove(),1200)});
+addEventListener('load',()=>{const p=S[0];if(!finished&&p.s==='ok'&&!p.d){p.d=net();paint()}});
+el('retry').addEventListener('click',()=>{B.onRetry&&B.onRetry()});
+el('reload').addEventListener('click',()=>location.reload());
+el('skip').addEventListener('click',()=>B.done('skip'));
+
+/* ошибки во время загрузки: покажем, если из-за них всё встанет (скрипт не скачался, исключение) */
+addEventListener('error',e=>{if(finished)return;const s=e.target;
+ if(s&&s.tagName==='SCRIPT')err='не загрузился '+(s.getAttribute('src')||'скрипт');
+ else if(e.message&&!/ResizeObserver/.test(e.message))err=e.message+(e.filename?' ('+e.filename.split('/').pop().split('?')[0]+':'+e.lineno+')':'')},true);
+/* разметка и скрипты на месте: браузерной версии этого достаточно (Linux дальше запускается в фоне — прогресс над чатом),
+   на сервере дальше ведёт client.js. Не запустился он — значит, сервер не ответил: ждём его и обновляем страницу */
+document.addEventListener('DOMContentLoaded',()=>{if(finished)return;
+ if(!SRV){B.done();return}
+ if(find('page').s==='ok')return;
+ if(err&&!/не загрузился/.test(err)){stuck=true;el('t').textContent='Мочи застряла';why('stuck','Ошибка: '+err,true);acts(false,true);feel('stuck');return}
+ let n=0,fresh=false;try{fresh=Date.now()-(+sessionStorage.getItem(KEY)||0)<20000}catch(e){}
+ const poll=async()=>{let up=false;try{up=(await fetch('api/health',{cache:'no-store'})).ok}catch(e){}
+  if(up&&!fresh){try{sessionStorage.setItem(KEY,Date.now())}catch(e){}location.reload();return}
+  if(up){stuck=true;why('script','',true);acts(false,true);return}
+  const s=[2,3,5,5,8,10][Math.min(n++,5)];B.wait('page',navigator.onLine===false?'offline':'script',s);setTimeout(poll,s*1000)};
+ B.onRetry=()=>location.reload();poll()});
+el('say').textContent=el('sr').textContent=said=pick(SAY.page);
+const tick=setInterval(paint,100);paint();
+})();
+</script>
 <div id="petbar" data-m="idle"><canvas id="pet" width="40" height="36" title="Погладить Мочи"></canvas><div id="say"><span id="sayt"></span></div><div class="ibs"><button class="ib" id="clr" title="Очистить чат" aria-label="Очистить чат"><i></i></button><button class="ib" id="set" title="Настройки" aria-label="Настройки"><i></i></button></div></div>
 <div id="pb"><i></i></div>
 <span id="stsrc" hidden><span id="dot"></span><span id="st">запуск…</span></span>
@@ -962,6 +1189,373 @@ background:repeating-conic-gradient(color-mix(in srgb,var(--line) 70%,var(--card
   <div class="wfoot"><button class="lnk" id="ask-no" type="button">Отмена</button><button class="p" id="ask-ok" type="button">OK</button></div>
 </dialog>
 
+<script>
+/* ---------- Мочи v8: пиксельный питомец 32×32, процедурная анимация (только наблюдает за UI, логику чата не трогает) ----------
+   Стоит раньше основного скрипта: Мочи оживает сразу, и экран загрузки (#boot) показывает её, пока грузится остальное */
+(()=>{
+const $=s=>document.querySelector(s);
+/* поле рисования шире кота: эффекты (мысли, лапки, «скорость») больше не срезаются по краям */
+const OX=4,OY=2,W=32+OX+4,H=32+OY+2,N=W*H,GROUND=29+OY;
+const cv=$('#pet');cv.width=W;cv.height=H;
+const g2=cv.getContext('2d'),img=g2.createImageData(W,H),px=new Uint32Array(img.data.buffer);
+const bar=$('#petbar'),sp=$('#say'),tx=$('#sayt');
+const RM=matchMedia('(prefers-reduced-motion: reduce)'),DARK=matchMedia('(prefers-color-scheme: dark)');
+const now=()=>performance.now(),rnd=a=>a[Math.random()*a.length|0];
+/* «мешок» фраз: ни одна не повторится, пока не прозвучат все остальные */
+const bags=new Map();
+function pick(a){if(!a||!a.length)return'';let b=bags.get(a);
+ if(!b||!b.q.length){const q=a.slice();for(let i=q.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[q[i],q[j]]=[q[j],q[i]]}
+  const last=b&&b.last;if(q.length>1&&q[q.length-1]===last)q.unshift(q.pop());b={q,last};bags.set(a,b)}
+ return b.last=b.q.pop()}
+
+/* ---------- палитра ---------- */
+const PAL={o:'#4a2f5a',b:'#ffe2c4',s:'#f4c49f',h:'#fff4e4',w:'#fffaf3',k:'#f1dfcd',W:'#ffffff',r:'#ff9cbc',e:'#2b1d3a',
+ M:'#b8325a',T:'#ff7d9f',t:'#6ad0ff',c:'#dff6ff',y:'#ffd34d',g:'#b9a3cf',d:'#4a2f5a38',L:'#ffffff2e'};
+const PT={girl:{p:'#ff8fb1',n:'#ff5c8a',x:'#ff6b9d'},boy:{p:'#7ab2ff',n:'#2f6fe0',x:'#2f80ff'},lamp:{p:'#ffb07a',n:'#e0761f',x:'#ffa53d'}};
+const COL={};
+const u32=h=>{const v=parseInt((h.slice(1)+'ff').slice(0,8),16);return(((v&255)<<24)|((v>>>8&255)<<16)|((v>>>16&255)<<8)|(v>>>24&255))>>>0};
+function theme(t){Object.assign(PAL,PT[t]||PT.girl);for(const k in PAL)COL[k]=u32(PAL[k])}
+{const t=document.documentElement.dataset.theme;theme(['boy','lamp'].includes(t)?t:'girl')}
+
+/* ---------- спрайты (левый глаз; правый зеркалится) ---------- */
+const EYE={
+ open:['....','.We.','.ee.','.ee.','....'],half:['....','....','.We.','.ee.','....'],shut:['....','....','....','eeee','....'],
+ sleepy:['....','....','eeee','.ee.','....'],happy:['....','....','.ee.','e..e','....'],calm:['....','....','e..e','.ee.','....'],
+ wide:['....','.ee.','eWee','eeee','.ee.'],sad:['...e','..e.','....','.We.','.ee.'],work:['e...','.e..','.We.','.ee.','....'],
+ x:['....','e.e.','.e..','e.e.','....'],plus:['....','.e..','eee.','.e..','....'],heart:['....','n.n.','nnn.','.n..','....']};
+const MOUTH={
+ cat:['..nn..','o.oo.o','.o..o.'],smile:['..nn..','o....o','.oooo.'],laugh:['..nn..','oooooo','oMMMMo','.oTTo.','..oo..'],
+ o:['..nn..','..oo..','.oMMo.','..oo..'],talk:['..nn..','.oooo.','.oMMo.','..oo..'],frown:['..nn..','......','.oooo.','o....o'],
+ flat:['..nn..','......','..ooo.'],wavy:['..nn..','......','.o.o.o','o.o.o.'],yawn:['..nn..','.oooo.','oMMMMo','oMTTMo','.oooo.'],
+ blep:['..nn..','o.oo.o','.o..o.','..TT..'],work:['..nn..','o.oo.o','.o..oT'],sleep:['..nn..','..oo..']};
+const PAW=['.ooo.','obbbo','obobo','.ooo.'],PUP=['.ooo.','obpbo','opppo','.ooo.'];
+const SP=['.y.','yWy','.y.'],SP2=['y.y','.W.','y.y'],POP=['c.c','.W.','c.c'],HS=['n.n','nnn','.n.'],Z1=['xxx','.x.','xxx'],Z2=['xxxx','..x.','.x..','xxxx'],
+ Q=['.xxx.','x...x','...x.','..x..','.....','..x..'],BANG=['x','x','x','.','x'],DROP=['.t.','ttt','tWt','.t.'],
+ GLASS=['.ooo.','oWcco','occco','occco','.ooo.'],DISK=['nnnnn','nWWnn','nnnnn','nwwwn','nwwwn'],W1=['x.','.x','.x','x.'],W2=['x..','.x.','..x','..x','.x.','x..'],
+ BUB=['.gg.','gWcg','gccg','.gg.'];
+
+/* ---------- растровые примитивы ---------- */
+const C=new Array(N);
+const inb=(x,y)=>x>=0&&y>=0&&x<W&&y<H;
+const put=(x,y,c)=>{x=Math.round(x);y=Math.round(y);if(inb(x,y))C[y*W+x]=c};
+const at=(m,x,y)=>inb(x,y)&&m[y*W+x]===1;
+function mk(f){const m=new Uint8Array(N);for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(f(x+.5,y+.5))m[y*W+x]=1;return m}
+function fill(m,c){for(let i=0;i<N;i++)if(m[i])C[i]=c}
+function rim(m,c){for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(!m[y*W+x]&&(at(m,x-1,y)||at(m,x+1,y)||at(m,x,y-1)||at(m,x,y+1)))C[y*W+x]=c}
+function stamp(x0,y0,rows,flip){x0=Math.round(x0);y0=Math.round(y0);
+ for(let j=0;j<rows.length;j++){const r=rows[j];for(let i=0;i<r.length;i++){const ch=flip?r[r.length-1-i]:r[i];if(ch!=='.')put(x0+i,y0+j,ch)}}}
+const inTri=(ax,ay,bx,by,qx,qy)=>(x,y)=>{const s=(x1,y1,x2,y2)=>(x-x2)*(y1-y2)-(x1-x2)*(y-y2);
+ const d1=s(ax,ay,bx,by),d2=s(bx,by,qx,qy),d3=s(qx,qy,ax,ay);return!((d1<0||d2<0||d3<0)&&(d1>0||d2>0||d3>0))};
+const bez=(a,b,c,n)=>{const o=[];for(let i=0;i<=n;i++){const t=i/n,u=1-t;o.push([u*u*a[0]+2*u*t*b[0]+t*t*c[0],u*u*a[1]+2*u*t*b[1]+t*t*c[1]])}return o};
+
+/* ---------- живость: моргание, взгляд, уши ---------- */
+let mood='idle',since=0,blinkS=-1e9,blinkN=0,gz={x:0,y:0},gzN=0,ptr={x:0,y:0,t:-1e9},earTw={s:0,until:0},earN=0,squishAt=-1e9,typeAt=-1e9;
+function blink(t){if(t>=blinkN){blinkS=t;blinkN=t+(Math.random()<.2?260:1800+Math.random()*4200)}
+ const d=t-blinkS;return d<55?'half':d<140?'shut':d<200?'half':null}
+function gaze(t,free){
+ if(t-ptr.t<2500){const r=cv.getBoundingClientRect(),dx=ptr.x-(r.left+r.width/2),dy=ptr.y-(r.top+r.height/2);
+  return{x:Math.abs(dx)<28?0:Math.sign(dx),y:dy<-28?-1:dy>40?1:0}}
+ if(t-typeAt<3000)return{x:0,y:1};
+ if(!free)return{x:0,y:0};
+ if(t>=gzN){gzN=t+1400+Math.random()*3200;gz=rnd([{x:0,y:0},{x:0,y:0},{x:0,y:0},{x:1,y:0},{x:-1,y:0},{x:1,y:-1},{x:-1,y:-1},{x:0,y:1}])}
+ return gz}
+function twitch(t){if(t>=earN){earN=t+2500+Math.random()*6000;earTw={s:Math.random()<.5?-1:1,until:t+170}}return t<earTw.until?earTw.s:0}
+addEventListener('pointermove',e=>{ptr={x:e.clientX,y:e.clientY,t:now()}},{passive:true});
+
+/* ---------- позы: каждое настроение — набор параметров тела ---------- */
+function pose(m,t,lt){
+ const S={dy:0,dx:0,sq:Math.sin(t/650)*.035,lean:0,eyes:'open',g:null,free:true,mouth:'cat',ear:[[0,0],[0,0]],pawB:[0,0],up:[null,null],
+  tail:{mode:'up',w:Math.sin(t/520)*.6},blush:2,fx:[],front:false,noPaws:false};
+ const tw=twitch(t);if(tw)S.ear[tw<0?0:1]=[1,0];
+ const ph=p=>(lt%p)/p,step=p=>lt/p|0;
+ switch(m){
+  case'happy':{const p=ph(560),h=Math.sin(p*Math.PI);S.dy=-Math.round(h*4);S.sq=p<.1||p>.9?.14:-.07*h;S.eyes='happy';
+   S.mouth=step(560)%2?'smile':'laugh';S.ear=[[0,-1],[0,-1]];S.tail.w=Math.sin(t/90);S.fx.push('spark');break}
+  case'work':S.dy=-(step(120)%2);S.sq=.02;S.eyes='work';S.mouth='work';S.pawB=step(130)%2?[-1,0]:[0,-1];S.tail.w=Math.sin(t/110);S.lean=.8;
+   S.fx.push('speed');if(ph(2600)<.55)S.fx.push('sweat');break;
+  case'look':S.g={x:[-1,0,1,0][step(420)%4],y:0};S.ear=[[0,-1],[0,-1]];S.tail.w=Math.sin(t/300);S.fx.push('glass');break;
+  case'think':S.g={x:1,y:-1};S.mouth='flat';S.lean=Math.sin(lt/700)*1.2;S.up[0]=[-6,4];S.tail.w=Math.sin(t/800);S.fx.push('think');break;
+  case'talk':{const k=step(130),hs=(Math.imul(k+1,2654435761)>>>0)%5;S.mouth=['talk','o','cat','smile','talk'][hs];S.dy=-(step(260)%2);
+   if(step(1600)%3===2)S.eyes='happy';S.tail.w=Math.sin(t/260);break}
+  case'sad':S.ear=[[3,3.5],[3,3.5]];S.eyes='sad';S.mouth='frown';S.sq=.08;S.blush=0;S.tail.mode='down';if(lt%1800<300)S.dx=step(60)%2;S.fx.push('tear');break;
+  case'wow':{const j=Math.min(lt/420,1);S.dy=-Math.round(Math.sin(j*Math.PI)*3);S.sq=lt<420?-.08:-.05;S.eyes='wide';S.mouth='o';
+   S.ear=[[0,-2],[0,-2]];S.tail.w=Math.sin(t/70)*.5;S.fx.push('bang','spark');break}
+  case'save':{S.sq=ph(900)<.5?.11:-.02;S.eyes='calm';S.fx.push('disk');break}
+  case'sleep':S.sq=.05+Math.sin(lt/1100)*.05;S.eyes='calm';S.mouth='sleep';S.ear=[[1,1],[1,1]];S.tail.mode='curl';S.front=true;S.noPaws=true;S.blush=1;
+   S.fx.push('zz','bubble');break;
+  case'sleepy':S.sq=ph(1800)>.8?.1:.05;S.eyes='sleepy';S.ear=[[1,1],[1,1]];S.tail.w=Math.sin(t/1200)*.3;break;
+  case'yawn':if(lt<250){S.sq=-.06;S.eyes='shut';S.mouth='o'}else if(lt<1300){S.sq=-.1;S.eyes='shut';S.mouth='yawn';S.up=[[-13,-3],[8,-3]]}
+   else{S.eyes='sleepy'}break;
+  case'listen':S.g={x:1,y:0};S.ear=[[0,0],[-.5,-2.5+(step(300)%2)*.6]];S.lean=-.8;S.mouth=step(900)%2?'cat':'smile';S.fx.push('waves');break;
+  case'dizzy':{const a=Math.sin(lt/170);S.dx=Math.round(a*1.4);S.lean=a*1.6;S.eyes=step(140)%2?'x':'plus';S.mouth='wavy';
+   S.ear=[[Math.max(0,a)*2,1],[Math.max(0,-a)*2,1]];S.fx.push('stars');break}
+  case'love':{const p=ph(900),h=Math.sin(p*Math.PI);S.dy=-Math.round(h*2);S.sq=p<.1||p>.9?.08:0;S.eyes='heart';S.mouth='smile';S.blush=3;
+   S.tail.w=Math.sin(t/120);S.fx.push('hearts');break}
+  case'stretch':{const p=Math.min(lt/1400,1);S.sq=p<.55?-.12*Math.sin(p/.55*Math.PI):.1*Math.sin((p-.55)/.45*Math.PI);S.eyes='happy';
+   S.mouth=p<.55?'o':'smile';if(p<.55)S.up=[[-13,-4],[8,-4]];break}
+  case'blep':S.mouth='blep';break;
+  case'wave':{const k=step(180)%2;S.eyes='happy';S.mouth='smile';S.up[1]=[8+k,-3-k];S.tail.w=Math.sin(t/150);break}
+  case'scratch':{const k=step(90)%2;S.eyes='calm';S.up[0]=[-12,-7+k];S.ear[0]=[k,0];S.lean=-.6;break}
+  case'peek':{S.g=[{x:-1,y:0},{x:1,y:0},{x:0,y:-1},{x:0,y:0}][Math.min(step(650),3)];S.ear=[[S.g.x<0?-1:0,0],[S.g.x>0?-1:0,0]];break}
+ }
+ if(t-squishAt<240)S.sq+=.17*(1-(t-squishAt)/240);
+ if(RM.matches){S.dy=0;S.dx=0;S.sq=0;S.lean=0}
+ return S}
+
+/* ---------- эффекты вокруг Мочи ---------- */
+const FXD={
+ spark:({hx,yT,t})=>[[-13,1],[10,-3],[-10,-5],[12,4]].forEach(([dx,dy],k)=>{const s=((t/140|0)+k*2)%7;if(s<3)stamp(hx+dx,yT+dy,s===1?SP:SP2)}),
+ speed:({B,t})=>{for(let k=0;k<3;k++){const x=OX+4-((t/50|0)+k*3)%7,y=B-3-k*4;for(let i=0;i<3;i++)if(x+i<OX+4)put(x+i,y,'g')}},
+ sweat:({hx,yT,lt})=>stamp(hx+8,yT+1+Math.round((lt%2600)/2600/.55*4),DROP),
+ tear:({hx,ey,lt})=>{const p=(lt%1800)/1800;if(p<.75){const y=ey+3+Math.round(p/.75*5);put(hx-6,y,'t');put(hx-6,y+1,'t')}},
+ glass:({hx,ey,lt})=>{const x=hx+8+[-1,0,1,0][(lt/420|0)%4],y=ey-4;stamp(x,y,GLASS);for(let i=4;i<7;i++)put(x+i,y+i,'o');put(x+5,y+6,'o')},
+ think:({hx,yT,lt})=>{const p=(lt%2400)/2400;if(p>.1)put(hx-11,yT,'g');if(p>.25){put(hx-12,yT-2,'g');put(hx-13,yT-2,'g')}
+  if(p>.4){if(p<.7)stamp(hx-15,yT-7,BUB);else stamp(hx-15,yT-9,Q)}},
+ bang:({hx,yT,t})=>{if((t/220|0)%3)stamp(hx+12,yT-6,BANG)},
+ disk:({hx,yT,t})=>{const b=(t/300|0)%2;stamp(hx-3,yT-8-b,DISK);if((t/150|0)%4===0)put(hx-1,yT-7-b,'y')},
+ zz:({hx,yT,t})=>{for(let k=0;k<2;k++){const p=((t+k*1300)%2600)/2600;stamp(hx+11+Math.round(p*2),yT-1-Math.round(p*9),p<.5?Z1:Z2)}},
+ bubble:({hx,ey,lt})=>{const p=(lt%3400)/3400;
+  if(p<.9){const r=.6+p/.9*2.2,x0=hx+2.6,y0=ey+2.2+r*.3,m=mk((x,y)=>(x-x0)**2+(y-y0)**2<=r*r);fill(m,'c');rim(m,'g');if(r>1.6)put(x0-.8,y0-.8,'W')}
+  else if(p<.96)stamp(hx+1,ey+1,POP)},
+ hearts:({hx,yT,t})=>[[-12,0],[10,600]].forEach(([dx,o])=>{const p=((t+o)%1200)/1200;if(p<.85)stamp(hx+dx,yT+6-Math.round(p*10),HS)}),
+ waves:({hx,yT,t})=>{const s=(t/260|0)%3;if(s>=1)stamp(hx+11,yT-2,W1);if(s===2)stamp(hx+13,yT-3,W2)},
+ stars:({hx,yT,t})=>{for(let k=0;k<3;k++){const a=t/260+k*2.094;stamp(hx-1.5+Math.cos(a)*10,yT-3+Math.sin(a)*2.5,SP)}}};
+
+/* ---------- отрисовка кадра ---------- */
+function draw(S,t,lt,m){
+ C.fill(undefined);
+ const cx=14+OX+S.dx,B=GROUND+S.dy,BH=Math.round(18*(1-S.sq)),rx=11*(1+S.sq*.75),yT=B+1-BH,cyb=B+1-BH/2,lean=S.lean;
+ const lx=y=>lean*((B+1-y)/BH);
+ /* тень на полу: меньше, когда Мочи в прыжке */
+ const k=Math.max(0,-S.dy)>>1;for(let x=cx-8+k;x<cx+8-k;x++)put(x,GROUND+2,'d');
+ /* хвостик */
+ const tail=()=>{const w=S.tail.w,md=S.tail.mode;let a,b,c;
+  if(md==='curl'){a=[cx+7,B-.5];b=[cx+12,B+1.4];c=[cx+1.5,B+.6]}
+  else if(md==='down'){a=[cx+9,B-1];b=[cx+13,B];c=[cx+16,B+.4]}
+  else{a=[cx+9,B-1];b=[cx+16+w*.5,B-1.5];c=[cx+14.5+w*1.6,B-9+Math.abs(w)*.8]}
+  const pts=bez(a,b,c,12),tm=mk((x,y)=>pts.some(p=>(x-p[0])**2+(y-p[1])**2<=1.32)),tip=pts[pts.length-1];fill(tm,'b');
+  for(let i=0;i<N;i++)if(tm[i]&&(i%W+.5-tip[0])**2+((i/W|0)+.5-tip[1])**2<3.2)C[i]='p';
+  rim(tm,'o')};
+ if(!S.front)tail();
+ /* тело-моти + ушки одним силуэтом */
+ const ear=side=>{const[ox,oy]=S.ear[side],sg=side?1:-1;
+  return[[cx+sg*10+lx(yT+5),yT+5],[cx+sg*3+lx(yT+1),yT+.8],[cx+sg*(8.5+ox)+lean,yT-4.5+oy]]};
+ const E=[ear(0),ear(1)],TE=E.map(e=>inTri(e[0][0],e[0][1],e[1][0],e[1][1],e[2][0],e[2][1]));
+ const M=mk((x,y)=>{const dy=(y-cyb)/(BH/2);if(dy>=-1&&dy<=1){const dx=Math.abs((x-lx(y)-cx)/rx),e=dy>0?3.2:2.1;if(dx**e+Math.abs(dy)**e<=1)return true}
+  return TE[0](x,y)||TE[1](x,y)});
+ fill(M,'b');rim(M,'o');
+ /* объём: тень снизу-справа, блик сверху-слева */
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;if(!M[i])continue;
+  if(!at(M,x,y+2)||(x>cx+3&&y>yT+2&&!at(M,x+2,y)))C[i]='s';
+  else if((!at(M,x,y-1)&&x<cx+3)||(!at(M,x-1,y)&&y<cyb))C[i]='h'}
+ /* животик */
+ for(let y=B-5;y<=B;y++)for(let x=cx-7;x<cx+7;x++)if(at(M,x,y)&&((x+.5-cx)/6.2)**2+((y+.5-B-.6)/4.6)**2<=1)C[y*W+x]=y===B?'k':'w';
+ /* розовое внутри ушек */
+ E.forEach(e=>{const g=[(e[0][0]+e[1][0]+e[2][0])/3,(e[0][1]+e[1][1]+e[2][1])/3];g[0]+=(e[2][0]-g[0])*.25;g[1]+=(e[2][1]-g[1])*.25;
+  const q=e.map(p=>[g[0]+(p[0]-g[0])*.5,g[1]+(p[1]-g[1])*.5]),f=inTri(q[0][0],q[0][1],q[1][0],q[1][1],q[2][0],q[2][1]);
+  for(let i=0;i<N;i++)if(M[i]&&f(i%W+.5,(i/W|0)+.5))C[i]='p'});
+ /* глянцевый блик */
+ const sx=cx-7+Math.round(lx(yT+3));put(sx,yT+3,'W');put(sx+1,yT+2,'h');put(sx-1,yT+4,'h');
+ /* мордочка */
+ const ey=yT+Math.round(BH*.39),hx=cx+Math.round(lx(ey));
+ for(let i=0;i<Math.min(S.blush,3);i++){put(hx-8-i,ey+2,'r');put(hx+7+i,ey+2,'r')}
+ let eyes=S.eyes;if(eyes==='open'){const b=blink(t);if(b)eyes=b}
+ const G=['open','half','wide','sad','work','sleepy'].includes(eyes)?(S.g||gaze(t,S.free&&(m==='idle'||m==='blep'))):{x:0,y:0};
+ const pat=EYE[eyes]||EYE.open;stamp(hx-7+G.x,ey-2+G.y,pat);stamp(hx+3+G.x,ey-2+G.y,pat,true);
+ stamp(hx-3,ey+1,MOUTH[S.mouth]||MOUTH.cat);
+ /* лапки */
+ if(!S.noPaws){if(!S.up[0])stamp(cx-8,B-2+S.pawB[0],PAW);if(!S.up[1])stamp(cx+3,B-2+S.pawB[1],PAW)}
+ S.up.forEach((u,i)=>{if(u)stamp(hx+u[0],ey+u[1],PUP,i===1)});
+ if(S.front)tail();
+ const ctx={hx,yT,ey,B,t,lt};for(const f of S.fx)FXD[f]&&FXD[f](ctx);
+ /* в тёмной теме — мягкий светлый ободок, чтобы Мочи не терялась на фоне */
+ if(DARK.matches){const sil=new Uint8Array(N);for(let i=0;i<N;i++)if(C[i]&&C[i]!=='d')sil[i]=1;rim(sil,'L')}
+ for(let i=0;i<N;i++){const c=C[i];px[i]=c?COL[c]:0}
+ g2.putImageData(img,0,0)}
+let lastF=0;
+function frame(t){requestAnimationFrame(frame);if(t-lastF<66)return;lastF=t;try{draw(pose(mood,t,t-since),t,t-since,mood)}catch(e){}}
+requestAnimationFrame(frame);
+
+/* ---------- фразы ---------- */
+const PH={
+ got:['Принято! Сейчас…','Поняла, бегу!','Ага, секунду!','Так-так, смотрим…','Сейчас сделаю!','Уже бегу-бегу!','Задачка! Обожаю задачки~',
+  'Записала, начинаю!','Есть! Засучиваю лапки…','Ушки на макушке — делаю!','Сейчас разберёмся!','Хоп — взялась за дело!','Будет сделано!',
+  'Ой, интересненько!','Ловлю задачку!','Так, где мои лапки… начинаю!'],
+ think:['Ммм, думаю…','Хм, дай подумать…','Секундочку…','Соображаю…','Шестерёнки крутятся…','Думаю-думаю…','Прикидываю план…',
+  'Так, с чего начать…','Чешу затылок…','Сейчас сложу два и два…','Хвостик подсказывает…','Перебираю идеи…','Почти придумала…','Ммм… кажется, есть идея!'],
+ retry:['Не вышло… пробую иначе','Упс, попробую по-другому…','Так не сработало, думаю дальше…','Ничего, зайду с другой стороны!',
+  'Хм, а если вот так?','Не сдаюсь! Ещё попытка…','Linux упрямится, а я упрямее!','Сейчас обхитрю эту ошибку…'],
+ talk:['Слушай-слушай!','Вот что у меня вышло!','Смотри-смотри!','Готово, читай~','Рассказываю!','Вот, держи ответ!','Та-да! Читай~',
+  'Я всё разузнала!','Сейчас всё расскажу!','Глянь, что получилось!'],
+ done:['Ура, готово!','Всё сделала!','Готова к делу!','Жду новых задачек!','Справилась! ^_^','Миссия выполнена!','Лапки свободны — что дальше?',
+  'Готово-готово!','Всё на месте!','Сделано с любовью~','Вот так-то!','Хвостик доволен!'],
+ readyNet:['Ура, готово! Интернет в Linux есть.','Проснулась! И интернет подключила~','Готова! В Linux даже интернет есть!'],
+ file:['Держи файлик!','Файл готов, забирай!','Вот, лови файл!','Свеженький файл для тебя!','Принесла файлик в зубках!',
+  'Файл упакован и доставлен!','Тук-тук, доставка файла!'],
+ err:['Ой, ошибочка…','Упс, что-то пошло не так…','Ой-ёй, ошибка…','Хнык… не получилось','Что-то сломалось… прости',
+  'Ошибка… но я не сдаюсь!','Ай! Споткнулась…','Ой… глянь сообщение ниже'],
+ pet:['Мурр!','Хи-хи, щекотно!','Я тебя тоже!','Ещё погладь!','Мур-мур~','Тепло-тепло…','Обожаю, когда чешут за ушком!','Ммм, приятно~',
+  'Ты самый лучший!','Мурлык!','Ой, хвостик сам виляет!','Ещё-ещё!','Мне нравится~','Прррр…','Лапки от счастья дрожат!','Хорошо-то как!','Мур-р-р-р…'],
+ love:['Я тебя обожаю!','Сердечко тает~','Мур-мур-мур-мур!','Ты мой любимый человек!','Сейчас лопну от счастья!','Люблю-люблю!'],
+ dizzy:['Ой, голова закружилась!','Всё кружится…','Где верх? Где низ?','Ой-ой, звёздочки…','Хватит, я как юла!','Вжух… вжух… ой'],
+ wake:['Ой, я проснулась!','А? Я не сплю!','Доброе утро!','Мяу?! Я тут!','Я просто глазки закрыла…','Уже проснулась, честно!',
+  'Ням… что? Работаем?','Потягушки — и я в деле!'],
+ sleep:['Zzz…','Zzz… мур…','Zzz… Linux… чат…','Хр-р… байтики…','Zzz… ядро тёпленькое…','Сплю… разбуди поглаживанием','Zzz… мур-мур…'],
+ sleepy:['Ааа-ааа… зевается','Что-то я засыпаю…','Глазки слипаются…','Пора бы вздремнуть…','Тихо так… задремлю?'],
+ idle:['Скучаю без задачек~','Я тут, если что!','Мурр… ^_^','Может, проверим Linux?','Меня можно погладить!','Что-нибудь запустим?',
+  'Тук-тук, есть дело?','Ля-ля-ля~','Считаю байтики… 1, 2, 3…','Охраняю твой Linux!','Ловлю хвостик… почти!','А давай что-нибудь посчитаем?',
+  'Мур? Мур-мур!','Тихонько жду…','Отличный день для команд!','Пинг-понг? Я про ping ^_^','Мои ушки слушают…','Можно задачку? Маленькую!',
+  'Скучно без тебя~','Разминаю лапки…','Я пиксельная, но настоящая!','В Linux тепло и уютно','Может, прибраться в /tmp?','Хвостик тоже скучает'],
+ tips:['Совет: Ctrl+C на «Терминале» прервёт команду','Совет: файлы можно перетащить прямо в чат','Могу упаковать файлы в архив и прислать!',
+  'Скажи «установи python» — поставлю через apk','Совет: «Сохранить» на «Терминале» — и Linux всё запомнит','Нажми на микрофон и скажи задачку голосом',
+  'Хочешь, посчитаю что-нибудь в Linux?','Пришли файл — прочитаю и перескажу','Тапни по мне пять раз… если не боишься ^_^'],
+ morning:['Доброе утро! Кофе и Linux?','Утро! Я уже бодрая~','С добрым утром! Что сделаем?','Утречко! Лапки размяты!'],
+ day:['Добрый день! Чем займёмся?','Привет! Я на месте~','Хорошего дня! Есть задачки?','Приветик! Готова работать!'],
+ evening:['Добрый вечер! Уютненько~','Вечер — время для задачек!','Привет! Как прошёл день?','Вечерок! Чем помочь?'],
+ night:['Ночь уже… не засиживайся!','Тсс, все спят, а мы работаем','Совушка ты моя~','Поздно уже… может, чайку?'],
+ save:['Сохраняю снимок…','Прячу всё в сундучок…','Записываю в память…','Складываю байтики…','Фотографирую Linux…','Кладу на полочку…'],
+ saved:['Запомнила! Всё сохранила.','Сохранила в сундучок!','Всё на полочке!','Снимок готов, не потеряю!'],
+ settings:['Настройки сохранены!','Записала настройки!','Готово, всё настроено!','Новые настройки — новая я!'],
+ clear:['Чат чистый! Начнём заново~','С чистого листа!','Всё подмела!','Чистенько! О чём поболтаем?'],
+ girl:['Розовенько!','Ой, как мило!','Нежненько~','Розовый — мой любимый!'],
+ boy:['Вау, синий цвет!','Синий, как небо!','Круто, по-морскому!','Синенький — тоже красиво!'],
+  lamp:['Ламповенько~','Тёпленько, как у торшера!','Уютный вечерок!','Как дома под пледом~'],
+ wait:['Ещё чуть-чуть…','Linux пыхтит, я жду…','Долго… но я терпеливая!','Работаем, работаем…','Почти-почти…','Эмулятор не спешит, потерпи~',
+  'Не уходи, скоро будет!','Я тут, всё идёт!'],
+ typing:['Пиши-пиши, я жду~','Ой, что-то интересное?','Внимательно слушаю…','Жду задачку!'],
+ hello:['Привет-привет!','Ой, привет!','Хи, ты меня видишь?','Помахать тебе лапкой?'],
+ hush:['Всё-всё, молчу!','Тсс, молчу~','Ой, замолкаю!']};
+const STG={'Загрузка движка':['Завожу моторчик…','Включаю движок…','Кручу педальки…'],
+ 'Загрузка ядра':['Качаю ядро Linux…','Несу ядро сюда…','Тащу ядрышко…','Скачиваю мозги Linux…'],
+ 'Загрузка компонентов':['Собираю детальки…','Несу запчасти…'],
+ 'Восстановление системы':['Вспоминаю, на чём остановились…','Достаю снимок из памяти…','Открываю сундучок…'],
+ 'Запуск системы':['Просыпаюсь…','Потягиваюсь…','Включаю свет в Linux…','Протираю глазки…'],
+ 'Настройка сети':['Тяну кабельки…','Настраиваю сеть…','Ищу интернет…'],
+ 'Распаковка Alpine':['Распаковываю Alpine…','Разбираю чемоданчик с Alpine…'],
+ 'Запуск Alpine':['Почти проснулась…','Надеваю тапочки Alpine…','Последние штрихи…']};
+const STM={'Загрузка ядра':'work','Загрузка компонентов':'work','Восстановление системы':'save','Распаковка Alpine':'work'};
+const dayPart=()=>{const h=new Date().getHours();return h<5?'night':h<12?'morning':h<18?'day':h<23?'evening':'night'};
+function idleLine(){const r=Math.random(),d=new Date().getDay();
+ if(r<.06&&d===5)return'Пятница! Ура-ура~';if(r<.06&&d===1)return'Понедельник… держимся вместе!';
+ if(r<.3)return pick(PH.tips);if(r<.42)return pick(PH[dayPart()]);return pick(PH.idle)}
+
+/* ---------- облачко с текстом: если не помещается — шрифт плавно уменьшается (замер на скрытой копии) ---------- */
+let back,zzT,yaT,patT,tw=false,lastFail=0,stage='',stPh='',clicks=[],speaking=false,wokeAt=0,greeted=false,netWarned=false,label='';
+const busy=()=>typeof ctl!=='undefined'&&!!ctl;
+const SMAX=10,SMIN=6,pr=document.createElement('div');pr.className='sayp';bar.append(pr);
+function fit(t){pr.style.width=sp.clientWidth+'px';pr.textContent=t;let s=SMAX;
+ for(;s>SMIN;s-=.5){pr.style.fontSize=s+'px';if(pr.offsetHeight<=sp.clientHeight)break}
+ sp.style.fontSize=s+'px'}
+/* Очередь реплик: каждая держится, пока её можно прочитать; новая ждёт своей очереди,
+   а смена идёт мягко — старая фраза «стирается» назад, новая печатается.
+   Из ждущих остаётся только самая свежая, чтобы Мочи не отставала от дела. */
+let ti,ft,phase='idle',pend=null,qk=null,readyAt=0,userAt=-1e9;
+const hold=t=>Math.min(3200,1300+t.length*32);
+const sync=()=>{tw=phase!=='idle'||pend!==null};
+function typeIn(t){phase='type';sync();sp.dataset.t=t;fit(t);let i=0;tx.textContent='';
+ ti=setInterval(()=>{tx.textContent=t.slice(0,++i);if(i>=t.length){clearInterval(ti);phase='idle';readyAt=now()+hold(t);
+  if(qk!==null&&pend===null){sp.dataset.t=qk;fit(qk);tx.textContent=qk}qk=null;sync();flush()}},30)}
+function flush(){clearTimeout(ft);if(pend===null||phase!=='idle')return;
+ const w=readyAt-now();if(w>0&&now()-userAt>500){ft=setTimeout(flush,w);return}
+ const t=pend;pend=null;phase='erase';sync();clearInterval(ti);
+ let s=tx.textContent;const step=Math.max(1,Math.ceil(s.length/9));
+ if(!s){typeIn(t);return}
+ ti=setInterval(()=>{s=s.slice(0,-step);tx.textContent=s;if(!s){clearInterval(ti);typeIn(t)}},26)}
+function say(t,quick){if(!t)return;
+ const cur=pend!==null?pend:sp.dataset.t;if(t===cur)return;
+ /* быстрые обновления (проценты загрузки) меняют текст на месте, без стирания */
+ if(quick&&pend===null){if(phase==='idle'){sp.dataset.t=t;fit(t);tx.textContent=t}else qk=t;return}
+ pend=t;sync();flush()}
+addEventListener('pointerdown',()=>{userAt=now()},true);addEventListener('keydown',()=>{userAt=now()},true);
+
+/* ---------- настроение ---------- */
+const ONCE=new Set(['wow','stretch','yawn','peek','scratch','wave']);
+function setMood(m){if(m!==mood||ONCE.has(m)){mood=m;since=now()}bar.dataset.m=m}
+const arm=()=>{clearTimeout(zzT);clearTimeout(yaT);
+ yaT=setTimeout(()=>{if(mood==='idle'&&!busy()&&!speaking){set('yawn',pick(PH.sleepy),0,true);setTimeout(()=>{if(mood==='yawn')set('sleepy','',0,true)},1700)}},38000);
+ zzT=setTimeout(()=>{if(!busy()&&!speaking&&mood!=='listen')set('sleep',pick(PH.sleep),0,true)},55000)};
+/* долгая работа: Мочи подбадривает, потом снова показывает, что делает */
+function patience(){clearTimeout(patT);patT=setTimeout(()=>{if((mood==='work'||mood==='look')&&busy()){say(pick(PH.wait));
+ patT=setTimeout(()=>{if((mood==='work'||mood==='look')&&busy()&&label)say(label);patience()},4000)}},9000+Math.random()*4000)}
+function set(m,t,ms,keepZ){setMood(m);if(t)say(t);
+ clearTimeout(back);if(ms)back=setTimeout(()=>setMood('idle'),ms);
+ if(m==='work'||m==='look')patience();else clearTimeout(patT);
+ if(!keepZ)arm()}
+function heart(){const h=document.createElement('i');h.className='ht';h.style.left=(10+Math.random()*50)+'px';bar.append(h);setTimeout(()=>h.remove(),1200)}
+window.petTheme=t=>{theme(t);set('happy',pick(PH[t]||PH.girl),2500);heart()};
+
+/* ---------- взаимодействие ---------- */
+cv.onclick=()=>{if(now()-wokeAt<500)return;window.sfx&&sfx('pet');
+ if(speaking&&window.mochiStop){mochiStop();set('happy',pick(PH.hush),2000);return}
+ squishAt=now();const n=Date.now();clicks=clicks.filter(x=>n-x<4000);clicks.push(n);
+ if(clicks.length>=5){clicks=[];set('dizzy',pick(PH.dizzy),2600);heart();heart();heart();return}
+ if(clicks.length>=3){set('love',pick(PH.love),2400);heart();heart();heart();return}
+ set('happy',pick(PH.pet),2500);heart();heart()};
+const wake=()=>{if(mood==='sleep'){wokeAt=now();set('happy',pick(PH.wake),2500);heart()}else if(mood==='sleepy'||mood==='yawn')set('happy','',900)};
+addEventListener('pointerdown',wake,true);addEventListener('keydown',wake,true);
+let helloAt=0;
+cv.addEventListener('pointerenter',e=>{if(e.pointerType!=='mouse'||mood!=='idle'||busy()||now()-helloAt<30000)return;
+ helloAt=now();set('wave',Math.random()<.5?pick(PH.hello):'',1400,true)});
+let typePh=0;
+$('#inp').addEventListener('input',()=>{typeAt=now();if(mood==='sleep')return;
+ if(mood==='idle'&&!busy()&&now()-typePh>60000&&Math.random()<.5){typePh=now();say(pick(PH.typing))}arm()});
+addEventListener('resize',()=>fit(sp.dataset.t||''));
+document.fonts&&document.fonts.ready.then(()=>fit(sp.dataset.t||''));
+/* бездельничанье: маленькие сценки, пока никто не пишет */
+let nextAct=now()+9000;
+setInterval(()=>{const n=now();if(mood!=='idle'||busy()||speaking||tw||n<nextAct)return;
+ nextAct=n+7000+Math.random()*9000;const r=Math.random();
+ if(r<.36)set('talk',idleLine(),2600,true);
+ else if(r<.5)set('peek','',2700,true);
+ else if(r<.61)set('blep','',1800,true);
+ else if(r<.71)set('stretch','',1500,true);
+ else if(r<.81)set('scratch','',1400,true);
+ else if(r<.91)set('happy','',1100,true);
+ else set('wave','',1400,true)},1000);
+
+/* действия инструментов из чата дублируются фразами Мочи */
+window.petAction=(lb,kind)=>{const s=String(lb||'').trim();if(!s)return;label=s[0].toUpperCase()+s.slice(1);
+ set(kind==='web_search'||kind==='web_fetch'?'look':'work',label)};
+window.petResult=ok=>{lastFail=ok?0:Date.now()};
+/* статусы (скрытый #st) → фразы и настроение */
+const ERR=[[/нет сохранения/,['Сохранений пока нет…','Сундучок пустой…']],[/сети нет/,['Я готова, но в Linux нет интернета…','Linux работает, но без интернета…']],
+ [/не отвечает/,['Linux молчит… загляни в «Терминал»','Linux задумался… проверь «Терминал»']],
+ [/ядро не скач|не скачался/,['Не смогла скачать ядро…','Ядро не долетело… проверь сеть']],
+ [/сохран/,['Не получилось сохранить…','Сундучок не закрылся…']],[/восстановл/,['Не смогла вспомнить прошлый раз…','Снимок не открылся…']],
+ [/запуск/,['Не смогла запуститься…','Linux не завёлся…']]];
+new MutationObserver(()=>{const t=$('#st').textContent,d=$('#dot').className,pm=t.match(/(\d+)%/);
+ if(/^готово/.test(t)&&busy())return;
+ const quietNet=d==='err'&&/^готово/.test(t)&&netWarned;
+ if(d==='err'&&!quietNet){stage='';if(/сети нет/.test(t))netWarned=true;const e=ERR.find(x=>x[0].test(t));set('sad',e?pick(e[1]):'Ой… '+t.toLowerCase(),6000);greeted=true;return}
+ if(pm){const sg=t.replace(/\s*·.*$/,'').trim();
+  if(sg===stage){if(!tw){say(stPh+' '+pm[1]+'%',true);arm()}}
+  else{stage=sg;stPh=pick(STG[sg]||['Просыпаюсь…']);set(STM[sg]||'think',stPh+' '+pm[1]+'%')}
+  return}
+ stage='';
+ if(/^готово/.test(t)){
+  if(!greeted){greeted=true;set('wave',/сеть/.test(t)&&!/нет/.test(t)?pick(PH.readyNet):pick(PH[dayPart()]),3500);heart();return}
+  set('happy',pick(PH.done),3500);heart()}
+ else if(/^запуск/.test(t))set('think',pick(['Просыпаюсь…','Запускаюсь…','Протираю глазки…']));
+ else if(/состояние сохранено/.test(t)){set('happy',pick(PH.saved),3000);heart()}
+ else if(/сохраняю/.test(t))set('save',pick(PH.save));
+ else if(/загружаю файлы/.test(t))set('work','Несу файлы в Linux… '+((t.match(/\d+\/\d+/)||[''])[0]));
+ else if(/перезагрузите/.test(t))set('think','Перезагрузи страницу — тогда настройки Linux вступят в силу',8000)
+ /* «выполняю / ищу / отправляю» не трогаем: эти фразы задаёт petAction */
+}).observe($('#stsrc'),{subtree:true,childList:true,characterData:true,attributes:true});
+new MutationObserver(ms=>ms.forEach(r=>r.addedNodes.forEach(n=>{const c=n.className||'';
+ if(c==='m u'){label='';set('happy',pick(PH.got),1500);heart()}
+ else if(c==='dots'){const rf=lastFail&&Date.now()-lastFail<10000;lastFail=0;
+   if(label&&busy()&&!rf){setMood('think');clearTimeout(back);patience()}else set('think',rf?pick(PH.retry):pick(PH.think))}
+ else if(c==='m a')set('talk',pick(PH.talk),2500);
+ else if(/fc/.test(c)){set('happy',pick(PH.file),4000);heart()}
+ else if(c==='m e')set('sad',pick(PH.err),5000)
+ else if(c==='empty'&&n.dataset&&n.dataset.cleared)set('happy',pick(PH.clear),2500)}))).observe($('#msgs'),{childList:true});
+$('#c-save').addEventListener('click',()=>set('happy',pick(PH.settings),2500));
+window.petSet=set;
+window.petSpeak=on=>{speaking=!!on;if(on){setMood('talk');clearTimeout(back);arm()}else if(mood==='talk')setMood('idle')};
+set('think','Просыпаюсь…');
+})();
+</script>
 <script>
 /* ---------- ответы Мочи: markdown ----------
    Свой разборщик без библиотек: страница работает офлайн и под строгой CSP сервера.
@@ -1665,8 +2259,10 @@ document.addEventListener('error',e=>{const im=e.target;if(!(im instanceof HTMLI
   const u=im.getAttribute('src');badImg.add(u);im.outerHTML=a(u,E(im.alt||u),'xil')},true);
 window.md=md;window.hl=hl;
 })();
+window.mochiBoot&&mochiBoot.go('img'); /* экран загрузки: дальше качается основной скрипт с образом Linux */
 </script>
 <script>
+window.mochiBoot&&mochiBoot.go('ui'); /* экран загрузки: основной скрипт (и образ Linux) докачан */
 const $=s=>document.querySelector(s);
 /* режим сервера: страницу отдаёт сервер Мочи (server/), агент и Linux живут там — см. server/public/client.js */
 const SRV=!!document.querySelector('meta[name=mochi-server]');
@@ -2379,7 +2975,7 @@ $('#term').addEventListener('click',()=>{if(!String(getSelection()).length&&matc
 /* ---------- Чат ---------- */
 const hist=[];let ctl=null;
 const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const hhmm=()=>new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+const HHMM=new Intl.DateTimeFormat('ru-RU',{hour:'2-digit',minute:'2-digit'}),hhmm=()=>HHMM.format(new Date());
 const WHO={u:'Ты',a:'Мочи'};
 /* автопрокрутка только если ты внизу: можно спокойно читать старое */
 let pinned=true;
@@ -2712,371 +3308,6 @@ $('#clr').onclick=async()=>{if((hist.length||ctl)&&!await ask('Очистить 
 welcome();tstat();
 new MutationObserver(ms=>ms.forEach(r=>r.addedNodes.forEach(n=>{const c=n.className||'';if(c==='m u')sfx('send');else if(c==='m e')sfx('err');else if(c==='fc')sfx('file')}))).observe($('#msgs'),{childList:true});
 if(!SRV)boot();
-</script>
-<script>
-/* ---------- Мочи v8: пиксельный питомец 32×32, процедурная анимация (только наблюдает за UI, логику чата не трогает) ---------- */
-(()=>{
-/* поле рисования шире кота: эффекты (мысли, лапки, «скорость») больше не срезаются по краям */
-const OX=4,OY=2,W=32+OX+4,H=32+OY+2,N=W*H,GROUND=29+OY;
-const cv=$('#pet');cv.width=W;cv.height=H;
-const g2=cv.getContext('2d'),img=g2.createImageData(W,H),px=new Uint32Array(img.data.buffer);
-const bar=$('#petbar'),sp=$('#say'),tx=$('#sayt');
-const RM=matchMedia('(prefers-reduced-motion: reduce)'),DARK=matchMedia('(prefers-color-scheme: dark)');
-const now=()=>performance.now(),rnd=a=>a[Math.random()*a.length|0];
-/* «мешок» фраз: ни одна не повторится, пока не прозвучат все остальные */
-const bags=new Map();
-function pick(a){if(!a||!a.length)return'';let b=bags.get(a);
- if(!b||!b.q.length){const q=a.slice();for(let i=q.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[q[i],q[j]]=[q[j],q[i]]}
-  const last=b&&b.last;if(q.length>1&&q[q.length-1]===last)q.unshift(q.pop());b={q,last};bags.set(a,b)}
- return b.last=b.q.pop()}
-
-/* ---------- палитра ---------- */
-const PAL={o:'#4a2f5a',b:'#ffe2c4',s:'#f4c49f',h:'#fff4e4',w:'#fffaf3',k:'#f1dfcd',W:'#ffffff',r:'#ff9cbc',e:'#2b1d3a',
- M:'#b8325a',T:'#ff7d9f',t:'#6ad0ff',c:'#dff6ff',y:'#ffd34d',g:'#b9a3cf',d:'#4a2f5a38',L:'#ffffff2e'};
-const PT={girl:{p:'#ff8fb1',n:'#ff5c8a',x:'#ff6b9d'},boy:{p:'#7ab2ff',n:'#2f6fe0',x:'#2f80ff'},lamp:{p:'#ffb07a',n:'#e0761f',x:'#ffa53d'}};
-const COL={};
-const u32=h=>{const v=parseInt((h.slice(1)+'ff').slice(0,8),16);return(((v&255)<<24)|((v>>>8&255)<<16)|((v>>>16&255)<<8)|(v>>>24&255))>>>0};
-function theme(t){Object.assign(PAL,PT[t]||PT.girl);for(const k in PAL)COL[k]=u32(PAL[k])}
-theme(['boy','lamp'].includes(cfg.theme)?cfg.theme:'girl');
-
-/* ---------- спрайты (левый глаз; правый зеркалится) ---------- */
-const EYE={
- open:['....','.We.','.ee.','.ee.','....'],half:['....','....','.We.','.ee.','....'],shut:['....','....','....','eeee','....'],
- sleepy:['....','....','eeee','.ee.','....'],happy:['....','....','.ee.','e..e','....'],calm:['....','....','e..e','.ee.','....'],
- wide:['....','.ee.','eWee','eeee','.ee.'],sad:['...e','..e.','....','.We.','.ee.'],work:['e...','.e..','.We.','.ee.','....'],
- x:['....','e.e.','.e..','e.e.','....'],plus:['....','.e..','eee.','.e..','....'],heart:['....','n.n.','nnn.','.n..','....']};
-const MOUTH={
- cat:['..nn..','o.oo.o','.o..o.'],smile:['..nn..','o....o','.oooo.'],laugh:['..nn..','oooooo','oMMMMo','.oTTo.','..oo..'],
- o:['..nn..','..oo..','.oMMo.','..oo..'],talk:['..nn..','.oooo.','.oMMo.','..oo..'],frown:['..nn..','......','.oooo.','o....o'],
- flat:['..nn..','......','..ooo.'],wavy:['..nn..','......','.o.o.o','o.o.o.'],yawn:['..nn..','.oooo.','oMMMMo','oMTTMo','.oooo.'],
- blep:['..nn..','o.oo.o','.o..o.','..TT..'],work:['..nn..','o.oo.o','.o..oT'],sleep:['..nn..','..oo..']};
-const PAW=['.ooo.','obbbo','obobo','.ooo.'],PUP=['.ooo.','obpbo','opppo','.ooo.'];
-const SP=['.y.','yWy','.y.'],SP2=['y.y','.W.','y.y'],POP=['c.c','.W.','c.c'],HS=['n.n','nnn','.n.'],Z1=['xxx','.x.','xxx'],Z2=['xxxx','..x.','.x..','xxxx'],
- Q=['.xxx.','x...x','...x.','..x..','.....','..x..'],BANG=['x','x','x','.','x'],DROP=['.t.','ttt','tWt','.t.'],
- GLASS=['.ooo.','oWcco','occco','occco','.ooo.'],DISK=['nnnnn','nWWnn','nnnnn','nwwwn','nwwwn'],W1=['x.','.x','.x','x.'],W2=['x..','.x.','..x','..x','.x.','x..'],
- BUB=['.gg.','gWcg','gccg','.gg.'];
-
-/* ---------- растровые примитивы ---------- */
-const C=new Array(N);
-const inb=(x,y)=>x>=0&&y>=0&&x<W&&y<H;
-const put=(x,y,c)=>{x=Math.round(x);y=Math.round(y);if(inb(x,y))C[y*W+x]=c};
-const at=(m,x,y)=>inb(x,y)&&m[y*W+x]===1;
-function mk(f){const m=new Uint8Array(N);for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(f(x+.5,y+.5))m[y*W+x]=1;return m}
-function fill(m,c){for(let i=0;i<N;i++)if(m[i])C[i]=c}
-function rim(m,c){for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(!m[y*W+x]&&(at(m,x-1,y)||at(m,x+1,y)||at(m,x,y-1)||at(m,x,y+1)))C[y*W+x]=c}
-function stamp(x0,y0,rows,flip){x0=Math.round(x0);y0=Math.round(y0);
- for(let j=0;j<rows.length;j++){const r=rows[j];for(let i=0;i<r.length;i++){const ch=flip?r[r.length-1-i]:r[i];if(ch!=='.')put(x0+i,y0+j,ch)}}}
-const inTri=(ax,ay,bx,by,qx,qy)=>(x,y)=>{const s=(x1,y1,x2,y2)=>(x-x2)*(y1-y2)-(x1-x2)*(y-y2);
- const d1=s(ax,ay,bx,by),d2=s(bx,by,qx,qy),d3=s(qx,qy,ax,ay);return!((d1<0||d2<0||d3<0)&&(d1>0||d2>0||d3>0))};
-const bez=(a,b,c,n)=>{const o=[];for(let i=0;i<=n;i++){const t=i/n,u=1-t;o.push([u*u*a[0]+2*u*t*b[0]+t*t*c[0],u*u*a[1]+2*u*t*b[1]+t*t*c[1]])}return o};
-
-/* ---------- живость: моргание, взгляд, уши ---------- */
-let mood='idle',since=0,blinkS=-1e9,blinkN=0,gz={x:0,y:0},gzN=0,ptr={x:0,y:0,t:-1e9},earTw={s:0,until:0},earN=0,squishAt=-1e9,typeAt=-1e9;
-function blink(t){if(t>=blinkN){blinkS=t;blinkN=t+(Math.random()<.2?260:1800+Math.random()*4200)}
- const d=t-blinkS;return d<55?'half':d<140?'shut':d<200?'half':null}
-function gaze(t,free){
- if(t-ptr.t<2500){const r=cv.getBoundingClientRect(),dx=ptr.x-(r.left+r.width/2),dy=ptr.y-(r.top+r.height/2);
-  return{x:Math.abs(dx)<28?0:Math.sign(dx),y:dy<-28?-1:dy>40?1:0}}
- if(t-typeAt<3000)return{x:0,y:1};
- if(!free)return{x:0,y:0};
- if(t>=gzN){gzN=t+1400+Math.random()*3200;gz=rnd([{x:0,y:0},{x:0,y:0},{x:0,y:0},{x:1,y:0},{x:-1,y:0},{x:1,y:-1},{x:-1,y:-1},{x:0,y:1}])}
- return gz}
-function twitch(t){if(t>=earN){earN=t+2500+Math.random()*6000;earTw={s:Math.random()<.5?-1:1,until:t+170}}return t<earTw.until?earTw.s:0}
-addEventListener('pointermove',e=>{ptr={x:e.clientX,y:e.clientY,t:now()}},{passive:true});
-
-/* ---------- позы: каждое настроение — набор параметров тела ---------- */
-function pose(m,t,lt){
- const S={dy:0,dx:0,sq:Math.sin(t/650)*.035,lean:0,eyes:'open',g:null,free:true,mouth:'cat',ear:[[0,0],[0,0]],pawB:[0,0],up:[null,null],
-  tail:{mode:'up',w:Math.sin(t/520)*.6},blush:2,fx:[],front:false,noPaws:false};
- const tw=twitch(t);if(tw)S.ear[tw<0?0:1]=[1,0];
- const ph=p=>(lt%p)/p,step=p=>lt/p|0;
- switch(m){
-  case'happy':{const p=ph(560),h=Math.sin(p*Math.PI);S.dy=-Math.round(h*4);S.sq=p<.1||p>.9?.14:-.07*h;S.eyes='happy';
-   S.mouth=step(560)%2?'smile':'laugh';S.ear=[[0,-1],[0,-1]];S.tail.w=Math.sin(t/90);S.fx.push('spark');break}
-  case'work':S.dy=-(step(120)%2);S.sq=.02;S.eyes='work';S.mouth='work';S.pawB=step(130)%2?[-1,0]:[0,-1];S.tail.w=Math.sin(t/110);S.lean=.8;
-   S.fx.push('speed');if(ph(2600)<.55)S.fx.push('sweat');break;
-  case'look':S.g={x:[-1,0,1,0][step(420)%4],y:0};S.ear=[[0,-1],[0,-1]];S.tail.w=Math.sin(t/300);S.fx.push('glass');break;
-  case'think':S.g={x:1,y:-1};S.mouth='flat';S.lean=Math.sin(lt/700)*1.2;S.up[0]=[-6,4];S.tail.w=Math.sin(t/800);S.fx.push('think');break;
-  case'talk':{const k=step(130),hs=(Math.imul(k+1,2654435761)>>>0)%5;S.mouth=['talk','o','cat','smile','talk'][hs];S.dy=-(step(260)%2);
-   if(step(1600)%3===2)S.eyes='happy';S.tail.w=Math.sin(t/260);break}
-  case'sad':S.ear=[[3,3.5],[3,3.5]];S.eyes='sad';S.mouth='frown';S.sq=.08;S.blush=0;S.tail.mode='down';if(lt%1800<300)S.dx=step(60)%2;S.fx.push('tear');break;
-  case'wow':{const j=Math.min(lt/420,1);S.dy=-Math.round(Math.sin(j*Math.PI)*3);S.sq=lt<420?-.08:-.05;S.eyes='wide';S.mouth='o';
-   S.ear=[[0,-2],[0,-2]];S.tail.w=Math.sin(t/70)*.5;S.fx.push('bang','spark');break}
-  case'save':{S.sq=ph(900)<.5?.11:-.02;S.eyes='calm';S.fx.push('disk');break}
-  case'sleep':S.sq=.05+Math.sin(lt/1100)*.05;S.eyes='calm';S.mouth='sleep';S.ear=[[1,1],[1,1]];S.tail.mode='curl';S.front=true;S.noPaws=true;S.blush=1;
-   S.fx.push('zz','bubble');break;
-  case'sleepy':S.sq=ph(1800)>.8?.1:.05;S.eyes='sleepy';S.ear=[[1,1],[1,1]];S.tail.w=Math.sin(t/1200)*.3;break;
-  case'yawn':if(lt<250){S.sq=-.06;S.eyes='shut';S.mouth='o'}else if(lt<1300){S.sq=-.1;S.eyes='shut';S.mouth='yawn';S.up=[[-13,-3],[8,-3]]}
-   else{S.eyes='sleepy'}break;
-  case'listen':S.g={x:1,y:0};S.ear=[[0,0],[-.5,-2.5+(step(300)%2)*.6]];S.lean=-.8;S.mouth=step(900)%2?'cat':'smile';S.fx.push('waves');break;
-  case'dizzy':{const a=Math.sin(lt/170);S.dx=Math.round(a*1.4);S.lean=a*1.6;S.eyes=step(140)%2?'x':'plus';S.mouth='wavy';
-   S.ear=[[Math.max(0,a)*2,1],[Math.max(0,-a)*2,1]];S.fx.push('stars');break}
-  case'love':{const p=ph(900),h=Math.sin(p*Math.PI);S.dy=-Math.round(h*2);S.sq=p<.1||p>.9?.08:0;S.eyes='heart';S.mouth='smile';S.blush=3;
-   S.tail.w=Math.sin(t/120);S.fx.push('hearts');break}
-  case'stretch':{const p=Math.min(lt/1400,1);S.sq=p<.55?-.12*Math.sin(p/.55*Math.PI):.1*Math.sin((p-.55)/.45*Math.PI);S.eyes='happy';
-   S.mouth=p<.55?'o':'smile';if(p<.55)S.up=[[-13,-4],[8,-4]];break}
-  case'blep':S.mouth='blep';break;
-  case'wave':{const k=step(180)%2;S.eyes='happy';S.mouth='smile';S.up[1]=[8+k,-3-k];S.tail.w=Math.sin(t/150);break}
-  case'scratch':{const k=step(90)%2;S.eyes='calm';S.up[0]=[-12,-7+k];S.ear[0]=[k,0];S.lean=-.6;break}
-  case'peek':{S.g=[{x:-1,y:0},{x:1,y:0},{x:0,y:-1},{x:0,y:0}][Math.min(step(650),3)];S.ear=[[S.g.x<0?-1:0,0],[S.g.x>0?-1:0,0]];break}
- }
- if(t-squishAt<240)S.sq+=.17*(1-(t-squishAt)/240);
- if(RM.matches){S.dy=0;S.dx=0;S.sq=0;S.lean=0}
- return S}
-
-/* ---------- эффекты вокруг Мочи ---------- */
-const FXD={
- spark:({hx,yT,t})=>[[-13,1],[10,-3],[-10,-5],[12,4]].forEach(([dx,dy],k)=>{const s=((t/140|0)+k*2)%7;if(s<3)stamp(hx+dx,yT+dy,s===1?SP:SP2)}),
- speed:({B,t})=>{for(let k=0;k<3;k++){const x=OX+4-((t/50|0)+k*3)%7,y=B-3-k*4;for(let i=0;i<3;i++)if(x+i<OX+4)put(x+i,y,'g')}},
- sweat:({hx,yT,lt})=>stamp(hx+8,yT+1+Math.round((lt%2600)/2600/.55*4),DROP),
- tear:({hx,ey,lt})=>{const p=(lt%1800)/1800;if(p<.75){const y=ey+3+Math.round(p/.75*5);put(hx-6,y,'t');put(hx-6,y+1,'t')}},
- glass:({hx,ey,lt})=>{const x=hx+8+[-1,0,1,0][(lt/420|0)%4],y=ey-4;stamp(x,y,GLASS);for(let i=4;i<7;i++)put(x+i,y+i,'o');put(x+5,y+6,'o')},
- think:({hx,yT,lt})=>{const p=(lt%2400)/2400;if(p>.1)put(hx-11,yT,'g');if(p>.25){put(hx-12,yT-2,'g');put(hx-13,yT-2,'g')}
-  if(p>.4){if(p<.7)stamp(hx-15,yT-7,BUB);else stamp(hx-15,yT-9,Q)}},
- bang:({hx,yT,t})=>{if((t/220|0)%3)stamp(hx+12,yT-6,BANG)},
- disk:({hx,yT,t})=>{const b=(t/300|0)%2;stamp(hx-3,yT-8-b,DISK);if((t/150|0)%4===0)put(hx-1,yT-7-b,'y')},
- zz:({hx,yT,t})=>{for(let k=0;k<2;k++){const p=((t+k*1300)%2600)/2600;stamp(hx+11+Math.round(p*2),yT-1-Math.round(p*9),p<.5?Z1:Z2)}},
- bubble:({hx,ey,lt})=>{const p=(lt%3400)/3400;
-  if(p<.9){const r=.6+p/.9*2.2,x0=hx+2.6,y0=ey+2.2+r*.3,m=mk((x,y)=>(x-x0)**2+(y-y0)**2<=r*r);fill(m,'c');rim(m,'g');if(r>1.6)put(x0-.8,y0-.8,'W')}
-  else if(p<.96)stamp(hx+1,ey+1,POP)},
- hearts:({hx,yT,t})=>[[-12,0],[10,600]].forEach(([dx,o])=>{const p=((t+o)%1200)/1200;if(p<.85)stamp(hx+dx,yT+6-Math.round(p*10),HS)}),
- waves:({hx,yT,t})=>{const s=(t/260|0)%3;if(s>=1)stamp(hx+11,yT-2,W1);if(s===2)stamp(hx+13,yT-3,W2)},
- stars:({hx,yT,t})=>{for(let k=0;k<3;k++){const a=t/260+k*2.094;stamp(hx-1.5+Math.cos(a)*10,yT-3+Math.sin(a)*2.5,SP)}}};
-
-/* ---------- отрисовка кадра ---------- */
-function draw(S,t,lt,m){
- C.fill(undefined);
- const cx=14+OX+S.dx,B=GROUND+S.dy,BH=Math.round(18*(1-S.sq)),rx=11*(1+S.sq*.75),yT=B+1-BH,cyb=B+1-BH/2,lean=S.lean;
- const lx=y=>lean*((B+1-y)/BH);
- /* тень на полу: меньше, когда Мочи в прыжке */
- const k=Math.max(0,-S.dy)>>1;for(let x=cx-8+k;x<cx+8-k;x++)put(x,GROUND+2,'d');
- /* хвостик */
- const tail=()=>{const w=S.tail.w,md=S.tail.mode;let a,b,c;
-  if(md==='curl'){a=[cx+7,B-.5];b=[cx+12,B+1.4];c=[cx+1.5,B+.6]}
-  else if(md==='down'){a=[cx+9,B-1];b=[cx+13,B];c=[cx+16,B+.4]}
-  else{a=[cx+9,B-1];b=[cx+16+w*.5,B-1.5];c=[cx+14.5+w*1.6,B-9+Math.abs(w)*.8]}
-  const pts=bez(a,b,c,12),tm=mk((x,y)=>pts.some(p=>(x-p[0])**2+(y-p[1])**2<=1.32)),tip=pts[pts.length-1];fill(tm,'b');
-  for(let i=0;i<N;i++)if(tm[i]&&(i%W+.5-tip[0])**2+((i/W|0)+.5-tip[1])**2<3.2)C[i]='p';
-  rim(tm,'o')};
- if(!S.front)tail();
- /* тело-моти + ушки одним силуэтом */
- const ear=side=>{const[ox,oy]=S.ear[side],sg=side?1:-1;
-  return[[cx+sg*10+lx(yT+5),yT+5],[cx+sg*3+lx(yT+1),yT+.8],[cx+sg*(8.5+ox)+lean,yT-4.5+oy]]};
- const E=[ear(0),ear(1)],TE=E.map(e=>inTri(e[0][0],e[0][1],e[1][0],e[1][1],e[2][0],e[2][1]));
- const M=mk((x,y)=>{const dy=(y-cyb)/(BH/2);if(dy>=-1&&dy<=1){const dx=Math.abs((x-lx(y)-cx)/rx),e=dy>0?3.2:2.1;if(dx**e+Math.abs(dy)**e<=1)return true}
-  return TE[0](x,y)||TE[1](x,y)});
- fill(M,'b');rim(M,'o');
- /* объём: тень снизу-справа, блик сверху-слева */
- for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;if(!M[i])continue;
-  if(!at(M,x,y+2)||(x>cx+3&&y>yT+2&&!at(M,x+2,y)))C[i]='s';
-  else if((!at(M,x,y-1)&&x<cx+3)||(!at(M,x-1,y)&&y<cyb))C[i]='h'}
- /* животик */
- for(let y=B-5;y<=B;y++)for(let x=cx-7;x<cx+7;x++)if(at(M,x,y)&&((x+.5-cx)/6.2)**2+((y+.5-B-.6)/4.6)**2<=1)C[y*W+x]=y===B?'k':'w';
- /* розовое внутри ушек */
- E.forEach(e=>{const g=[(e[0][0]+e[1][0]+e[2][0])/3,(e[0][1]+e[1][1]+e[2][1])/3];g[0]+=(e[2][0]-g[0])*.25;g[1]+=(e[2][1]-g[1])*.25;
-  const q=e.map(p=>[g[0]+(p[0]-g[0])*.5,g[1]+(p[1]-g[1])*.5]),f=inTri(q[0][0],q[0][1],q[1][0],q[1][1],q[2][0],q[2][1]);
-  for(let i=0;i<N;i++)if(M[i]&&f(i%W+.5,(i/W|0)+.5))C[i]='p'});
- /* глянцевый блик */
- const sx=cx-7+Math.round(lx(yT+3));put(sx,yT+3,'W');put(sx+1,yT+2,'h');put(sx-1,yT+4,'h');
- /* мордочка */
- const ey=yT+Math.round(BH*.39),hx=cx+Math.round(lx(ey));
- for(let i=0;i<Math.min(S.blush,3);i++){put(hx-8-i,ey+2,'r');put(hx+7+i,ey+2,'r')}
- let eyes=S.eyes;if(eyes==='open'){const b=blink(t);if(b)eyes=b}
- const G=['open','half','wide','sad','work','sleepy'].includes(eyes)?(S.g||gaze(t,S.free&&(m==='idle'||m==='blep'))):{x:0,y:0};
- const pat=EYE[eyes]||EYE.open;stamp(hx-7+G.x,ey-2+G.y,pat);stamp(hx+3+G.x,ey-2+G.y,pat,true);
- stamp(hx-3,ey+1,MOUTH[S.mouth]||MOUTH.cat);
- /* лапки */
- if(!S.noPaws){if(!S.up[0])stamp(cx-8,B-2+S.pawB[0],PAW);if(!S.up[1])stamp(cx+3,B-2+S.pawB[1],PAW)}
- S.up.forEach((u,i)=>{if(u)stamp(hx+u[0],ey+u[1],PUP,i===1)});
- if(S.front)tail();
- const ctx={hx,yT,ey,B,t,lt};for(const f of S.fx)FXD[f]&&FXD[f](ctx);
- /* в тёмной теме — мягкий светлый ободок, чтобы Мочи не терялась на фоне */
- if(DARK.matches){const sil=new Uint8Array(N);for(let i=0;i<N;i++)if(C[i]&&C[i]!=='d')sil[i]=1;rim(sil,'L')}
- for(let i=0;i<N;i++){const c=C[i];px[i]=c?COL[c]:0}
- g2.putImageData(img,0,0)}
-let lastF=0;
-function frame(t){requestAnimationFrame(frame);if(t-lastF<66)return;lastF=t;try{draw(pose(mood,t,t-since),t,t-since,mood)}catch(e){}}
-requestAnimationFrame(frame);
-
-/* ---------- фразы ---------- */
-const PH={
- got:['Принято! Сейчас…','Поняла, бегу!','Ага, секунду!','Так-так, смотрим…','Сейчас сделаю!','Уже бегу-бегу!','Задачка! Обожаю задачки~',
-  'Записала, начинаю!','Есть! Засучиваю лапки…','Ушки на макушке — делаю!','Сейчас разберёмся!','Хоп — взялась за дело!','Будет сделано!',
-  'Ой, интересненько!','Ловлю задачку!','Так, где мои лапки… начинаю!'],
- think:['Ммм, думаю…','Хм, дай подумать…','Секундочку…','Соображаю…','Шестерёнки крутятся…','Думаю-думаю…','Прикидываю план…',
-  'Так, с чего начать…','Чешу затылок…','Сейчас сложу два и два…','Хвостик подсказывает…','Перебираю идеи…','Почти придумала…','Ммм… кажется, есть идея!'],
- retry:['Не вышло… пробую иначе','Упс, попробую по-другому…','Так не сработало, думаю дальше…','Ничего, зайду с другой стороны!',
-  'Хм, а если вот так?','Не сдаюсь! Ещё попытка…','Linux упрямится, а я упрямее!','Сейчас обхитрю эту ошибку…'],
- talk:['Слушай-слушай!','Вот что у меня вышло!','Смотри-смотри!','Готово, читай~','Рассказываю!','Вот, держи ответ!','Та-да! Читай~',
-  'Я всё разузнала!','Сейчас всё расскажу!','Глянь, что получилось!'],
- done:['Ура, готово!','Всё сделала!','Готова к делу!','Жду новых задачек!','Справилась! ^_^','Миссия выполнена!','Лапки свободны — что дальше?',
-  'Готово-готово!','Всё на месте!','Сделано с любовью~','Вот так-то!','Хвостик доволен!'],
- readyNet:['Ура, готово! Интернет в Linux есть.','Проснулась! И интернет подключила~','Готова! В Linux даже интернет есть!'],
- file:['Держи файлик!','Файл готов, забирай!','Вот, лови файл!','Свеженький файл для тебя!','Принесла файлик в зубках!',
-  'Файл упакован и доставлен!','Тук-тук, доставка файла!'],
- err:['Ой, ошибочка…','Упс, что-то пошло не так…','Ой-ёй, ошибка…','Хнык… не получилось','Что-то сломалось… прости',
-  'Ошибка… но я не сдаюсь!','Ай! Споткнулась…','Ой… глянь сообщение ниже'],
- pet:['Мурр!','Хи-хи, щекотно!','Я тебя тоже!','Ещё погладь!','Мур-мур~','Тепло-тепло…','Обожаю, когда чешут за ушком!','Ммм, приятно~',
-  'Ты самый лучший!','Мурлык!','Ой, хвостик сам виляет!','Ещё-ещё!','Мне нравится~','Прррр…','Лапки от счастья дрожат!','Хорошо-то как!','Мур-р-р-р…'],
- love:['Я тебя обожаю!','Сердечко тает~','Мур-мур-мур-мур!','Ты мой любимый человек!','Сейчас лопну от счастья!','Люблю-люблю!'],
- dizzy:['Ой, голова закружилась!','Всё кружится…','Где верх? Где низ?','Ой-ой, звёздочки…','Хватит, я как юла!','Вжух… вжух… ой'],
- wake:['Ой, я проснулась!','А? Я не сплю!','Доброе утро!','Мяу?! Я тут!','Я просто глазки закрыла…','Уже проснулась, честно!',
-  'Ням… что? Работаем?','Потягушки — и я в деле!'],
- sleep:['Zzz…','Zzz… мур…','Zzz… Linux… чат…','Хр-р… байтики…','Zzz… ядро тёпленькое…','Сплю… разбуди поглаживанием','Zzz… мур-мур…'],
- sleepy:['Ааа-ааа… зевается','Что-то я засыпаю…','Глазки слипаются…','Пора бы вздремнуть…','Тихо так… задремлю?'],
- idle:['Скучаю без задачек~','Я тут, если что!','Мурр… ^_^','Может, проверим Linux?','Меня можно погладить!','Что-нибудь запустим?',
-  'Тук-тук, есть дело?','Ля-ля-ля~','Считаю байтики… 1, 2, 3…','Охраняю твой Linux!','Ловлю хвостик… почти!','А давай что-нибудь посчитаем?',
-  'Мур? Мур-мур!','Тихонько жду…','Отличный день для команд!','Пинг-понг? Я про ping ^_^','Мои ушки слушают…','Можно задачку? Маленькую!',
-  'Скучно без тебя~','Разминаю лапки…','Я пиксельная, но настоящая!','В Linux тепло и уютно','Может, прибраться в /tmp?','Хвостик тоже скучает'],
- tips:['Совет: Ctrl+C на «Терминале» прервёт команду','Совет: файлы можно перетащить прямо в чат','Могу упаковать файлы в архив и прислать!',
-  'Скажи «установи python» — поставлю через apk','Совет: «Сохранить» на «Терминале» — и Linux всё запомнит','Нажми на микрофон и скажи задачку голосом',
-  'Хочешь, посчитаю что-нибудь в Linux?','Пришли файл — прочитаю и перескажу','Тапни по мне пять раз… если не боишься ^_^'],
- morning:['Доброе утро! Кофе и Linux?','Утро! Я уже бодрая~','С добрым утром! Что сделаем?','Утречко! Лапки размяты!'],
- day:['Добрый день! Чем займёмся?','Привет! Я на месте~','Хорошего дня! Есть задачки?','Приветик! Готова работать!'],
- evening:['Добрый вечер! Уютненько~','Вечер — время для задачек!','Привет! Как прошёл день?','Вечерок! Чем помочь?'],
- night:['Ночь уже… не засиживайся!','Тсс, все спят, а мы работаем','Совушка ты моя~','Поздно уже… может, чайку?'],
- save:['Сохраняю снимок…','Прячу всё в сундучок…','Записываю в память…','Складываю байтики…','Фотографирую Linux…','Кладу на полочку…'],
- saved:['Запомнила! Всё сохранила.','Сохранила в сундучок!','Всё на полочке!','Снимок готов, не потеряю!'],
- settings:['Настройки сохранены!','Записала настройки!','Готово, всё настроено!','Новые настройки — новая я!'],
- clear:['Чат чистый! Начнём заново~','С чистого листа!','Всё подмела!','Чистенько! О чём поболтаем?'],
- girl:['Розовенько!','Ой, как мило!','Нежненько~','Розовый — мой любимый!'],
- boy:['Вау, синий цвет!','Синий, как небо!','Круто, по-морскому!','Синенький — тоже красиво!'],
-  lamp:['Ламповенько~','Тёпленько, как у торшера!','Уютный вечерок!','Как дома под пледом~'],
- wait:['Ещё чуть-чуть…','Linux пыхтит, я жду…','Долго… но я терпеливая!','Работаем, работаем…','Почти-почти…','Эмулятор не спешит, потерпи~',
-  'Не уходи, скоро будет!','Я тут, всё идёт!'],
- typing:['Пиши-пиши, я жду~','Ой, что-то интересное?','Внимательно слушаю…','Жду задачку!'],
- hello:['Привет-привет!','Ой, привет!','Хи, ты меня видишь?','Помахать тебе лапкой?'],
- hush:['Всё-всё, молчу!','Тсс, молчу~','Ой, замолкаю!']};
-const STG={'Загрузка движка':['Завожу моторчик…','Включаю движок…','Кручу педальки…'],
- 'Загрузка ядра':['Качаю ядро Linux…','Несу ядро сюда…','Тащу ядрышко…','Скачиваю мозги Linux…'],
- 'Загрузка компонентов':['Собираю детальки…','Несу запчасти…'],
- 'Восстановление системы':['Вспоминаю, на чём остановились…','Достаю снимок из памяти…','Открываю сундучок…'],
- 'Запуск системы':['Просыпаюсь…','Потягиваюсь…','Включаю свет в Linux…','Протираю глазки…'],
- 'Настройка сети':['Тяну кабельки…','Настраиваю сеть…','Ищу интернет…'],
- 'Распаковка Alpine':['Распаковываю Alpine…','Разбираю чемоданчик с Alpine…'],
- 'Запуск Alpine':['Почти проснулась…','Надеваю тапочки Alpine…','Последние штрихи…']};
-const STM={'Загрузка ядра':'work','Загрузка компонентов':'work','Восстановление системы':'save','Распаковка Alpine':'work'};
-const dayPart=()=>{const h=new Date().getHours();return h<5?'night':h<12?'morning':h<18?'day':h<23?'evening':'night'};
-function idleLine(){const r=Math.random(),d=new Date().getDay();
- if(r<.06&&d===5)return'Пятница! Ура-ура~';if(r<.06&&d===1)return'Понедельник… держимся вместе!';
- if(r<.3)return pick(PH.tips);if(r<.42)return pick(PH[dayPart()]);return pick(PH.idle)}
-
-/* ---------- облачко с текстом: если не помещается — шрифт плавно уменьшается (замер на скрытой копии) ---------- */
-let back,zzT,yaT,patT,tw=false,lastFail=0,stage='',stPh='',clicks=[],speaking=false,wokeAt=0,greeted=false,netWarned=false,label='';
-const busy=()=>typeof ctl!=='undefined'&&!!ctl;
-const SMAX=10,SMIN=6,pr=document.createElement('div');pr.className='sayp';bar.append(pr);
-function fit(t){pr.style.width=sp.clientWidth+'px';pr.textContent=t;let s=SMAX;
- for(;s>SMIN;s-=.5){pr.style.fontSize=s+'px';if(pr.offsetHeight<=sp.clientHeight)break}
- sp.style.fontSize=s+'px'}
-/* Очередь реплик: каждая держится, пока её можно прочитать; новая ждёт своей очереди,
-   а смена идёт мягко — старая фраза «стирается» назад, новая печатается.
-   Из ждущих остаётся только самая свежая, чтобы Мочи не отставала от дела. */
-let ti,ft,phase='idle',pend=null,qk=null,readyAt=0,userAt=-1e9;
-const hold=t=>Math.min(3200,1300+t.length*32);
-const sync=()=>{tw=phase!=='idle'||pend!==null};
-function typeIn(t){phase='type';sync();sp.dataset.t=t;fit(t);let i=0;tx.textContent='';
- ti=setInterval(()=>{tx.textContent=t.slice(0,++i);if(i>=t.length){clearInterval(ti);phase='idle';readyAt=now()+hold(t);
-  if(qk!==null&&pend===null){sp.dataset.t=qk;fit(qk);tx.textContent=qk}qk=null;sync();flush()}},30)}
-function flush(){clearTimeout(ft);if(pend===null||phase!=='idle')return;
- const w=readyAt-now();if(w>0&&now()-userAt>500){ft=setTimeout(flush,w);return}
- const t=pend;pend=null;phase='erase';sync();clearInterval(ti);
- let s=tx.textContent;const step=Math.max(1,Math.ceil(s.length/9));
- if(!s){typeIn(t);return}
- ti=setInterval(()=>{s=s.slice(0,-step);tx.textContent=s;if(!s){clearInterval(ti);typeIn(t)}},26)}
-function say(t,quick){if(!t)return;
- const cur=pend!==null?pend:sp.dataset.t;if(t===cur)return;
- /* быстрые обновления (проценты загрузки) меняют текст на месте, без стирания */
- if(quick&&pend===null){if(phase==='idle'){sp.dataset.t=t;fit(t);tx.textContent=t}else qk=t;return}
- pend=t;sync();flush()}
-addEventListener('pointerdown',()=>{userAt=now()},true);addEventListener('keydown',()=>{userAt=now()},true);
-
-/* ---------- настроение ---------- */
-const ONCE=new Set(['wow','stretch','yawn','peek','scratch','wave']);
-function setMood(m){if(m!==mood||ONCE.has(m)){mood=m;since=now()}bar.dataset.m=m}
-const arm=()=>{clearTimeout(zzT);clearTimeout(yaT);
- yaT=setTimeout(()=>{if(mood==='idle'&&!busy()&&!speaking){set('yawn',pick(PH.sleepy),0,true);setTimeout(()=>{if(mood==='yawn')set('sleepy','',0,true)},1700)}},38000);
- zzT=setTimeout(()=>{if(!busy()&&!speaking&&mood!=='listen')set('sleep',pick(PH.sleep),0,true)},55000)};
-/* долгая работа: Мочи подбадривает, потом снова показывает, что делает */
-function patience(){clearTimeout(patT);patT=setTimeout(()=>{if((mood==='work'||mood==='look')&&busy()){say(pick(PH.wait));
- patT=setTimeout(()=>{if((mood==='work'||mood==='look')&&busy()&&label)say(label);patience()},4000)}},9000+Math.random()*4000)}
-function set(m,t,ms,keepZ){setMood(m);if(t)say(t);
- clearTimeout(back);if(ms)back=setTimeout(()=>setMood('idle'),ms);
- if(m==='work'||m==='look')patience();else clearTimeout(patT);
- if(!keepZ)arm()}
-function heart(){const h=document.createElement('i');h.className='ht';h.style.left=(10+Math.random()*50)+'px';bar.append(h);setTimeout(()=>h.remove(),1200)}
-window.petTheme=t=>{theme(t);set('happy',pick(PH[t]||PH.girl),2500);heart()};
-
-/* ---------- взаимодействие ---------- */
-cv.onclick=()=>{if(now()-wokeAt<500)return;window.sfx&&sfx('pet');
- if(speaking&&window.mochiStop){mochiStop();set('happy',pick(PH.hush),2000);return}
- squishAt=now();const n=Date.now();clicks=clicks.filter(x=>n-x<4000);clicks.push(n);
- if(clicks.length>=5){clicks=[];set('dizzy',pick(PH.dizzy),2600);heart();heart();heart();return}
- if(clicks.length>=3){set('love',pick(PH.love),2400);heart();heart();heart();return}
- set('happy',pick(PH.pet),2500);heart();heart()};
-const wake=()=>{if(mood==='sleep'){wokeAt=now();set('happy',pick(PH.wake),2500);heart()}else if(mood==='sleepy'||mood==='yawn')set('happy','',900)};
-addEventListener('pointerdown',wake,true);addEventListener('keydown',wake,true);
-let helloAt=0;
-cv.addEventListener('pointerenter',e=>{if(e.pointerType!=='mouse'||mood!=='idle'||busy()||now()-helloAt<30000)return;
- helloAt=now();set('wave',Math.random()<.5?pick(PH.hello):'',1400,true)});
-let typePh=0;
-$('#inp').addEventListener('input',()=>{typeAt=now();if(mood==='sleep')return;
- if(mood==='idle'&&!busy()&&now()-typePh>60000&&Math.random()<.5){typePh=now();say(pick(PH.typing))}arm()});
-addEventListener('resize',()=>fit(sp.dataset.t||''));
-document.fonts&&document.fonts.ready.then(()=>fit(sp.dataset.t||''));
-/* бездельничанье: маленькие сценки, пока никто не пишет */
-let nextAct=now()+9000;
-setInterval(()=>{const n=now();if(mood!=='idle'||busy()||speaking||tw||n<nextAct)return;
- nextAct=n+7000+Math.random()*9000;const r=Math.random();
- if(r<.36)set('talk',idleLine(),2600,true);
- else if(r<.5)set('peek','',2700,true);
- else if(r<.61)set('blep','',1800,true);
- else if(r<.71)set('stretch','',1500,true);
- else if(r<.81)set('scratch','',1400,true);
- else if(r<.91)set('happy','',1100,true);
- else set('wave','',1400,true)},1000);
-
-/* действия инструментов из чата дублируются фразами Мочи */
-window.petAction=(lb,kind)=>{const s=String(lb||'').trim();if(!s)return;label=s[0].toUpperCase()+s.slice(1);
- set(kind==='web_search'||kind==='web_fetch'?'look':'work',label)};
-window.petResult=ok=>{lastFail=ok?0:Date.now()};
-/* статусы (скрытый #st) → фразы и настроение */
-const ERR=[[/нет сохранения/,['Сохранений пока нет…','Сундучок пустой…']],[/сети нет/,['Я готова, но в Linux нет интернета…','Linux работает, но без интернета…']],
- [/не отвечает/,['Linux молчит… загляни в «Терминал»','Linux задумался… проверь «Терминал»']],
- [/ядро не скач|не скачался/,['Не смогла скачать ядро…','Ядро не долетело… проверь сеть']],
- [/сохран/,['Не получилось сохранить…','Сундучок не закрылся…']],[/восстановл/,['Не смогла вспомнить прошлый раз…','Снимок не открылся…']],
- [/запуск/,['Не смогла запуститься…','Linux не завёлся…']]];
-new MutationObserver(()=>{const t=$('#st').textContent,d=$('#dot').className,pm=t.match(/(\d+)%/);
- if(/^готово/.test(t)&&busy())return;
- const quietNet=d==='err'&&/^готово/.test(t)&&netWarned;
- if(d==='err'&&!quietNet){stage='';if(/сети нет/.test(t))netWarned=true;const e=ERR.find(x=>x[0].test(t));set('sad',e?pick(e[1]):'Ой… '+t.toLowerCase(),6000);greeted=true;return}
- if(pm){const sg=t.replace(/\s*·.*$/,'').trim();
-  if(sg===stage){if(!tw){say(stPh+' '+pm[1]+'%',true);arm()}}
-  else{stage=sg;stPh=pick(STG[sg]||['Просыпаюсь…']);set(STM[sg]||'think',stPh+' '+pm[1]+'%')}
-  return}
- stage='';
- if(/^готово/.test(t)){
-  if(!greeted){greeted=true;set('wave',/сеть/.test(t)&&!/нет/.test(t)?pick(PH.readyNet):pick(PH[dayPart()]),3500);heart();return}
-  set('happy',pick(PH.done),3500);heart()}
- else if(/^запуск/.test(t))set('think',pick(['Просыпаюсь…','Запускаюсь…','Протираю глазки…']));
- else if(/состояние сохранено/.test(t)){set('happy',pick(PH.saved),3000);heart()}
- else if(/сохраняю/.test(t))set('save',pick(PH.save));
- else if(/загружаю файлы/.test(t))set('work','Несу файлы в Linux… '+((t.match(/\d+\/\d+/)||[''])[0]));
- else if(/перезагрузите/.test(t))set('think','Перезагрузи страницу — тогда настройки Linux вступят в силу',8000)
- /* «выполняю / ищу / отправляю» не трогаем: эти фразы задаёт petAction */
-}).observe($('#stsrc'),{subtree:true,childList:true,characterData:true,attributes:true});
-new MutationObserver(ms=>ms.forEach(r=>r.addedNodes.forEach(n=>{const c=n.className||'';
- if(c==='m u'){label='';set('happy',pick(PH.got),1500);heart()}
- else if(c==='dots'){const rf=lastFail&&Date.now()-lastFail<10000;lastFail=0;
-   if(label&&busy()&&!rf){setMood('think');clearTimeout(back);patience()}else set('think',rf?pick(PH.retry):pick(PH.think))}
- else if(c==='m a')set('talk',pick(PH.talk),2500);
- else if(/fc/.test(c)){set('happy',pick(PH.file),4000);heart()}
- else if(c==='m e')set('sad',pick(PH.err),5000)
- else if(c==='empty'&&n.dataset&&n.dataset.cleared)set('happy',pick(PH.clear),2500)}))).observe($('#msgs'),{childList:true});
-$('#c-save').addEventListener('click',()=>set('happy',pick(PH.settings),2500));
-window.petSet=set;
-window.petSpeak=on=>{speaking=!!on;if(on){setMood('talk');clearTimeout(back);arm()}else if(mood==='talk')setMood('idle')};
-set('think','Просыпаюсь…');
-})();
 </script>
 <script>
 /* ---------- Голос: ввод (SpeechRecognition), озвучка ответов (speechSynthesis), полный экран ---------- */

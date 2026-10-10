@@ -20,6 +20,7 @@ import { TERM_PREFIX, proxyHttp, proxyUpgrade } from './term.js';
 import * as U from './update.js';
 import * as AC from './access.js';
 import { fsCmd, fsGet, fsUpload, agentInfo } from './runner-client.js';
+import { warmWeb } from './mcp.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const VERSION = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8')).version;
@@ -74,10 +75,19 @@ function sameOrigin(req) {
 }
 const userOf = req => A.sessionUser(cookies(req)[COOKIE]);
 
-/* ---------- страница: внедряем режим сервера, CSP с хешами встроенных скриптов ---------- */
+/* ---------- страница: внедряем режим сервера, CSP с хешами встроенных скриптов ----------
+   Образ Alpine и BIOS внутри index.html нужны только браузерной версии (эмулятору v86): на сервере Linux настоящий.
+   Это 3,6 МБ из 3,8 в сжатом виде — без них страница весит ~190 КБ и открывается за доли секунды, а не за 10–20 с на медленной сети */
+export function stripImages(src) {
+  for (const k of ["const BIOS='", ",VGA='", "const ALP='"]) {
+    const i = src.indexOf(k), a = i + k.length, b = i < 0 ? -1 : src.indexOf("'", a);
+    if (b - a > 256 && /^[A-Za-z0-9+/=]+$/.test(src.slice(a, a + 256))) src = src.slice(0, a) + src.slice(b);
+  }
+  return src;
+}
 let page = null;
 function loadPage() {
-  const src = fs.readFileSync(path.join(CFG.web, 'index.html'), 'utf8')
+  const src = stripImages(fs.readFileSync(path.join(CFG.web, 'index.html'), 'utf8'))
     .replace('<head>', '<head>\n<meta name="mochi-server" content="1">')
     .replace(/<\/body>(?![\s\S]*<\/body>)/, '<script src="srv/client.js"></script>\n</body>');
   const hashes = [...src.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => `'sha256-${crypto.createHash('sha256').update(m[1]).digest('base64')}'`);
@@ -562,6 +572,8 @@ export function startServer() {
   A.initAuth();
   TG.initTelegram(A.listUsers);
   resumeAll(A.listUsers());
+  /* поиск в интернете подключаем заранее: иначе первое сообщение после перезапуска ждёт его (см. webTools) */
+  if (A.listUsers().some(u => getChat(u).settings().search !== false)) warmWeb();
   loadPage();
   U.initUpdates();
   const srv = http.createServer({ requestTimeout: 0, headersTimeout: 30000 }, handle);
