@@ -118,7 +118,7 @@ function stream(req, res, u) {
   const send = (ev, d) => res.write(`event: ${ev}\ndata: ${JSON.stringify(d)}\n\n`);
   send('snap', { ...chat.snapshot(), user: A.publicUser(u), build: U.buildId() });
   const on = {
-    log: e => send('log', e), delta: d => send('delta', { d }), run: r => send('run', r),
+    log: e => send('log', e), delta: d => send('delta', { d }), run: r => send('run', r), queue: q => send('queue', { queue: q }),
     reset: () => send('snap', chat.snapshot()),
   };
   for (const k in on) chat.on(k, on[k]);
@@ -372,10 +372,22 @@ async function api(req, res, url) {
       const files = (Array.isArray(b.files) ? b.files : []).slice(0, 20).map(f => ({ name: safeName(f.name), path: String(f.path || ''), size: +f.size || 0, fid: /^[0-9a-f]{24}$/.test(f.fid) ? f.fid : null }))
         .filter(f => f.path.startsWith(userDir(u) + '/inbox/'));
       const parts = (Array.isArray(b.parts) ? b.parts : []).slice(0, 10).filter(x => x && (x.type === 'image_url' || x.type === 'file'));
-      try { chat.submit({ text: b.text, files, parts, origin: 'web' }); } catch (e) { throw new HttpErr(e.status || 400, e.message); }
-      return json(res, 200, { ok: true });
+      let r;
+      try { r = chat.submit({ text: b.text, files, parts, origin: 'web' }); } catch (e) { throw new HttpErr(e.status || 400, e.message); }
+      return json(res, 200, { ok: true, ...r });
     }
-    case '/api/chat/stop': if (M === 'POST') { chat.stop(); return json(res, 200, { ok: true }); } break;
+    /* отвечаем, когда задача уже остановлена: страница сразу показывает итог, даже если поток событий отстал */
+    case '/api/chat/stop':
+      if (M !== 'POST') break;
+      await Promise.race([chat.stop(), new Promise(ok => setTimeout(ok, 5000).unref())]);
+      return json(res, 200, { ok: true, ...chat.runState() });
+    case '/api/chat/now': if (M === 'POST') return json(res, 200, { ok: chat.hurry() }); break;
+    case '/api/chat/unqueue': {
+      if (M !== 'POST') break;
+      const q = chat.unqueue(String((await jbody(req)).id || ''));
+      if (!q) throw new HttpErr(404, 'Мочи уже прочла это сообщение');
+      return json(res, 200, { ok: true, text: q.text, files: q.files });
+    }
     case '/api/chat/retry': if (M === 'POST') { try { chat.retry('web'); } catch (e) { throw new HttpErr(e.status || 400, e.message); } return json(res, 200, { ok: true }); } break;
     case '/api/chat/clear': if (M === 'POST') { chat.clear(); dropFiles(u); return json(res, 200, { ok: true }); } break;
     case '/api/upload': {

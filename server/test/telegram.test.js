@@ -40,6 +40,9 @@ before(async () => {
   model = await fakeModel(async body => {
     const last = body.messages.at(-1);
     const u = [...body.messages].reverse().find(x => x.role === 'user');
+    /* долгая задача ждёт флаг; сообщение во время работы — ответ по ходу дела и ещё один шаг */
+    if (last.role === 'user' && u.content.startsWith('долгая задача ')) return { tools: [{ name: 'run_command', args: { action: 'Жду', command: `while [ ! -f '${u.content.slice(14)}' ]; do sleep 0.05; done` } }] };
+    if (last.role === 'user' && u.content.startsWith('[во время работы] ')) return { text: 'по ходу: ' + u.content.slice(18), tools: [{ name: 'run_command', args: { action: 'Финиш', command: 'echo финиш' } }] };
     if (last.role === 'user' && /токен/.test(u.content)) return { tools: [{ name: 'telegram_connect', args: { token: u.content.match(/\d+:[\w-]+/)[0] } }] };
     if (last.role === 'tool') return { text: 'Готово: ' + last.content };
     assert.ok(body.messages[0].content.includes('@mochi_test_bot'), 'в системной подсказке есть состояние Telegram');
@@ -85,6 +88,18 @@ test('подключение Telegram через инструмент агент
   await tg.waitSent(/Свободна/);
   tg.push(777, '/web');
   await tg.waitSent(/^https:\/\/mochi\.example\/$/);
+
+  /* во время работы: сообщение — дополнение к задаче, ответ модели по ходу дела и итог приходят сюда же */
+  const flag = path.join(m.env.MOCHI_WORK, 'tguser', 'tg.flag'), n0 = tg.sent.length;
+  tg.push(777, 'долгая задача ' + flag);
+  for (let i = 0; i < 100 && !tg.sent.slice(n0).some(x => /Думаю/.test(x.text || '')); i++) await sleep(50);
+  tg.push(777, '/now');
+  await tg.waitSent(/Новых сообщений нет/);
+  tg.push(777, 'а сколько ещё?');
+  await tg.waitSent(/Передала Мочи — прочтёт после текущего шага/);
+  fs.writeFileSync(flag, '');
+  await tg.waitSent(/^по ходу: а сколько ещё/);
+  await tg.waitSent(/Готово: финиш/);
 
   /* задача из веба, когда чат закрыт → уведомление в Telegram */
   await c.json('/api/chat', { text: 'веб-задача' });
