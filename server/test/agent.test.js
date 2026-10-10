@@ -6,6 +6,10 @@ import { fakeModel, startMochi, registered, client, sleep } from './helpers.js';
 
 let m, model;
 const doneRun = evs => evs.some(e => e.ev === 'run' && e.d.running === false);
+const MID = '[во время работы] ';
+/* ждать файл-флаг: шаги сценария идут по команде теста, а не по таймерам */
+const flagged = async f => { for (let i = 0; i < 300 && !fs.existsSync(f); i++) await sleep(50); };
+const snapLog = async c => (await c.events(e => e.some(x => x.ev === 'snap'))).find(e => e.ev === 'snap').d;
 
 before(async () => {
   /* сценарий: команда → файл → ответ; дальше — по тексту последнего сообщения */
@@ -13,6 +17,11 @@ before(async () => {
     const last = body.messages[body.messages.length - 1];
     const u = [...body.messages].reverse().find(x => x.role === 'user');
     const ut = typeof u.content === 'string' ? u.content : u.content[0].text;
+    /* сообщение во время работы: что учла и что было прямо перед ним */
+    if (ut.startsWith(MID)) return { text: 'учла «' + ut.slice(MID.length) + '» после: ' + String(body.messages[body.messages.lastIndexOf(u) - 1].content).split('\n')[0] };
+    if (ut.startsWith('работай ')) return last.role === 'user' ? { tools: [{ name: 'run_command', args: { action: 'Работаю', command: `while [ ! -f '${ut.slice(8)}' ]; do sleep 0.05; done; echo шаг1` } }] } : { text: 'без дополнения' };
+    if (ut.startsWith('упрямо')) return last.role === 'user' ? { tools: [{ name: 'run_command', args: { action: 'Упрямлюсь', command: "trap '' TERM; sleep 30" } }] } : { text: 'упрямо готово' };
+    if (ut.startsWith('думай ')) { await flagged(ut.slice(6)); return { text: 'первый ответ' }; }
     if (ut.startsWith('посмотри')) return { tools: [{ name: 'view_image', args: { path: 'pic.png' } }, { name: 'view_image', args: { path: 'note.txt' } }] };
     if (ut.startsWith('[Картинки из view_image')) {
       const img = u.content.find?.(p => p.type === 'image_url'), tool = body.messages.filter(x => x.role === 'tool').slice(-2);
@@ -101,7 +110,6 @@ test('live-поток: дельты текста, шаги и окончание
   assert.ok(evs.some(e => e.ev === 'delta'));
   assert.ok(evs.some(e => e.ev === 'log' && e.d.kind === 'tool' && e.d.state === 'run'));
   assert.ok(evs.some(e => e.ev === 'run' && e.d.running === true));
-  /* второе сообщение во время работы — 409 */
 });
 
 test('лимит шагов: из настроек, выключается', async () => {
@@ -130,14 +138,124 @@ test('остановка убивает команду', async () => {
   await sleep(200);
   await c.json('/api/chat', { text: 'спать' });
   await sleep(1200);
-  assert.equal((await c.json('/api/chat', { text: 'ещё' })).status, 409);
   const t0 = Date.now();
-  await c.json('/api/chat/stop', {});
+  const s = await c.json('/api/chat/stop', {});
+  /* ответ — когда задача уже остановлена */
+  assert.equal(s.j.running, false);
   const evs = await p;
-  assert.ok(Date.now() - t0 < 8000);
+  assert.ok(Date.now() - t0 < 1000, 'остановилась за ' + (Date.now() - t0) + ' мс');
   const tool = evs.filter(e => e.ev === 'log' && e.d.kind === 'tool').at(-1).d;
   assert.equal(tool.state, 'bad');
-  assert.ok(evs.some(e => e.ev === 'log' && e.d.kind === 'note' && /Остановлено/.test(e.d.text)));
+  const note = evs.find(e => e.ev === 'log' && e.d.kind === 'note' && /Остановлено/.test(e.d.text)).d;
+  assert.equal(note.text, 'Остановлено'); assert.equal(note.retry, undefined);
+  assert.equal((await c.json('/api/chat/stop', {})).j.running, false);
+});
+
+test('«Стоп» — сразу, даже если команда не слушает SIGTERM; непрочитанное сообщение остаётся в переписке', async () => {
+  const c = await registered(m, 'olga');
+  await c.json('/api/settings', { base: model.url, model: 'fake-1' }, 'PUT');
+  const p = c.events(doneRun, 20000);
+  await sleep(200);
+  await c.json('/api/chat', { text: 'упрямо' });
+  await sleep(1200);
+  /* сообщение во время работы не отклоняется, а ждёт в очереди */
+  const r = await c.json('/api/chat', { text: 'а ещё вот что' });
+  assert.equal(r.status, 200); assert.match(r.j.queued, /^[0-9a-f]{12}$/);
+  const t0 = Date.now();
+  assert.equal((await c.json('/api/chat/stop', {})).j.running, false);
+  assert.ok(Date.now() - t0 < 1000, 'остановилась за ' + (Date.now() - t0) + ' мс (раньше ждала SIGKILL — 3 с)');
+  const evs = await p;
+  assert.ok(evs.some(e => e.ev === 'queue' && e.d.queue.length === 1 && e.d.queue[0].text === 'а ещё вот что' && !e.d.queue[0].msg));
+  const log = evs.filter(e => e.ev === 'log').map(e => e.d);
+  assert.equal(log.filter(e => e.kind === 'tool').at(-1).state, 'bad');
+  const ui = log.findIndex(e => e.kind === 'user' && e.text === 'а ещё вот что'), ni = log.findIndex(e => e.kind === 'note');
+  assert.ok(ui >= 0 && ui < ni, 'сообщение — в переписке, перед отметкой об остановке');
+  assert.equal(log[ni].retry, true);
+  assert.deepEqual((await snapLog(c)).queue, []);
+  /* «Продолжить»: модель отвечает на то, что не успела прочесть */
+  const p2 = c.events(evs => evs.some(e => e.ev === 'log' && e.d.kind === 'assistant'), 10000);
+  await sleep(200);
+  assert.equal((await c.json('/api/chat/retry', {})).status, 200);
+  assert.equal((await p2).find(e => e.ev === 'log' && e.d.kind === 'assistant').d.text, 'учла «а ещё вот что» после: Прервано пользователем');
+});
+
+test('сообщение во время работы доходит до модели между шагами', async () => {
+  const c = await registered(m, 'kim');
+  await c.json('/api/settings', { base: model.url, model: 'fake-1' }, 'PUT');
+  const flag = path.join(m.env.MOCHI_WORK, 'kim', 'go.flag');
+  const p = c.events(doneRun, 15000);
+  await sleep(200);
+  await c.json('/api/chat', { text: 'работай ' + flag });
+  await sleep(300);
+  assert.ok((await c.json('/api/chat', { text: 'учти ещё вот это' })).j.queued);
+  fs.writeFileSync(flag, '');
+  await p;
+  const s = await snapLog(c);
+  assert.deepEqual(s.log.map(e => e.kind), ['user', 'tool', 'user', 'assistant']);
+  assert.equal(s.log[1].state, 'ok');
+  assert.equal(s.log[2].text, 'учти ещё вот это'); assert.equal(s.log[2].mid, 1);
+  assert.equal(s.log[3].text, 'учла «учти ещё вот это» после: шаг1');
+  assert.deepEqual(s.queue, []);
+  /* модель видит пометку сразу после ответа инструмента и знает из подсказки, что с ней делать */
+  const req = model.calls.at(-1).body;
+  assert.equal(req.messages.at(-1).content, MID + 'учти ещё вот это');
+  assert.equal(req.messages.at(-2).role, 'tool');
+  assert.match(req.messages[0].content, /писать тебе прямо во время работы/);
+});
+
+test('сообщение, пришедшее, пока модель пишет ответ, получает ответ в той же задаче', async () => {
+  const c = await registered(m, 'max');
+  await c.json('/api/settings', { base: model.url, model: 'fake-1' }, 'PUT');
+  const flag = path.join(m.env.MOCHI_WORK, 'max', 'go.flag');
+  const p = c.events(doneRun, 15000);
+  await sleep(200);
+  await c.json('/api/chat', { text: 'думай ' + flag });
+  await sleep(300);
+  assert.ok((await c.json('/api/chat', { text: 'и ещё' })).j.queued);
+  fs.writeFileSync(flag, '');
+  const evs = await p;
+  assert.deepEqual(evs.filter(e => e.ev === 'log' && e.d.kind === 'assistant').map(e => e.d.text), ['первый ответ', 'учла «и ещё» после: первый ответ']);
+  assert.equal(evs.filter(e => e.ev === 'run' && !e.d.running).length, 1);
+});
+
+test('«Прочитать сейчас» бросает текущий шаг и передаёт сообщение', async () => {
+  const c = await registered(m, 'lea');
+  await c.json('/api/settings', { base: model.url, model: 'fake-1' }, 'PUT');
+  assert.equal((await c.json('/api/chat/now', {})).j.ok, false);
+  const p = c.events(doneRun, 15000);
+  await sleep(200);
+  await c.json('/api/chat', { text: 'упрямо' });
+  await sleep(800);
+  assert.equal((await c.json('/api/chat/now', {})).j.ok, false, 'очередь пуста — шаг не трогаем');
+  await c.json('/api/chat', { text: 'срочно: стоп-кран' });
+  const t0 = Date.now();
+  assert.equal((await c.json('/api/chat/now', {})).j.ok, true);
+  const evs = await p;
+  assert.ok(Date.now() - t0 < 2000, 'ответила за ' + (Date.now() - t0) + ' мс');
+  assert.equal(evs.filter(e => e.ev === 'log' && e.d.kind === 'tool').at(-1).d.state, 'bad');
+  assert.equal(evs.filter(e => e.ev === 'log' && e.d.kind === 'assistant').at(-1).d.text, 'учла «срочно: стоп-кран» после: Прервано: пользователь прислал новое сообщение — оно ниже');
+  assert.ok(!evs.some(e => e.ev === 'log' && e.d.kind === 'note'), 'задача не остановлена');
+});
+
+test('сообщение из очереди можно отозвать; очередь не бесконечна', async () => {
+  const c = await registered(m, 'nik');
+  await c.json('/api/settings', { base: model.url, model: 'fake-1' }, 'PUT');
+  const p = c.events(doneRun, 15000);
+  await sleep(200);
+  await c.json('/api/chat', { text: 'упрямо' });
+  await sleep(800);
+  const id = (await c.json('/api/chat', { text: 'передумала' })).j.queued;
+  const r = await c.json('/api/chat/unqueue', { id });
+  assert.equal(r.status, 200); assert.equal(r.j.text, 'передумала');
+  assert.equal((await c.json('/api/chat/unqueue', { id })).status, 404);
+  for (let i = 0; i < 20; i++) assert.equal((await c.json('/api/chat', { text: 'п' + i })).status, 200);
+  assert.equal((await c.json('/api/chat', { text: 'лишнее' })).status, 429);
+  await c.json('/api/chat/stop', {});
+  const evs = await p;
+  assert.ok(evs.some(e => e.ev === 'queue' && e.d.queue.length === 0));
+  const users = evs.filter(e => e.ev === 'log' && e.d.kind === 'user').map(e => e.d.text);
+  assert.ok(!users.includes('передумала') && !users.includes('лишнее'));
+  assert.equal(users.filter(t => /^п\d+$/.test(t)).length, 20);
 });
 
 test('send_file не отдаёт файлы вне рабочей папки (симлинк на данные сервера)', async () => {

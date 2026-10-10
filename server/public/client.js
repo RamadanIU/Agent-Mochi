@@ -32,6 +32,12 @@ css.textContent = `
 #p-srv .row2{display:flex;gap:14px;flex-wrap:wrap;margin-top:16px}
 #p-srv .row2 .pbtn{flex:1 1 200px;width:auto}
 #p-srv .note{display:block;margin-top:18px;font-size:9px;line-height:1.7;color:var(--mut);word-break:break-all}
+[data-act=sretry] .pi{--ico:var(--i-restore)}
+.snote .ea{justify-content:center;margin-top:10px}
+#queue{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:12px 16px 0;background:var(--card)}#queue[hidden]{display:none}
+#queue .qh{flex:1 1 100%;display:flex;align-items:center;gap:12px;margin:0 4px;color:var(--mut);font:7px/1.6 var(--pf)}
+#queue .qh span{flex:1;min-width:0}#queue .qh .pbtn{flex:none;margin:4px}#queue .qh .pbtn .pi{--ico:var(--i-enter)}
+#queue .chip{border-left:4px dashed var(--acc)}#queue .chip .n{color:var(--fg)}
 `;
 document.head.append(css);
 
@@ -144,9 +150,14 @@ function fileCardS(e) {
   el.append(fr, fb); box.append(el); pin();
   if (!replaying && !$('#v-chat').classList.contains('on')) { unread++; badge(); }
 }
-function note(text) {
+/* «Продолжить» под последней отметкой «Остановлено»: остановили, а сообщения, присланные во время работы, остались
+   без ответа. Нужна, только пока после остановки ничего не случилось — следующая запись её убирает */
+let cont = null;
+function note(text, retry) {
   const box = $('#msgs'); box.querySelector('.empty')?.remove();
-  const d = document.createElement('div'); d.className = 'snote'; d.textContent = text; box.append(d); pin();
+  const d = document.createElement('div'); d.className = 'snote'; d.textContent = text;
+  if (retry) { d.insertAdjacentHTML('beforeend', '<div class="ea"><button class="pbtn sm" data-act="sretry"><i class="pi"></i><span>Продолжить</span></button></div>'); cont = d.lastChild; }
+  box.append(d); pin();
 }
 function errBox(e) {
   return esc(e.text || 'ошибка') + (e.detail ? '<small class="ed">' + esc(String(e.detail).slice(0, 220)) + '</small>' : '')
@@ -155,11 +166,15 @@ function errBox(e) {
 
 function render(e) {
   curT = e.t;
+  if (cont && e.kind !== 'note') { cont.remove(); cont = null; }
   switch (e.kind) {
     case 'user': {
       tray = null; bubble = null;
       const d = add('u', esc(e.text || '') + (e.origin === 'tg' ? '<span class="tgm">TG</span>' : '') + (e.files || []).map(f => '<div class="uf">' + (f.fid && isImgN(f.name) ? '<img src="api/files/' + f.fid + '" alt="" loading="lazy">' : '') + '+ ' + esc(f.name) + ' <small>' + sz(f.size) + '</small></div>').join(''));
-      stamp(d, e); break;
+      stamp(d, e);
+      /* сообщение из очереди ушло модели посреди задачи — она уже думает над ним */
+      if (e.mid && running && !replaying) think(true);
+      break;
     }
     case 'assistant': {
       const el = bubble || add('a', ''); bubble = null;
@@ -175,7 +190,7 @@ function render(e) {
     }
     case 'file': fileCardS(e); break;
     case 'error': stamp(add('e', errBox(e)), e); break;
-    case 'note': note(e.text); break;
+    case 'note': note(e.text, e.retry); break;
   }
   curT = null;
 }
@@ -222,9 +237,10 @@ function showOlder() {
   older = older.slice(0, cut); seq0 = part[0].seq;
   const b = box.querySelector(':scope>.more'); if (b) { moreIO && moreIO.unobserve(b); b.remove(); }
   const head = box.firstElementChild, start = document.createElement('i'); box.append(start); box._day = start;
-  const tray0 = tray, bubble0 = bubble, dots0 = dots; dots = null; /* иначе add() уберёт «Мочи печатает» внизу ленты */
+  const tray0 = tray, bubble0 = bubble, dots0 = dots, cont0 = cont; dots = null; cont = null; /* иначе add() уберёт «Мочи печатает» внизу ленты */
   quietly(() => { tray = null; bubble = null; for (const e of part) render(e); }, true);
-  tray = tray0; bubble = bubble0; dots = dots0;
+  if (cont) cont.remove(); /* старая отметка: после неё уже что-то было */
+  tray = tray0; bubble = bubble0; dots = dots0; cont = cont0;
   const fresh = []; for (let n = start.nextSibling; n; n = n.nextSibling) fresh.push(n);
   start.remove(); box.prepend(...fresh); box._day = null;
   /* тот же день — второй разделитель на стыке не нужен */
@@ -242,7 +258,7 @@ function onSnap(s) {
   if (s.user) me = s.user;
   seenBuild(s.build);
   quietly(() => {
-    const box = $('#msgs'); box.innerHTML = ''; tray = null; bubble = null; ents.clear(); think(false);
+    const box = $('#msgs'); box.innerHTML = ''; tray = null; bubble = null; cont = null; ents.clear(); think(false);
     const cut = cutAt(s.log, HIST);
     older = s.log.slice(0, cut); seq0 = cut < s.log.length ? s.log[cut].seq : 0;
     for (const e of s.log.slice(cut)) render(e);
@@ -251,6 +267,7 @@ function onSnap(s) {
     moreUI();
   });
   setRun(s);
+  onQueue(s.queue);
   if (!connected) {
     connected = true; setSt(READY, 'on');
     const n = s.log.filter(e => e.kind === 'user' || e.kind === 'assistant').length;
@@ -271,11 +288,68 @@ function onDelta(d) {
 }
 function setRun(r) {
   const was = running; running = !!r.running;
-  ctl = running ? { abort: () => post('api/chat/stop').catch(() => {}) } : null;
+  ctl = running ? { abort: stopNow } : null;
   sendUI(running);
   if (running && !bubble) { const last = $('#msgs').lastElementChild; if (!last || !last.classList.contains('tray') || !last.querySelector('.th.s-run')) think(true); }
   if (!running) { think(false); stopTray(); if (was) setSt(READY, 'on'); }
 }
+
+/* «Стоп»: кнопка откликается сразу, а сервер отвечает, когда задача уже остановлена, — итог виден,
+   даже если поток событий отстал (телефон только что проснулся, плохая сеть) */
+let stopping = false;
+async function stopNow() {
+  if (stopping) return;
+  stopping = true;
+  const b = $('#stop'); b.disabled = true; b.title = 'Останавливаю…';
+  think(false); setSt('останавливаю…', 'on');
+  try { const r = await post('api/chat/stop'); if (!r.running) { setRun(r); setSt(READY, 'on'); } }
+  catch (e) { if (e.status === 401) check(); else { add('e', esc('Не получилось остановить: ' + e.message)); setSt(READY, 'on'); } }
+  finally { stopping = false; b.disabled = false; b.title = 'Остановить (Esc)'; }
+}
+
+/* ---------- сообщения во время работы ----------
+   Пока Мочи работает, написанное ждёт ближайшей паузы между шагами (после команды или ответа модели) — здесь, над полем
+   ввода. Уйдёт модели — появится в переписке на своём месте. «Прочитать сейчас» бросает текущий шаг, «X» — отзывает
+   сообщение: текст (и вложения, если отправляла эта вкладка) возвращаются в поле ввода */
+const qbox = document.createElement('div');
+qbox.id = 'queue'; qbox.hidden = true; qbox.setAttribute('aria-live', 'polite');
+$('#chips').before(qbox);
+const held = new Map(); /* id сообщения в очереди → вложения (File) */
+function onQueue(q) {
+  q = Array.isArray(q) ? q : [];
+  for (const id of [...held.keys()]) if (!q.some(x => x.id === id)) held.delete(id);
+  qbox.hidden = !q.length; qbox.innerHTML = '';
+  if (!q.length) return;
+  const h = document.createElement('div'); h.className = 'qh';
+  h.innerHTML = '<span></span><button class="pbtn sm" type="button" data-qnow title="Бросить текущий шаг и прочитать сразу"><i class="pi"></i><span>Прочитать сейчас</span></button>';
+  h.firstChild.textContent = (q.length > 1 ? plural(q.length, 'сообщение', 'сообщения', 'сообщений') + ' · ' : '') + 'Мочи прочтёт после текущего шага';
+  qbox.append(h);
+  for (const x of q) {
+    const d = document.createElement('span'), n = document.createElement('span'), b = document.createElement('button');
+    const fl = (x.files || []).map(f => '+ ' + f.name).join(' ');
+    d.className = 'chip'; n.className = 'n'; d.title = x.text || fl;
+    n.textContent = [String(x.text || '').replace(/\s+/g, ' ').trim(), fl].filter(Boolean).join(' ');
+    b.type = 'button'; b.textContent = 'X'; b.dataset.qx = x.id; b.setAttribute('aria-label', 'Отозвать сообщение'); b.title = 'Отозвать — вернуть в поле ввода';
+    d.append(n, b); qbox.append(d);
+  }
+}
+qbox.addEventListener('click', async e => {
+  const now = e.target.closest('[data-qnow]');
+  if (now) {
+    now.disabled = true; now.lastChild.textContent = 'Читаю…';
+    try { if (!(await post('api/chat/now')).ok) { now.disabled = false; now.lastChild.textContent = 'Прочитать сейчас'; } }
+    catch (x) { if (x.status === 401) check(); else add('e', esc(x.message)); now.disabled = false; now.lastChild.textContent = 'Прочитать сейчас'; }
+    return;
+  }
+  const b = e.target.closest('[data-qx]'); if (!b) return;
+  const id = b.dataset.qx; b.disabled = true;
+  try {
+    const r = await post('api/chat/unqueue', { id }), i = $('#inp');
+    if (r.text) { i.value = i.value.trim() ? r.text + '\n' + i.value : r.text; i.dispatchEvent(new Event('input')); }
+    const fs = held.get(id); if (fs && fs.length) { staged.push(...fs); renderChips(); }
+    i.focus();
+  } catch (x) { if (x.status === 401) check(); else if (x.status !== 404) add('e', esc(x.message)); b.disabled = false; }
+});
 
 /* ---------- поток событий ---------- */
 function connect() {
@@ -285,6 +359,7 @@ function connect() {
   es.addEventListener('log', e => onLog(JSON.parse(e.data)));
   es.addEventListener('delta', e => onDelta(JSON.parse(e.data).d));
   es.addEventListener('run', e => setRun(JSON.parse(e.data)));
+  es.addEventListener('queue', e => onQueue(JSON.parse(e.data).queue));
   es.onopen = () => { if (connected) setSt(READY, 'on'); };
   es.onerror = async () => {
     if (!es) return;
@@ -318,8 +393,8 @@ function mirror() {
 }
 
 /* ---------- отправка ---------- */
+/* во время работы сообщение не отклоняется: сервер ставит его в очередь, и Мочи прочтёт его между шагами */
 window.srvSubmit = async () => {
-  if (running) { ctl && ctl.abort(); return; }
   if (upBusy) return;
   const i = $('#inp'), t = i.value.trim(), fs = staged.slice();
   if (!t && !fs.length) return;
@@ -340,8 +415,10 @@ window.srvSubmit = async () => {
   }
   if (i.value.trim() === t) { i.value = ''; i.style.height = ''; }
   lastSent = t;
-  try { await post('api/chat', { text: t, files, parts }); }
-  catch (e) {
+  try {
+    const r = await post('api/chat', { text: t, files, parts });
+    if (r && r.queued) { if (fs.length) held.set(r.queued, fs); window.sfx && sfx('send'); }
+  } catch (e) {
     if (e.status === 401) return check();
     add('e', esc(e.message)); if (!i.value) i.value = t;
   }

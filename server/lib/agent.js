@@ -89,6 +89,18 @@ export function setTools(chat, m) {
 const argsOk = s => { try { const a = JSON.parse(s); return !!a && typeof a === 'object' && !Array.isArray(a); } catch { return false; } };
 const sleep = (ms, sig) => new Promise(ok => { const t = setTimeout(ok, ms); sig?.addEventListener('abort', () => { clearTimeout(t); ok(); }, { once: true }); });
 const abortErr = () => Object.assign(new Error('остановлено'), { name: 'AbortError' });
+/* ждём операцию, но не дольше, чем до «Стопа»: агент останавливается сразу, а сама операция доделывается в фоне.
+   Команду исполнитель добивает сам (SIGTERM, через 3 с — SIGKILL), запросы к модели и MCP получают тот же сигнал;
+   а подключение к MCP или поиску (до 10–30 с) и упрямый процесс больше не держат «Стоп» */
+const until = (p, sig) => new Promise((ok, no) => {
+  const ab = () => no(abortErr());
+  if (sig.aborted) ab(); else sig.addEventListener('abort', ab, { once: true });
+  Promise.resolve(p).then(v => { sig.removeEventListener('abort', ab); ok(v); }, e => { sig.removeEventListener('abort', ab); no(e); });
+});
+
+/* сообщения во время работы: ждут в очереди и уходят модели между шагами — после ответов инструментов */
+const MID = '[во время работы] ', MAX_QUEUE = 20;
+const MID_SYS = '\nПользователь может писать тебе прямо во время работы: такие сообщения начинаются с «[во время работы]» и приходят между шагами. Это дополнение, уточнение, новая просьба или вопрос по ходу дела: учти его и продолжай задачу с поправкой на сказанное (новую просьбу выполни вместе с текущей или сразу после неё). На вопрос ответь коротко прямо сейчас и, если задача не закончена, продолжай работу. Просят остановиться, бросить задачу или сделать иначе — так и сделай.';
 
 function labelFor(n, a) {
   let s;
@@ -140,7 +152,8 @@ export class Chat extends EventEmitter {
     this.doc = new Doc(path.join(this.dir, 'chat.json'), { hist: [], log: [], seq: 0, run: null, cwd: null, sess: rid(16) });
     this.set = new Doc(path.join(this.dir, 'settings.json'), () => ({ ...DEF_SETTINGS }));
     this.clients = new Set();
-    this.ctl = null; this.partial = ''; this.gen = 0; this.noVis = 0;
+    /* ctl — вся задача («Стоп»), stepCtl — текущий шаг («Прочитать сейчас»), ended — обещание конца задачи */
+    this.ctl = null; this.stepCtl = null; this.ended = Promise.resolve(); this.partial = ''; this.gen = 0; this.noVis = 0;
     /* что агент уже видел из файлов (только в памяти): настоящий путь → {sig: версия, rng: [[с, по, ход]]};
        нужно, чтобы не перезаписать непрочитанный файл и не выводить заново то, что уже есть в разговоре */
     this.seen = new Map(); this.turn = 0; this.phKey = null;
@@ -152,7 +165,9 @@ export class Chat extends EventEmitter {
     const r = this.doc.v.run;
     return { running: this.running, ...(r ? { origin: r.origin, t: r.t, steps: r.steps } : {}) };
   }
-  snapshot() { return { log: this.doc.v.log, seq: this.doc.v.seq, partial: this.partial, ...this.runState() }; }
+  snapshot() { return { log: this.doc.v.log, seq: this.doc.v.seq, partial: this.partial, queue: this.queueView(), ...this.runState() }; }
+  /* очередь для экрана: без готового сообщения для модели */
+  queueView() { return (this.doc.v.queue || []).map(({ id, text, files, origin, t }) => ({ id, text, files, origin, t })); }
 
   /* ---------- журнал для экрана ---------- */
   push(e) {
@@ -179,7 +194,7 @@ export class Chat extends EventEmitter {
     const us = H.map((m, i) => m.role === 'user' ? i : -1).filter(i => i >= 0), from = us.length > 40 ? us[us.length - 40] : 0;
     const out = [];
     for (let i = from; i < H.length; i++) {
-      const { _pf, _vi, ...m } = H[i];
+      const { _pf, _vi, _mid, ...m } = H[i];
       /* Ollama не принимает историю, где аргументы вызова — не JSON-объект (обрезаны или пустые): шлём {} — модель и так получила ошибку */
       if (m.tool_calls) m.tool_calls = m.tool_calls.map(c => argsOk(c.function.arguments) ? c : { ...c, function: { ...c.function, arguments: '{}' } });
       if (_pf && lvl < 2 && rec.has(i)) {
@@ -206,24 +221,71 @@ export class Chat extends EventEmitter {
       const got = new Set(H.slice(i + 1).map(x => x.tool_call_id));
       for (const c of a.tool_calls) if (!got.has(c.id)) H.push({ role: 'tool', tool_call_id: c.id, content: why });
     }
-    for (const e of this.doc.v.log) if (e.kind === 'tool' && e.state === 'run') e.state = 'bad';
+    /* прерванные шаги — на экран сразу: агент не ждёт, пока убитая команда закончится */
+    for (const e of this.doc.v.log) if (e.kind === 'tool' && e.state === 'run') { e.state = 'bad'; this.update(e); }
     this.doc.save();
   }
 
   /* ---------- управление ---------- */
+  /* Мочи свободна — сообщение начинает задачу. Занята — ждёт в очереди и уходит модели в ближайшей паузе между шагами
+     (после текущей команды или ответа модели) с пометкой MID: модель понимает, что это дополнение или вопрос по ходу дела */
   submit({ text = '', files = [], parts = [], origin = 'web' }) {
-    if (this.running) throw Object.assign(new Error('Мочи ещё работает над прошлой задачей'), { status: 409 });
     text = String(text).slice(0, 100000);
     if (!text.trim() && !files.length) throw Object.assign(new Error('пустое сообщение'), { status: 400 });
+    const busy = this.running, Q = this.doc.v.queue ||= [];
+    if (busy && Q.length >= MAX_QUEUE) throw Object.assign(new Error('Мочи ещё не прочла прошлые сообщения — подожди немного'), { status: 429 });
     const content = (text.trim() || 'Файлы во вложении.') + (files.length
       ? '\n\n[Пользователь загрузил файлы на сервер:\n' + files.map(f => '- ' + f.path + ' (' + sz(f.size) + ')').join('\n') + ']' : '');
-    const m = { role: 'user', content };
+    const m = busy ? { role: 'user', content: MID + content, _mid: 1 } : { role: 'user', content };
     if (parts.length) m._pf = this.saveParts(parts);
+    const pub = { text, origin, files: files.map(f => ({ name: f.name, size: f.size, fid: f.fid || null })) };
+    if (busy) {
+      const q = { id: rid(6), t: Date.now(), ...pub, msg: m };
+      Q.push(q);
+      if (origin === 'tg' && this.doc.v.run) this.doc.v.run.tg = 1;
+      this.doc.save();
+      this.emit('queue', this.queueView());
+      return { queued: q.id };
+    }
     this.doc.v.hist.push(m);
     this.turn++;
     this.trimHist();
-    this.push({ kind: 'user', text, origin, files: files.map(f => ({ name: f.name, size: f.size, fid: f.fid || null })) });
+    this.push({ kind: 'user', ...pub });
     this.start(origin);
+    return {};
+  }
+
+  /* очередь → в историю (сразу после ответов инструментов) и на экран: модель увидит сообщения следующим шагом */
+  takeQueue() {
+    const Q = this.doc.v.queue;
+    if (!Q?.length) return [];
+    const all = Q.splice(0);
+    for (const q of all) {
+      this.doc.v.hist.push(q.msg);
+      this.push({ kind: 'user', text: q.text, origin: q.origin, files: q.files, mid: 1 });
+    }
+    this.turn++;
+    this.trimHist();
+    this.emit('queue', []);
+    return all;
+  }
+
+  /* «Прочитать сейчас»: бросить текущий шаг (команду или ответ модели), чтобы модель прочла очередь немедленно */
+  hurry() {
+    if (!this.stepCtl || !this.doc.v.queue?.length) return false;
+    this.stepCtl.abort();
+    return true;
+  }
+
+  /* отозвать сообщение, которое модель ещё не прочла → оно само (текст вернётся в поле ввода) или null */
+  unqueue(id) {
+    const Q = this.doc.v.queue || [], i = Q.findIndex(q => q.id === id);
+    if (i < 0) return null;
+    const [q] = Q.splice(i, 1);
+    this.dropParts([q.msg]);
+    this.doc.save();
+    this.emit('queue', this.queueView());
+    return q;
   }
 
   retry(origin = 'web') {
@@ -233,14 +295,20 @@ export class Chat extends EventEmitter {
     this.start(origin);
   }
 
-  stop() { this.ctl?.abort(); }
+  /* «Стоп» действует сразу: всё, чего ждёт агент, обёрнуто в until. Обещание — конец задачи (журнал уже записан) */
+  stop() {
+    if (!this.ctl) return Promise.resolve();
+    this.ctl.abort();
+    return this.ended;
+  }
 
   clear() {
     this.gen++;
-    this.ctl?.abort(); this.ctl = null; this.partial = '';
+    this.ctl?.abort(); this.ctl = null; this.stepCtl = null; this.partial = '';
     this.seen.clear(); this.phKey = null;
     this.dropParts(this.doc.v.hist);
-    Object.assign(this.doc.v, { hist: [], log: [], run: null, sess: rid(16), act: [] });
+    this.dropParts((this.doc.v.queue || []).map(q => q.msg));
+    Object.assign(this.doc.v, { hist: [], log: [], run: null, sess: rid(16), act: [], queue: [] });
     this.doc.save();
     this.emit('reset');
     this.emit('run', this.runState());
@@ -248,15 +316,16 @@ export class Chat extends EventEmitter {
 
   async start(origin, resumed) {
     const g = this.gen, ctl = new AbortController();
-    this.ctl = ctl; this.partial = '';
-    this.doc.v.run = resumed && this.doc.v.run ? this.doc.v.run : { origin, t: Date.now(), steps: 0 };
+    let fin;
+    this.ctl = ctl; this.partial = ''; this.ended = new Promise(ok => { fin = ok; });
+    this.doc.v.run = resumed && this.doc.v.run ? this.doc.v.run : { origin, t: Date.now(), steps: 0, ...(origin === 'tg' ? { tg: 1 } : {}) };
     this.doc.save();
     const run = this.doc.v.run;
     this.emit('run', this.runState());
     let text = '', err = null;
     try { text = await this.loop(ctl.signal, g); }
     catch (e) { if (!ctl.signal.aborted) err = e; }
-    if (g !== this.gen) return; /* чат очистили — старая задача молча уходит */
+    if (g !== this.gen) return fin(); /* чат очистили — старая задача молча уходит */
     if (ctl.signal.aborted && this.partial.trim()) {
       /* остановили посреди ответа — то, что модель успела написать, оставляем */
       this.doc.v.hist.push({ role: 'assistant', content: this.partial });
@@ -264,12 +333,15 @@ export class Chat extends EventEmitter {
     }
     this.partial = '';
     this.repair(err ? 'Прервано: ' + friendly(err) : 'Прервано пользователем');
+    /* сообщения, которые модель так и не прочла, остаются в переписке: «Повторить» или «Продолжить» ответит на них */
+    const left = this.takeQueue().length;
     if (err) { console.warn('agent:', this.u.name, err.message); this.push({ kind: 'error', text: friendly(err), detail: err.detail || '', retry: true }); }
-    else if (ctl.signal.aborted) this.push({ kind: 'note', text: 'Остановлено' });
+    else if (ctl.signal.aborted) this.push({ kind: 'note', text: left ? 'Остановлено · Мочи ещё не ответила на сообщения выше' : 'Остановлено', ...(left ? { retry: true } : {}) });
     this.doc.v.run = null; this.doc.save();
     this.ctl = null;
     this.emit('run', this.runState());
-    this.emit('done', { origin: run.origin, text, err, stopped: ctl.signal.aborted && !err, steps: run.steps, ms: Date.now() - run.t });
+    this.emit('done', { origin: run.origin, tg: !!run.tg, text, err, stopped: ctl.signal.aborted && !err, steps: run.steps, ms: Date.now() - run.t });
+    fin();
   }
 
   /* подсказка собирается только из того, что сейчас включено: выключенный инструмент не занимает память */
@@ -297,55 +369,82 @@ export class Chat extends EventEmitter {
       + (offB.length ? '\nВыключено пользователем: ' + offB.join(', ') + '. Включить их может только он сам в настройках — ты не можешь.' : '')
       + extra
       + (this.wire().some(m => Array.isArray(m.content)) ? '\nКартинки и PDF из сообщений пользователя ты видишь напрямую; те же файлы лежат в inbox/, если их нужно обработать.' : '')
-      + (has('view_image') ? '\nЧтобы увидеть картинку с сервера (фото, скриншот, график), вызови view_image — не гадай по имени файла и не читай её через read_file.' : '');
+      + (has('view_image') ? '\nЧтобы увидеть картинку с сервера (фото, скриншот, график), вызови view_image — не гадай по имени файла и не читай её через read_file.' : '')
+      + (this.doc.v.hist.some(m => m._mid) ? MID_SYS : '');
   }
 
-  /* ---------- цикл агента ---------- */
+  /* ---------- цикл агента ----------
+     Шаг — вызов модели и её инструменты. У шага свой сигнал (поверх сигнала задачи): «Прочитать сейчас» бросает только его,
+     а задача продолжается с новыми сообщениями. Перед каждым шагом — сообщения, присланные во время работы */
   async loop(sig, g) {
-    const chk = () => { if (sig.aborted || g !== this.gen) throw abortErr(); };
     const H = this.doc.v.hist, run = this.doc.v.run;
+    let ask = false; /* в этом шаге модель отвечает на сообщения из Telegram — её пояснение по ходу дела тоже туда */
     for (;;) {
-      const S = this.settings(), on = t => isOn(S, t.function.name);
-      if (S.stepLimit !== false && run.steps >= S.maxSteps) throw new Error('Мочи сделала ' + S.maxSteps + ' шагов подряд и остановилась, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить. Лимит шагов меняется в настройках → Модель.');
-      run.steps++;
-      const web0 = S.search ? await webTools() : [], web = web0.filter(on); chk();
-      const offB = [...builtins(), ...web0, ...MANAGE_TOOLS].filter(t => !on(t)).map(t => t.function.name);
-      const X = await agentExt(this, S.tools); chk();
-      const tools = [...builtins().filter(on), ...web, ...X.defs], names = new Set(tools.map(t => t.function.name));
-      const ctx = { web, X, names };
-      const { text, calls } = await this.callModel(await this.system(names, X.prompt, web.length > 0, offB), tools, sig); chk();
-      H.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}) });
-      this.partial = '';
-      if (text) this.push({ kind: 'assistant', text });
-      this.doc.save();
-      if (!calls.length) return text;
-      ctx.imgs = [];
-      for (const tc of calls) {
-        let a = {}, bad = false;
-        try { a = JSON.parse(tc.function.arguments || '{}') || {}; } catch { bad = true; }
-        if (typeof a !== 'object' || Array.isArray(a)) { a = {}; bad = true; }
-        const nm = tc.function.name;
-        const e = this.push({ kind: 'tool', name: nm, label: labelFor(nm, a), hint: nm === 'run_command' ? String(a.command || '').slice(0, 2000) : FILE_TOOLS.has(nm) || nm === 'view_image' ? String(a.path || '').slice(0, 500) : '', state: 'run' });
-        this.emit('tool', e);
-        let out;
-        try {
-          out = bad ? 'Ошибка: аргументы вызова — невалидный JSON (возможно, обрезаны). Повтори вызов с корректным JSON, длинное содержимое раздели на части.'
-            : !ctx.names.has(nm) ? 'Ошибка: инструмента ' + nm + ' сейчас нет (он выключен пользователем или не подключён). Обойдись без него.'
-            : await this.tool(nm, a, sig, ctx);
-        } catch (x) { if (sig.aborted || g !== this.gen) throw abortErr(); out = 'Ошибка: ' + x.message; }
-        if (g !== this.gen) throw abortErr();
-        out = String(out);
-        e.state = /^Ошибка|\[таймаут|\[прервано|\[не выполнено/.test(out) ? 'bad' : 'ok';
-        this.update(e);
-        H.push({ role: 'tool', tool_call_id: tc.id, content: out });
-        this.doc.save();
-        chk();
-      }
-      if (ctx.imgs.length) {
-        H.push({ role: 'user', content: '[Картинки из view_image: ' + ctx.imgs.map(x => x.at).join(', ') + ']', _pf: this.saveParts(ctx.imgs.map(x => x.part)), _vi: 1 });
-        this.doc.save();
-      }
+      const got = this.takeQueue();
+      if (got.length) { run.base = run.steps; ask = got.some(q => q.origin === 'tg'); }
+      const step = this.stepCtl = new AbortController();
+      try {
+        const text = await this.step(AbortSignal.any([sig, step.signal]), g, H, run, ask);
+        ask = false;
+        /* ответ готов, но пока модель писала, пришли сообщения — отвечаем и на них */
+        if (text !== null && !this.doc.v.queue?.length) return text;
+      } catch (e) {
+        if (sig.aborted || g !== this.gen || !step.signal.aborted) throw e;
+        /* шаг бросили ради новых сообщений: недописанный ответ остаётся, незакрытые вызовы закрываем */
+        if (this.partial.trim()) { H.push({ role: 'assistant', content: this.partial }); this.push({ kind: 'assistant', text: this.partial }); }
+        this.partial = '';
+        this.repair('Прервано: пользователь прислал новое сообщение — оно ниже');
+      } finally { if (this.stepCtl === step) this.stepCtl = null; }
     }
+  }
+
+  /* один шаг → текст ответа (модель закончила) или null (были инструменты — нужен следующий шаг) */
+  async step(sig, g, H, run, ask) {
+    const chk = () => { if (sig.aborted || g !== this.gen) throw abortErr(); };
+    const S = this.settings(), on = t => isOn(S, t.function.name);
+    /* лимит — шагов подряд без сообщений пользователя */
+    if (S.stepLimit !== false && run.steps - (run.base || 0) >= S.maxSteps) throw new Error('Мочи сделала ' + S.maxSteps + ' шагов подряд и остановилась, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить. Лимит шагов меняется в настройках → Модель.');
+    run.steps++;
+    const web0 = S.search ? await until(webTools(), sig) : [], web = web0.filter(on); chk();
+    const offB = [...builtins(), ...web0, ...MANAGE_TOOLS].filter(t => !on(t)).map(t => t.function.name);
+    const X = await until(agentExt(this, S.tools), sig); chk();
+    const tools = [...builtins().filter(on), ...web, ...X.defs], names = new Set(tools.map(t => t.function.name));
+    const ctx = { web, X, names };
+    const sys = await until(this.system(names, X.prompt, web.length > 0, offB), sig); chk();
+    const { text, calls } = await until(this.callModel(sys, tools, sig), sig); chk();
+    H.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}) });
+    this.partial = '';
+    if (text) this.push({ kind: 'assistant', text });
+    this.doc.save();
+    if (!calls.length) return text;
+    if (text && ask) this.emit('aside', text);
+    ctx.imgs = [];
+    for (const tc of calls) {
+      let a = {}, bad = false;
+      try { a = JSON.parse(tc.function.arguments || '{}') || {}; } catch { bad = true; }
+      if (typeof a !== 'object' || Array.isArray(a)) { a = {}; bad = true; }
+      const nm = tc.function.name;
+      const e = this.push({ kind: 'tool', name: nm, label: labelFor(nm, a), hint: nm === 'run_command' ? String(a.command || '').slice(0, 2000) : FILE_TOOLS.has(nm) || nm === 'view_image' ? String(a.path || '').slice(0, 500) : '', state: 'run' });
+      this.emit('tool', e);
+      let out;
+      try {
+        out = bad ? 'Ошибка: аргументы вызова — невалидный JSON (возможно, обрезаны). Повтори вызов с корректным JSON, длинное содержимое раздели на части.'
+          : !ctx.names.has(nm) ? 'Ошибка: инструмента ' + nm + ' сейчас нет (он выключен пользователем или не подключён). Обойдись без него.'
+          : await until(this.tool(nm, a, sig, ctx), sig);
+      } catch (x) { if (sig.aborted || g !== this.gen) throw abortErr(); out = 'Ошибка: ' + x.message; }
+      if (g !== this.gen) throw abortErr();
+      out = String(out);
+      e.state = /^Ошибка|\[таймаут|\[прервано|\[не выполнено/.test(out) ? 'bad' : 'ok';
+      this.update(e);
+      H.push({ role: 'tool', tool_call_id: tc.id, content: out });
+      this.doc.save();
+      chk();
+    }
+    if (ctx.imgs.length) {
+      H.push({ role: 'user', content: '[Картинки из view_image: ' + ctx.imgs.map(x => x.at).join(', ') + ']', _pf: this.saveParts(ctx.imgs.map(x => x.part)), _vi: 1 });
+      this.doc.save();
+    }
+    return null;
   }
 
   async tool(nm, a, sig, { web, X, imgs }) {
@@ -546,13 +645,18 @@ export class Chat extends EventEmitter {
 export function resumeAll(users) {
   for (const u of users) {
     const c = getChat(u), r = c.doc.v.run;
-    if (!r) continue;
+    if (!r) {
+      /* очередь без задачи — сервер упал между сообщением и концом задачи: отвечаем на сообщения */
+      if (c.doc.v.queue?.length) { const o = c.doc.v.queue[0].origin; c.takeQueue(); c.start(o); }
+      continue;
+    }
     c.repair('Прервано: сервер перезапускался. Если команда важна — проверь её результат и при необходимости повтори.');
     if (Date.now() - r.t < 6 * 3600e3) {
       c.push({ kind: 'note', text: 'Сервер перезапускался — продолжаю работу' });
       c.start(r.origin, true);
     } else {
       c.doc.v.run = null; c.doc.save();
+      c.takeQueue();
       c.push({ kind: 'error', text: 'Работа прервалась: сервер был выключен.', retry: true });
     }
   }

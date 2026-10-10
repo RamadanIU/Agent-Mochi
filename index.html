@@ -277,7 +277,9 @@ html.isfs{overflow:hidden}
 .bar textarea{min-height:40px;padding:10px 12px}
 .go{width:40px;height:40px;display:flex;align-items:center;justify-content:center}
 .go .pi{width:16px;height:16px;--ico:var(--i-send)}
-#send.stop{background:var(--err);color:#fff}#send.stop .pi{width:14px;height:14px;--ico:var(--i-stop)}
+/* «Стоп» — отдельная кнопка: пока Мочи работает, «Отправить» тоже доступна (сообщение она прочтёт по ходу дела) */
+#stop{background:var(--err);color:#fff}#stop .pi{width:14px;height:14px;--ico:var(--i-stop)}#stop[hidden]{display:none}
+#stop:disabled{cursor:progress}#stop:disabled .pi{animation:blk .6s steps(1) infinite}
 .mic.rec{color:#fff}
 /* файлы от Мочи — дискетка */
 .fc .fr{display:flex;align-items:center;gap:12px;min-width:0}
@@ -1099,7 +1101,7 @@ const tick=setInterval(paint,100);paint();
   <section class="view on" id="v-chat">
     <div class="mw"><div id="msgs" role="log" aria-live="polite" aria-label="Переписка с Мочи"></div><button id="tobot" hidden><i class="pi"></i><span>к новым</span></button></div>
     <div id="chips" hidden></div>
-    <div class="bar"><button class="ic ab" id="att" title="Прикрепить файл" aria-label="Прикрепить файл"><i class="pi"></i></button><input type="file" id="cf" multiple hidden><button class="ic ab mic" id="mic" title="Голосовой ввод" aria-label="Голосовой ввод" aria-pressed="false" hidden><i class="pi"></i></button><textarea id="inp" rows="1" placeholder="напиши Мочи…" aria-label="Сообщение для Мочи"></textarea><button class="go" id="send" aria-label="Отправить"><i class="pi"></i></button></div>
+    <div class="bar"><button class="ic ab" id="att" title="Прикрепить файл" aria-label="Прикрепить файл"><i class="pi"></i></button><input type="file" id="cf" multiple hidden><button class="ic ab mic" id="mic" title="Голосовой ввод" aria-label="Голосовой ввод" aria-pressed="false" hidden><i class="pi"></i></button><textarea id="inp" rows="1" placeholder="напиши Мочи…" aria-label="Сообщение для Мочи"></textarea><button class="go" id="stop" aria-label="Остановить" title="Остановить (Esc)" hidden><i class="pi"></i></button><button class="go" id="send" aria-label="Отправить"><i class="pi"></i></button></div>
   </section>
   <section class="view" id="v-files" aria-label="Файлы"></section>
   <section class="view" id="v-term">
@@ -2414,14 +2416,16 @@ let upBusy=false;
 /* отправку, «Стоп» и «Повторить» делает client.js: задача живёт на сервере */
 function submit(){window.srvSubmit&&srvSubmit()}
 let lastSent='';
-const sendUI=on=>{const b=$('#send');b.classList.toggle('stop',on);b.setAttribute('aria-label',on?'Остановить':'Отправить');b.title=on?'Остановить (Esc)':''};
-/* Enter — отправить (на компьютере), Shift+Enter — перенос, ↑ в пустом поле — вернуть последнее, Esc — стоп */
+/* пока Мочи работает: рядом с «Отправить» — «Стоп», а написанное она прочтёт между шагами */
+const sendUI=on=>{const s=$('#stop');s.hidden=!on;if(!on)s.disabled=false;$('#inp').placeholder=on?'допиши по ходу…':'напиши Мочи…'};
+/* Enter — отправить (на компьютере; и во время работы), Shift+Enter — перенос, ↑ в пустом поле — вернуть последнее, Esc — стоп */
 const fine=matchMedia('(hover:hover) and (pointer:fine)');
 $('#inp').addEventListener('keydown',e=>{const i=e.target;
-  if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&fine.matches){e.preventDefault();if(!ctl)submit()}
+  if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&fine.matches){e.preventDefault();submit()}
   else if(e.key==='ArrowUp'&&!i.value&&lastSent){e.preventDefault();i.value=lastSent;i.dispatchEvent(new Event('input'))}});
 addEventListener('keydown',e=>{if(e.key==='Escape'&&ctl&&!$('#dlg').open&&!$('#ask').open&&!$('#v-files').classList.contains('on')){e.preventDefault();ctl.abort()}});
 $('#send').onclick=submit;
+$('#stop').onclick=()=>ctl&&ctl.abort();
 $('#inp').oninput=e=>{const t=e.target;t.style.height='auto';t.style.height=Math.min(t.scrollHeight,120)+'px'};
 welcome();tstat();
 new MutationObserver(ms=>ms.forEach(r=>r.addedNodes.forEach(n=>{const c=n.className||'';if(c==='m u')sfx('send');else if(c==='m e')sfx('err');else if(c==='fc')sfx('file')}))).observe($('#msgs'),{childList:true});
@@ -2470,7 +2474,7 @@ window.mochiSpeak=t=>speak(t,false);window.mochiStop=stop;window.mochiSay=t=>spe
 /* iOS/Safari: озвучку нужно «разбудить» первым касанием */
 let unl=false;addEventListener('pointerdown',()=>{if(unl||!SS)return;unl=true;try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;SS.speak(u)}catch(e){}},true);
 addEventListener('visibilitychange',()=>{if(document.hidden)stop()});
-$('#send').addEventListener('click',stop);$('#clr').addEventListener('click',stop);
+$('#send').addEventListener('click',stop);$('#stop').addEventListener('click',stop);$('#clr').addEventListener('click',stop);
 
 /* --- голосовой ввод --- */
 const mic=$('#mic'),inp=$('#inp');let rec=null,listening=false;
