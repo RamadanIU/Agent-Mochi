@@ -1,4 +1,4 @@
-/* Быстрый старт: страница без образа Linux (он нужен только браузерной версии), экран загрузки,
+/* Быстрый старт: лёгкая страница без встроенного Linux, экран загрузки
    и агент, который не ждёт подключения к поиску в интернете */
 import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,7 +9,6 @@ import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { fakeModel, startMochi, registered } from './helpers.js';
-import { stripImages } from '../lib/server.js';
 import { WEB_GRACE } from '../lib/mcp.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -54,32 +53,25 @@ async function ask(text) {
 }
 const tools = () => (model.calls[model.calls.length - 1].body.tools || []).map(t => t.function.name);
 
-test('страница сервера — без образа Linux и BIOS, скрипты целы и разрешены CSP', async () => {
+test('страница — без встроенного Linux, скрипты целы и разрешены CSP', async () => {
   const r = await fetch(m.base + '/', { headers: { 'accept-encoding': 'br' } });
   const t = await r.text();
-  assert.ok(t.length < 1.5 * 2 ** 20, 'страница весит ' + t.length);
-  assert.match(t, /const BIOS='',VGA='';/);
-  assert.match(t, /const ALP='';/);
-  assert.doesNotMatch(t, /H4sIAAAAAAAC/); /* gzip в base64 — так начинался образ Alpine */
+  assert.ok(t.length < 700 * 1024, 'страница весит ' + t.length);
+  assert.doesNotMatch(t, /H4sIAAAAAAAC|const (BIOS|VGA|ALP)=|new V86\(|libv86|wisps?:\/\//); /* ни образа, ни эмулятора, ни его сети */
   assert.match(t, /<div id="boot"/);
   const csp = r.headers.get('content-security-policy');
   const scripts = [...t.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x => x[1]);
   assert.ok(scripts.length >= 5);
   for (const s of scripts) {
-    new vm.Script(s); /* вырезание не сломало синтаксис */
+    new vm.Script(s);
     assert.ok(csp.includes(`'sha256-${crypto.createHash('sha256').update(s).digest('base64')}'`), 'скрипт без хеша в CSP');
   }
-  /* браузерной версии образ по-прежнему нужен — в самом файле он на месте */
-  const src = fs.readFileSync(path.join(here, '..', '..', 'index.html'), 'utf8');
-  assert.ok(src.length > 4 * 2 ** 20);
-  assert.equal(stripImages(stripImages(src)), stripImages(src));
 });
 
-test('вырезаются только длинные base64-строки образов', () => {
-  const s = "const BIOS='" + 'A'.repeat(300) + "',VGA='" + 'B'.repeat(300) + "';\nconst ALP='" + 'H4sI'.repeat(100) + "';\nconst X='keep';";
-  assert.equal(stripImages(s), "const BIOS='',VGA='';\nconst ALP='';\nconst X='keep';");
-  const short = "const ALP='abc';";
-  assert.equal(stripImages(short), short);
+test('в index.html нет браузерного агента: модель зовёт только сервер', () => {
+  const src = fs.readFileSync(path.join(here, '..', '..', 'index.html'), 'utf8');
+  assert.ok(src.length < 700 * 1024, 'index.html весит ' + src.length);
+  assert.doesNotMatch(src, /chat\/completions|search\.parallel\.ai|indexedDB/);
 });
 
 test('поиск в интернете молчит — агент отвечает, не дожидаясь его 10 секунд', async () => {

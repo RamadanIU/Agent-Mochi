@@ -1,5 +1,5 @@
-/* ---------- Мочи · режим сервера ----------
-   Страница та же, что и на GitHub Pages, но мозги и Linux — на сервере:
+/* ---------- Мочи · связь с сервером ----------
+   index.html — оформление, питомец, чат, проводник; здесь — всё, что говорит с сервером:
    • вход/регистрация (по приглашению);
    • агент работает на сервере в фоне: чат подписан на поток событий и после возвращения
      показывает и прогресс, и итог;
@@ -7,7 +7,6 @@
    • в настройках — вкладка «Сервер» (Telegram, приглашения, пароль, выход, обновления, доступ агента — root) и «Инструменты» (вкл/выкл, MCP, навыки).
    Используем функции основного скрипта (add, trayAdd, md, think, ask…), а не дублируем их. */
 (() => {
-if (typeof SRV === 'undefined' || !SRV) return;
 const de = document.documentElement;
 de.classList.add('srv');
 /* экран загрузки (#boot в index.html): страница на месте — дальше шаги «сервер → вход → модель → чат → агент» двигаем отсюда */
@@ -17,7 +16,6 @@ bt('go', 'link');
 /* ---------- стили серверного режима ---------- */
 const css = document.createElement('style');
 css.textContent = `
-html.srv #term{display:none}
 #tty{flex:1;min-height:0;width:100%;border:0;background:var(--tbg);display:block}
 .snote{align-self:center;max-width:92%;padding:6px 12px;color:var(--mut);background:var(--card);font:7px/1.6 var(--pf);box-shadow:var(--sh2);text-align:center}
 .m.u .tgm{display:inline-block;margin-left:8px;padding:0 5px;background:var(--onacc);color:var(--acc);font:6px/12px var(--pf)}
@@ -295,7 +293,7 @@ window.srvSubmit = async () => {
     add('e', esc(e.message)); if (!i.value) i.value = t;
   }
 };
-/* «Повторить» после ошибки — на сервере (перехватываем раньше обработчика браузерного режима) */
+/* «Повторить» после ошибки — на сервере (перехватываем раньше общего обработчика кнопок в чате) */
 $('#msgs').addEventListener('click', e => {
   const b = e.target.closest('[data-act=sretry]'); if (!b) return;
   e.stopImmediatePropagation(); b.closest('.ea')?.remove();
@@ -391,8 +389,6 @@ css.textContent += `
 
 /* ---------- вкладка «Сервер»: Аккаунт и Telegram ---------- */
 const lxTab = $('#t-lx'), lxPane = $('#p-lx');
-lxTab.textContent = 'Сервер';
-[...lxPane.children].forEach(x => { x.hidden = true; x.style.display = 'none'; });
 const pane = document.createElement('div'); pane.id = 'p-srv';
 const fAcct = fold('acct', 'Аккаунт'), fTg = fold('tg', 'Telegram');
 fAcct.body.innerHTML = `<div class="acct" id="s-acct">…</div>
@@ -967,7 +963,7 @@ function skillForm(name, raw, d = $('#x-skf')) {
 }
 
 /* ---------- терминал: ttyd за авторизацией ----------
-   ttyd рисует xterm.js в iframe с того же адреса, поэтому оформляем его как экран браузерной версии:
+   ttyd рисует xterm.js в iframe с того же адреса, поэтому оформляем его как ЭЛТ-экран Мочи:
    шрифт VT323, свечение люминофора, отступы, палитра из текущей темы (и меняется вместе с ней). */
 let tty = null;
 function ttyFrame() {
@@ -988,7 +984,7 @@ function ttyFrame() {
 const xterm = () => { try { return tty && tty.contentWindow && tty.contentWindow.term; } catch (e) { return null; } };
 const fit = () => { const t = xterm(); try { t && t.fit && t.fit(); } catch (e) {} };
 
-/* цвета: #rrggbb → смесь. Палитра ANSI монохромная, как экран браузерной версии (там вывод без цветов):
+/* цвета: #rrggbb → смесь. Палитра ANSI монохромная, как у старого ЭЛТ-экрана:
    все цвета — люминофор темы; «чёрный» — фон, «ярко-чёрный» — приглушённый люминофор (подсказки, строка tmux) */
 const hex = c => { c = String(c || '').trim().replace('#', ''); if (c.length === 3) c = c.replace(/./g, '$&$&'); const n = parseInt(c, 16); return /^[0-9a-f]{6}$/i.test(c) ? [n >> 16, n >> 8 & 255, n & 255] : null; };
 const mix = (a, b, k) => { const x = hex(a), y = hex(b); if (!x || !y) return a || b; return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, '0')).join(''); };
@@ -1068,11 +1064,6 @@ $('#tin').onkeydown = e => {
   if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); if (tx(i.value + '\r')) i.value = ''; }
   else if (!i.value && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); tx(e.key === 'ArrowUp' ? '\x1b[A' : '\x1b[B'); }
   else if (e.ctrlKey && !e.altKey && !e.metaKey && /^[cdlz]$/i.test(e.key) && i.selectionStart === i.selectionEnd) { e.preventDefault(); tx(String.fromCharCode(e.key.toLowerCase().charCodeAt(0) - 96)); }
-};
-tstat = function () {
-  const el = $('#tstat'); if (!el) return;
-  el.innerHTML = '<span>сервер</span><span></span><span class="sst"></span>';
-  el.children[1].textContent = location.host; el.querySelector('.sst').textContent = $('#st').textContent;
 };
 
 /* ---------- старт ----------
