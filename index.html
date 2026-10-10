@@ -326,7 +326,8 @@ background:var(--card) repeating-linear-gradient(var(--ink) 0 2px,transparent 2p
 .stabs button{position:relative;margin:4px 0 0 4px;padding:11px 12px 10px;background:var(--line);color:var(--mut);font:8px/1 var(--pf);box-shadow:0 -4px 0 0 var(--ink),-4px 0 0 0 var(--ink),4px 0 0 0 var(--ink)}
 .stabs button.on{top:4px;padding-bottom:14px;margin-top:0;background:var(--card);color:var(--acc);z-index:1}
 .stabs button:active{transform:none}
-.sbody{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:6px 20px 24px}
+/* основа — по содержимому (auto), а не 0: высота окна не задана, и Safari (iPhone/iPad) при flex:1 сжимал тело окна до полоски */
+.sbody{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:6px 20px 24px}
 .spane[hidden]{display:none}
 .seg{display:flex;gap:14px;margin:10px 4px 0}
 .seg button{flex:1;padding:12px 6px;background:var(--bg);color:var(--mut);font:8px/1.2 var(--pf);text-transform:none;box-shadow:var(--sh4)}
