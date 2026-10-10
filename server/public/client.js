@@ -199,7 +199,10 @@ function render(e) {
    сообщения: она заставляет браузер заново раскладывать всю ленту. Вниз — один раз в конце (keep — оставить, где есть) */
 function quietly(fn, keep) {
   replaying = true; window.mochiReplay = true; const sfxOn = cfg.sfx, u0 = unread, pin0 = pin; cfg.sfx = false; pin = () => {};
+  /* и без анимации появления: перерисованное (.np) не «выпрыгивает» заново при каждом переподключении */
+  const box = $('#msgs'); box.classList.add('rp');
   try { fn(); } finally {
+    box.querySelectorAll(':scope>:not(.empty),:scope>.tray li').forEach(n => n.classList.add('np')); box.classList.remove('rp');
     pin = pin0; replaying = false; unread = u0; badge(); if (!keep) pin(true);
     setTimeout(() => { cfg.sfx = sfxOn; window.mochiReplay = false; }, 0);
   }
@@ -501,21 +504,7 @@ function fold(key, title, meta, bad) {
   return d;
 }
 const foldMeta = (d, text, bad) => { let m = d.querySelector(':scope>summary>.fm'); if (!m) { m = el('span', 'fm'); d.firstChild.append(m); } m.textContent = text; m.classList.toggle('bad', !!bad); };
-css.textContent += `
-#dlg .stabs{gap:6px;padding:14px 10px 0;overflow-x:auto;scrollbar-width:none}#dlg .stabs::-webkit-scrollbar{display:none}#dlg .stabs button{flex:none;padding-left:8px;padding-right:8px}
-#dlg .fold{margin:14px 4px 0;border:0;background:var(--bg);box-shadow:var(--sh2)}
-#dlg .fold>summary{padding:13px 12px;gap:10px;align-items:center;color:var(--fg);font:9px/1.4 var(--pf)}
-#dlg .fold>summary .ft{flex:1;min-width:0;overflow-wrap:anywhere}
-#dlg .fold>summary .fm{flex:none;max-width:52%;text-align:right;color:var(--mut);font:7px/1.5 var(--pf);text-transform:none}
-#dlg .fold>summary .fm.bad{color:var(--err)}
-#dlg .fold>summary::after{flex:none;content:"+"}#dlg .fold[open]>summary::after{content:"-"}
-#dlg .fold[open]>summary{border-bottom:4px dashed var(--line)}
-#dlg .fold>.fb{padding:2px 12px 16px}
-#dlg .fold .fold{margin:12px 0 0;background:var(--card)}
-#dlg .fold .fold .fold{background:var(--bg)}
-#dlg .fold .sw{margin-top:14px}
-#dlg .fold .f{margin-top:14px}
-`;
+/* оформление папок и вкладок окна — в index.html (слой v10: значок по data-k, итог справа, стрелка) */
 
 /* ---------- вкладка «Сервер»: Аккаунт и Telegram ---------- */
 const lxTab = $('#t-lx'), lxPane = $('#p-lx');
