@@ -17,6 +17,8 @@ bt('go', 'link');
 const css = document.createElement('style');
 css.textContent = `
 #tty{flex:1;min-height:0;width:100%;border:0;background:var(--tbg);display:block}
+.more{align-self:center;display:flex;align-items:center;gap:8px;margin:0 4px;padding:9px 12px;background:var(--card);color:var(--fg);font:7px/1 var(--pf);box-shadow:var(--sh2)}
+.more .pi{width:10px;height:6px;--ico:var(--i-up)}.more:hover,.more:focus-visible{color:var(--acc)}
 .snote{align-self:center;max-width:92%;padding:6px 12px;color:var(--mut);background:var(--card);font:7px/1.6 var(--pf);box-shadow:var(--sh2);text-align:center}
 .m.u .tgm{display:inline-block;margin-left:8px;padding:0 5px;background:var(--onacc);color:var(--acc);font:6px/12px var(--pf)}
 #auth .sbody{padding:10px 20px 18px}
@@ -178,11 +180,58 @@ function render(e) {
   curT = null;
 }
 
-/* на время перерисовки истории — без звуков, счётчиков и озвучки. И без прокрутки вниз после каждого сообщения:
-   она заставляет браузер заново раскладывать всю ленту, и 400 записей рисовались секунды. Вниз — один раз в конце */
-function quietly(fn) {
-  replaying = true; const sfxOn = cfg.sfx, u0 = unread, pin0 = pin; cfg.sfx = false; pin = () => {};
-  try { fn(); } finally { pin = pin0; replaying = false; unread = u0; badge(); pin(true); setTimeout(() => { cfg.sfx = sfxOn; }, 0); }
+/* на время перерисовки истории — без звуков, счётчиков, озвучки и реакций питомца. И без прокрутки вниз после каждого
+   сообщения: она заставляет браузер заново раскладывать всю ленту. Вниз — один раз в конце (keep — оставить, где есть) */
+function quietly(fn, keep) {
+  replaying = true; window.mochiReplay = true; const sfxOn = cfg.sfx, u0 = unread, pin0 = pin; cfg.sfx = false; pin = () => {};
+  try { fn(); } finally {
+    pin = pin0; replaying = false; unread = u0; badge(); if (!keep) pin(true);
+    setTimeout(() => { cfg.sfx = sfxOn; window.mochiReplay = false; }, 0);
+  }
+}
+
+/* ---------- длинная история: сначала только последние сообщения ----------
+   Сотни ответов с таблицами и кодом рисуются секундами (на слабом телефоне — до четырёх). Поэтому при подключении
+   рисуем последние HIST сообщений, а раньше — по кнопке «Показать раньше» или когда долистаешь до неё; позиция не прыгает */
+const HIST = 100;
+let older = [], seq0 = 0;
+const isMsg = e => e.kind === 'user' || e.kind === 'assistant';
+/* откуда рисовать: последние n сообщений (твоих и Мочи), начиная с твоего — чтобы шаги инструментов не рвались */
+function cutAt(log, n) {
+  let k = log.length, c = 0;
+  while (k > 0 && c < n) { k--; if (isMsg(log[k])) c++; }
+  while (k > 0 && log[k].kind !== 'user') k--;
+  return k;
+}
+const moreIO = 'IntersectionObserver' in window
+  ? new IntersectionObserver(es => { if (!pinned && es.some(x => x.isIntersecting)) showOlder(); }, { root: $('#msgs'), rootMargin: '300px 0px 0px 0px' }) : null;
+function moreUI() {
+  const box = $('#msgs');
+  let b = box.querySelector(':scope>.more');
+  if (!older.length) { if (b) { moreIO && moreIO.unobserve(b); b.remove(); } return; }
+  if (!b) { b = document.createElement('button'); b.type = 'button'; b.className = 'more'; b.onclick = showOlder; b.innerHTML = '<i class="pi"></i><span></span>'; }
+  const n = older.filter(isMsg).length;
+  b.lastChild.textContent = 'Показать раньше · ещё ' + (n ? plural(n, 'сообщение', 'сообщения', 'сообщений') : plural(older.length, 'запись', 'записи', 'записей'));
+  box.prepend(b); moreIO && moreIO.observe(b);
+}
+/* дорисовать раньше: старые записи рисуем в конец ленты (метка start — чтобы разделитель дня считался заново)
+   и переносим наверх. Показанные сообщения не трогаем — иначе их анимация появления проиграется снова */
+function showOlder() {
+  if (!older.length) return;
+  const box = $('#msgs'), h0 = box.scrollHeight, t0 = box.scrollTop, cut = cutAt(older, HIST), part = older.slice(cut);
+  older = older.slice(0, cut); seq0 = part[0].seq;
+  const b = box.querySelector(':scope>.more'); if (b) { moreIO && moreIO.unobserve(b); b.remove(); }
+  const head = box.firstElementChild, start = document.createElement('i'); box.append(start); box._day = start;
+  const tray0 = tray, bubble0 = bubble, dots0 = dots; dots = null; /* иначе add() уберёт «Мочи печатает» внизу ленты */
+  quietly(() => { tray = null; bubble = null; for (const e of part) render(e); }, true);
+  tray = tray0; bubble = bubble0; dots = dots0;
+  const fresh = []; for (let n = start.nextSibling; n; n = n.nextSibling) fresh.push(n);
+  start.remove(); box.prepend(...fresh); box._day = null;
+  /* тот же день — второй разделитель на стыке не нужен */
+  const days = fresh.filter(n => n.classList && n.classList.contains('day')), day = days[days.length - 1];
+  if (day && head && head.classList.contains('day') && head.dataset.d === day.dataset.d) head.remove();
+  moreUI();
+  box.scrollTop = t0 + box.scrollHeight - h0;
 }
 function welcomeS(cleared) {
   const k = cfg.key, b = cfg.base;
@@ -194,9 +243,12 @@ function onSnap(s) {
   seenBuild(s.build);
   quietly(() => {
     const box = $('#msgs'); box.innerHTML = ''; tray = null; bubble = null; ents.clear(); think(false);
-    for (const e of s.log) render(e);
+    const cut = cutAt(s.log, HIST);
+    older = s.log.slice(0, cut); seq0 = cut < s.log.length ? s.log[cut].seq : 0;
+    for (const e of s.log.slice(cut)) render(e);
     if (s.partial) { bubble = add('a', ''); aText(bubble, s.partial); }
     if (!s.log.length) welcomeS(s.seq > 0);
+    moreUI();
   });
   setRun(s);
   if (!connected) {
@@ -208,7 +260,8 @@ function onSnap(s) {
   }
 }
 function onLog(e) {
-  if (ents.has(e.seq)) { render(e); return; }
+  /* обновилась запись, которой нет на экране (она в непоказанной истории) — только запомнить */
+  if (e.seq < seq0) { const o = older.find(x => x.seq === e.seq); if (o) Object.assign(o, e); return; }
   render(e);
 }
 function onDelta(d) {

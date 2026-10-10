@@ -1482,14 +1482,15 @@ new MutationObserver(()=>{const t=$('#st').textContent,d=$('#dot').className;
  else if(/загружаю файлы/.test(t))set('work','Несу файлы на сервер… '+((t.match(/\d+\/\d+/)||[''])[0]));
  /* «выполняю / ищу / отправляю» не трогаем: эти фразы задаёт petAction */
 }).observe($('#stsrc'),{subtree:true,childList:true,characterData:true,attributes:true});
-new MutationObserver(ms=>ms.forEach(r=>r.addedNodes.forEach(n=>{const c=n.className||'';
+/* сообщения в чате: перерисовку истории (mochiReplay — см. client.js) пропускаем */
+new MutationObserver(ms=>{if(window.mochiReplay)return;ms.forEach(r=>r.addedNodes.forEach(n=>{const c=n.className||'';
  if(c==='m u'){label='';set('happy',pick(PH.got),1500);heart()}
  else if(c==='dots'){const rf=lastFail&&Date.now()-lastFail<10000;lastFail=0;
    if(label&&busy()&&!rf){setMood('think');clearTimeout(back);patience()}else set('think',rf?pick(PH.retry):pick(PH.think))}
  else if(c==='m a')set('talk',pick(PH.talk),2500);
  else if(/fc/.test(c)){set('happy',pick(PH.file),4000);heart()}
  else if(c==='m e')set('sad',pick(PH.err),5000)
- else if(c==='empty'&&n.dataset&&n.dataset.cleared)set('happy',pick(PH.clear),2500)}))).observe($('#msgs'),{childList:true});
+ else if(c==='empty'&&n.dataset&&n.dataset.cleared)set('happy',pick(PH.clear),2500)}))}).observe($('#msgs'),{childList:true});
 $('#c-save').addEventListener('click',()=>set('happy',pick(PH.settings),2500));
 window.petSet=set;
 window.petSpeak=on=>{speaking=!!on;if(on){setMood('talk');clearTimeout(back);arm()}else if(mood==='talk')setMood('idle')};
