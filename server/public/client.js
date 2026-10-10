@@ -10,6 +10,9 @@
 if (typeof SRV === 'undefined' || !SRV) return;
 const de = document.documentElement;
 de.classList.add('srv');
+/* экран загрузки (#boot в index.html): страница на месте — дальше шаги «сервер → вход → модель → чат → агент» двигаем отсюда */
+const bt = (k, ...a) => { try { window.mochiBoot && mochiBoot[k](...a); } catch (e) {} };
+bt('go', 'link');
 
 /* ---------- стили серверного режима ---------- */
 const css = document.createElement('style');
@@ -94,6 +97,7 @@ async function doAuth() {
 $('#a-go').onclick = doAuth;
 auth.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); doAuth(); } });
 function showAuth(info) {
+  bt('done', 'auth');
   authInfo = info || {};
   if (es) { es.close(); es = null; }
   if (inviteFromUrl) $('#a-inv').value = inviteFromUrl;
@@ -108,13 +112,17 @@ function showAuth(info) {
 let curT = null;
 /* разделитель дня — по времени сообщения, а не по «сейчас» */
 dayMark = function (box) {
-  const d = curT ? new Date(curT) : new Date(), k = d.toDateString(), all = box.querySelectorAll('.day'), last = all[all.length - 1];
-  if (last && last.dataset.d === k) return;
+  const d = curT ? new Date(curT) : new Date(), k = d.toDateString();
+  /* последний разделитель помним: искать его по всей ленте на каждое сообщение — квадратично на длинной истории */
+  let last = box._day;
+  if (!last || last.parentNode !== box) { const all = box.querySelectorAll('.day'); last = all[all.length - 1]; }
+  if (last && last.dataset.d === k) { box._day = last; return; }
   const dd = document.createElement('div'); dd.className = 'day'; dd.dataset.d = k; dd.innerHTML = '<span></span>';
   dd.firstChild.textContent = (k === new Date().toDateString() ? 'Сегодня, ' : '') + d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-  box.append(dd);
+  box.append(dd); box._day = dd;
 };
-const stamp = (el, e) => { const t = el && el.querySelector('.mh time'); if (t && e.t) t.textContent = new Date(e.t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); };
+const HM = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
+const stamp = (el, e) => { const t = el && el.querySelector('.mh time'); if (t && e.t) t.textContent = HM.format(e.t); };
 const btns = '<div class="mf"><button class="cp" data-k="a"><i class="pi"></i>копировать</button><button class="cp" data-k="s"><i class="pi"></i>вслух</button></div>';
 function aText(el, text) { el._raw = text; el._b.innerHTML = md(text) + (text ? btns : ''); }
 
@@ -172,10 +180,11 @@ function render(e) {
   curT = null;
 }
 
-/* на время перерисовки истории — без звуков, счётчиков и озвучки */
+/* на время перерисовки истории — без звуков, счётчиков и озвучки. И без прокрутки вниз после каждого сообщения:
+   она заставляет браузер заново раскладывать всю ленту, и 400 записей рисовались секунды. Вниз — один раз в конце */
 function quietly(fn) {
-  replaying = true; const sfxOn = cfg.sfx, u0 = unread; cfg.sfx = false;
-  try { fn(); } finally { replaying = false; unread = u0; badge(); setTimeout(() => { cfg.sfx = sfxOn; }, 0); }
+  replaying = true; const sfxOn = cfg.sfx, u0 = unread, pin0 = pin; cfg.sfx = false; pin = () => {};
+  try { fn(); } finally { pin = pin0; replaying = false; unread = u0; badge(); pin(true); setTimeout(() => { cfg.sfx = sfxOn; }, 0); }
 }
 function welcomeS(cleared) {
   const k = cfg.key, b = cfg.base;
@@ -190,10 +199,15 @@ function onSnap(s) {
     for (const e of s.log) render(e);
     if (s.partial) { bubble = add('a', ''); aText(bubble, s.partial); }
     if (!s.log.length) welcomeS(s.seq > 0);
-    pin(true);
   });
   setRun(s);
-  if (!connected) { connected = true; setSt(READY, 'on'); }
+  if (!connected) {
+    connected = true; setSt(READY, 'on');
+    const n = s.log.filter(e => e.kind === 'user' || e.kind === 'assistant').length;
+    bt('ok', 'chat', n ? plural(n, 'сообщение', 'сообщения', 'сообщений') : 'пусто');
+    bt('ok', 'agent', s.running ? 'работает' + (s.steps ? ' · шаг ' + s.steps : '') : 'свободна');
+    bt('done');
+  }
 }
 function onLog(e) {
   if (ents.has(e.seq)) { render(e); return; }
@@ -223,6 +237,7 @@ function connect() {
   es.onopen = () => { if (connected) setSt(READY, 'on'); };
   es.onerror = async () => {
     if (!es) return;
+    if (!connected) bt('wait', 'chat', 'stream', 3);
     /* во время обновления сервер перезапускается — это не ошибка */
     if (connected) { connected = false; if (uMode === 'run') setSt('обновляюсь…', 'on'); else setSt('нет связи с сервером', 'err'); }
     if (es.readyState === 2) { es.close(); es = null; await check(); if (me) setTimeout(connect, 3000); }
@@ -240,7 +255,8 @@ async function check() {
   catch (e) { if (e.status === 401) { me = null; showAuth(e.j); } return false; }
 }
 async function started() {
-  try { srvSet = await api('api/settings'); mirror(); } catch (e) {}
+  bt('go', 'set');
+  try { srvSet = await api('api/settings'); mirror(); bt('ok', 'set', srvSet.hasKey ? srvSet.model : 'нужен ключ'); } catch (e) { bt('ok', 'set', 'не загрузились'); }
   connect();
   initPane();
   updBoot(true);
@@ -1059,7 +1075,31 @@ tstat = function () {
   el.children[1].textContent = location.host; el.querySelector('.sst').textContent = $('#st').textContent;
 };
 
-/* ---------- старт ---------- */
+/* ---------- старт ----------
+   Сервер не ответил (перезапускается, обновляется, пропала сеть) — не висим на «подключаюсь…», а пробуем снова;
+   экран загрузки показывает почему и сколько до следующей попытки */
+let helloT = 0, tries = 0;
+async function hello() {
+  clearTimeout(helloT); helloT = 0;
+  bt('go', 'link', tries ? 'попытка ' + (tries + 1) : undefined);
+  const t0 = performance.now(), ms = () => Math.round(performance.now() - t0) + ' мс';
+  try { me = (await api('api/me')).user; }
+  catch (e) {
+    if (e.status === 401) { me = null; bt('ok', 'link', 'пинг ' + ms()); showAuth(e.j); return; }
+    const k = navigator.onLine === false ? 'offline' : !e.status ? 'down' : e.status >= 502 && e.status <= 504 ? 'restart' : 'http';
+    const s = [1, 2, 3, 5, 5, 8, 10][Math.min(tries++, 6)];
+    bt('wait', 'link', k, s, k === 'http' ? 'HTTP ' + e.status : '');
+    setSt(k === 'offline' ? 'нет интернета' : 'сервер не отвечает', 'err');
+    helloT = setTimeout(hello, s * 1000);
+    return;
+  }
+  bt('ok', 'link', 'пинг ' + ms());
+  bt('ok', 'auth', me.name);
+  setSt('подключаюсь к серверу…', 'on');
+  started();
+}
+addEventListener('online', () => { if (helloT) hello(); });
+if (window.mochiBoot) mochiBoot.onRetry = () => { if (helloT) hello(); else if (me && !connected) { if (es) { es.close(); es = null; } connect(); } };
 setSt('подключаюсь к серверу…', 'on');
-check().then(ok => { if (ok) started(); });
+hello();
 })();

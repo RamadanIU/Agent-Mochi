@@ -889,9 +889,236 @@ background:repeating-conic-gradient(color-mix(in srgb,var(--line) 70%,var(--card
 .fx-code,.fx-hex{font-variant-ligatures:none}
 .fx-win:focus{outline:none}
 .fx-prev.tbl .md{max-width:none}
+
+/* ===== экран загрузки: окошко с Мочи и «BIOS»-экраном шагов, пока страница и сервер просыпаются (скрипт — в начале <body>) ===== */
+#boot{position:fixed;inset:0;z-index:97;display:flex;padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain;
+background:var(--bg) conic-gradient(var(--line) 25%,transparent 0 50%,var(--line) 0 75%,transparent 0) 0 0/32px 32px}
+#boot.out{animation:bout .32s steps(4) forwards;pointer-events:none}
+#boot.out .bw{animation:bwout .32s steps(4) forwards}
+@keyframes bout{to{opacity:0}}
+@keyframes bwout{to{transform:translateY(-10px) scale(.94)}}
+@keyframes bwin{from{transform:translateY(12px);opacity:0}}
+.bw{width:min(460px,100%);margin:auto;background:var(--card);border:4px solid var(--ink);box-shadow:8px 8px 0 var(--ink);animation:bwin .24s steps(3)}
+.bw .wbar b{font-size:8px}
+.bb{padding:16px 18px 18px}
+.bh{position:relative;display:flex;align-items:center;gap:14px}
+.bh .ht{left:52px;bottom:84px}
+#boot-pet{flex:none;width:120px;height:108px;margin:-6px -6px -6px -10px;image-rendering:pixelated;cursor:pointer;touch-action:manipulation}
+.bsay{flex:1;min-width:0;min-height:58px;position:relative;margin:4px;padding:10px 12px;display:flex;align-items:center;background:var(--bg);font:9px/1.7 var(--pf);box-shadow:var(--sh4);overflow-wrap:anywhere}
+.bsay::before{content:"";position:absolute;left:-8px;top:20px;width:8px;height:8px;background:var(--bg);box-shadow:-4px 0 var(--ink),0 -4px var(--ink),0 4px var(--ink)}
+#boot-say::after{content:"_";color:var(--acc);animation:blk .6s steps(1) infinite}
+.bsr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.bbar{height:26px;margin:18px 4px 0;padding:5px;background:var(--bg);box-shadow:var(--sh4)}
+.bbar i{display:block;height:100%;width:0;background:repeating-linear-gradient(90deg,var(--acc) 0 8px,transparent 8px 11px);transition:width .2s steps(3)}
+#boot[data-s=wait] .bbar i{background:repeating-linear-gradient(90deg,var(--mut) 0 8px,transparent 8px 11px)}
+.bnum{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:12px 4px 0;color:var(--mut);font:7px/1.7 var(--pf)}
+.bnum b{flex:none;color:var(--acc);font:12px/1 var(--pf);font-weight:400}
+.bnum span{text-align:right}
+.bcrt{position:relative;margin:18px 4px 0;padding:10px 14px 12px;overflow:hidden;background:var(--tbg);color:var(--tfg);font:19px/1.12 var(--mono);text-shadow:0 0 6px var(--glow);box-shadow:var(--sh4)}
+.bcrt::before{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:repeating-linear-gradient(to bottom,transparent 0 2px,rgba(0,0,0,.32) 2px 3px,transparent 3px 4px)}
+.bcrt::after{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;background:radial-gradient(ellipse 80% 75% at 50% 50%,transparent 55%,rgba(0,0,0,.5) 100%);animation:flk 7s steps(1) infinite}
+.bcrt .bt{display:flex;justify-content:space-between;gap:10px;margin-bottom:4px;opacity:.6;white-space:nowrap}
+.bcrt .bt span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis}
+#boot-log{margin:0;padding:0;list-style:none}
+#boot-log li{display:flex;align-items:baseline;gap:6px;white-space:nowrap}
+#boot-log .bl{flex:none}
+#boot-log .bf{flex:1;min-width:8px;overflow:hidden;opacity:.4}
+#boot-log .bf::before{content:"................................................................"}
+#boot-log .bd{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+#boot-log .bs{flex:none;min-width:4.6ch;text-align:right}
+#boot-log li[data-s=todo]{opacity:.32}
+#boot-log li[data-s=run] .bs{animation:blk .8s steps(1) infinite}
+#boot-log li[data-s=wait],#boot-log li.berr{color:#ff8fa3;text-shadow:0 0 6px rgba(255,90,120,.55)}
+#boot-log li.berr{white-space:normal;overflow-wrap:anywhere}
+.bcrt .bc::after{content:"";display:inline-block;width:.55em;height:.9em;vertical-align:-.1em;background:var(--tfg);box-shadow:0 0 6px var(--glow);animation:blk 1s steps(1) infinite}
+.bwhy{margin:18px 4px 0;padding:10px 12px 11px;background:var(--bg);box-shadow:var(--sh2);font:8px/1.8 var(--pf)}
+.bwhy b{display:block;margin-bottom:4px;color:var(--acc);font-weight:400}
+.bwhy[data-k=warn] b{color:var(--err)}
+.bwhy[hidden],.bact[hidden],.bact [hidden]{display:none}
+.bact{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.bact .pbtn.sm{flex:1 1 auto}
+@media(max-width:400px){.bb{padding:14px 12px 16px}#boot-pet{width:80px;height:72px;margin:-4px -4px -4px -6px}.bh .ht{left:30px;bottom:56px}.bcrt{padding:9px 10px 11px;font-size:17px}}
 </style>
 </head>
 <body>
+<div id="boot" aria-busy="true">
+ <div class="bw">
+  <div class="wbar"><span></span><b id="boot-t">Мочи просыпается</b><span></span></div>
+  <div class="bb">
+   <div class="bh"><canvas id="boot-pet" width="40" height="36" title="Погладить Мочи" aria-hidden="true"></canvas><p class="bsay"><span id="boot-say" aria-hidden="true">Протираю глазки…</span><span class="bsr" id="boot-sr" role="status"></span></p></div>
+   <div class="bbar" id="boot-bar" role="progressbar" aria-label="Загрузка Мочи" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+   <div class="bnum"><b id="boot-pct">0%</b><span id="boot-eta">считаю, сколько ждать…</span></div>
+   <div class="bcrt"><div class="bt" aria-hidden="true"><span>MOCHI BIOS</span><span id="boot-host"></span></div><ol id="boot-log" aria-label="Шаги загрузки"></ol><div class="bc" aria-hidden="true"></div></div>
+   <div class="bwhy" id="boot-why" role="alert" hidden><b></b><span></span></div>
+   <div class="bact" id="boot-act" hidden><button class="pbtn sm" type="button" id="boot-retry" hidden>Повторить сейчас</button><button class="pbtn sm" type="button" id="boot-reload">Обновить страницу</button><button class="pbtn sm" type="button" id="boot-skip" hidden>Открыть как есть</button></div>
+  </div>
+ </div>
+</div>
+<script>
+/* ---------- экран загрузки ----------
+   Пока страница, скрипты и сервер просыпаются, Мочи рассказывает, что сейчас делается, сколько занял каждый шаг и сколько ещё ждать.
+   «Сколько ждать» — по прошлым загрузкам на этом устройстве (медиана пяти последних по каждому шагу), в первый раз — прикидка.
+   Шаги двигают: метки в скриптах ниже (браузерная версия: образ Linux, интерфейс), server/public/client.js (связь, вход,
+   настройки, чат) и DOMContentLoaded. Сервер не отвечает — объясняет почему и пробует снова сама.
+   mochiBoot.go(id[,деталь]) — шаг начался (предыдущие готовы); ok(id[,деталь]); wait(id,причина,секунд) — ждём и повторяем;
+   done([как]) — убрать экран; onRetry — кнопка «Повторить сейчас» (ставит client.js). Мочи здесь — копия холста #pet */
+(()=>{
+const root=document.getElementById('boot');if(!root)return;
+const SRV=!!document.querySelector('meta[name=mochi-server]'),MODE=SRV?'srv':'web',KEY='mochi-boot';
+const el=id=>document.getElementById('boot-'+id),now=()=>performance.now(),pick=a=>a[Math.random()*a.length|0];
+const RM=matchMedia('(prefers-reduced-motion: reduce)');
+const sec=ms=>ms<9950?(ms/1000).toFixed(1).replace('.',',')+' с':Math.round(ms/1000)+' с';
+/* шаги: id, подпись на «BIOS»-экране, сколько длится обычно (мс), подробность, сколько качать (МБ).
+   Пока своей истории нет, время скачивания прикидываем по скорости сети, которую знает браузер (navigator.connection) */
+const DEF=SRV?[['page','СТРАНИЦА',700,'',.2],['link','СЕРВЕР',250],['auth','ВХОД',20],['set','МОДЕЛЬ',200],['chat','ЧАТ',400],['agent','АГЕНТ',20]]
+ :[['page','СТРАНИЦА',800,'',.1],['img','LINUX',5000,'образ ≈3,4 МБ',3.4],['ui','ИНТЕРФЕЙС',250]];
+const NC=navigator.connection,guess=(ms,mb)=>mb&&NC&&NC.downlink>0?Math.round(mb*8/NC.downlink*1000+Math.min(NC.rtt||100,2000)*2):ms;
+let hist={};try{hist=JSON.parse(localStorage.getItem(KEY)||'{}')||{}}catch(e){}
+const mine=hist[MODE]&&typeof hist[MODE]==='object'?hist[MODE]:{};
+const med=a=>{const s=a.slice().sort((x,y)=>x-y);return s[s.length>>1]};
+const S=DEF.map(([id,label,ms,d,mb])=>{const h=Array.isArray(mine[id])?mine[id].filter(x=>x>=0&&x<6e5):[];
+ return{id,label,exp:h.length?med(h):guess(ms,mb),known:h.length>0,s:'todo',t0:0,t1:0,d:d||'',waited:false,slow:false}});
+const known=S.every(x=>x.known),usual=S.reduce((a,x)=>a+x.exp,0);
+S[0].s='run'; /* страница грузится с начала перехода: performance.now() отсчитывается от него */
+
+const SAY={page:['Раскладываю пиксели…','Несу странички…','Протираю экранчик…','Собираю интерфейс по кусочкам…'],
+ img:['Несу целый Linux — он тяжёленький!','Тащу образ Linux, уф…','Пакую Alpine в лапки…'],
+ ui:['Почти! Расставляю кнопочки…','Включаю чат и голос…'],
+ link:['Стучусь на сервер…','Тук-тук, сервер?','Зову сервер…'],auth:['Проверяю пропуск…'],
+ set:['Вспоминаю, какая у меня модель…','Достаю настройки…'],chat:['Листаю нашу переписку…','Вспоминаю, о чём болтали…'],
+ agent:['Смотрю, чем я занята…'],slow:['Сеть сегодня неторопливая…','Чуть дольше обычного, потерпи~','Ещё капельку…'],
+ down:['Сервер молчит… постучу ещё!','Ой, сервер не отвечает. Пробую снова!'],restart:['Сервер просыпается — подожду его!','Сервер перезапускается, жду~'],
+ offline:['Кажется, пропал интернет…'],http:['Сервер ответил ошибкой… пробую ещё'],stream:['Чат не открылся, переподключаюсь…'],
+ script:['Ой, кусочек меня не загрузился… жду сервер'],stuck:['Ой, я застряла…'],
+ done:['Готово! ^_^','Я тут! Поехали~','Проснулась!','Всё готово!']};
+const MOOD={page:'work',img:'work',ui:'work',link:'look',auth:'think',set:'think',chat:'work',agent:'think',slow:'think',
+ down:'sad',restart:'sleepy',offline:'sad',http:'sad',stream:'think',script:'sad',stuck:'dizzy',done:'happy'};
+/* почему долго: подсказка у медленного шага и при ожидании сервера */
+const WHY={page:SRV?'Страница идёт дольше обычного — похоже, медленная сеть между тобой и сервером.':'В браузерной версии внутри страницы целый Linux (~3,8 МБ). Со второго раза она берётся из кэша.',
+ img:'Образ Linux весит ~3,4 МБ — на медленной сети это несколько секунд. Потом он берётся из кэша.',
+ ui:'Браузер разбирает скрипты — на слабом устройстве это чуть дольше.',
+ link:'Сервер отвечает медленно: он занят или далеко.',auth:'',set:'Сервер долго отдаёт настройки — похоже, он занят.',
+ chat:'Длинную переписку дольше передавать и рисовать — особенно на слабом телефоне.',agent:'',
+ down:'Сервер не отвечает. Если Мочи только что обновлялась или перезапускалась, это около минуты.',
+ restart:'Сервер Мочи перезапускается: HTTPS на месте, а сама Мочи ещё просыпается (после обновления — около минуты).',
+ offline:'Нет интернета. Как только связь появится, продолжу сама.',http:'Сервер ответил ошибкой.',
+ stream:'Поток событий чата не открылся — переподключаюсь.',
+ script:'Не загрузился скрипт сервера (srv/client.js) — сервер не ответил. Жду его и обновлю страницу сама.',
+ stuck:'Загрузка застряла. Можно обновить страницу или открыть Мочи как есть.'};
+
+/* ---------- отрисовка ---------- */
+const log=el('log');
+for(const x of S){const li=document.createElement('li');
+ li.innerHTML='<span class="bl"></span><span class="bf" aria-hidden="true"></span><span class="bd"></span><span class="bs"></span>';
+ li.firstChild.textContent=x.label;x.li=li;log.append(li)}
+el('host').textContent=location.host||'локально';
+let shown=0,last=0,waitUntil=0,finished=false,err='',hidden=document.visibilityState==='hidden',stuck=false,said='',typeT=0,petOn=false,cur=S[0];
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')hidden=true});
+function say(t){if(!t||t===said)return;said=t;clearInterval(typeT);const s=el('say');el('sr').textContent=t;
+ if(RM.matches){s.textContent=t;return}
+ let i=0;s.textContent='';typeT=setInterval(()=>{s.textContent=t.slice(0,++i);if(i>=t.length)clearInterval(typeT)},22)}
+const pet=(m,ms)=>{try{if(window.petSet){petSet(m,'',ms||0,true);petOn=true}}catch(e){}};
+const feel=k=>{pet(MOOD[k]||'think');say(pick(SAY[k]||SAY.page))};
+function why(k,extra,warn){const w=el('why'),t=WHY[k]||'';if(!t&&!extra){w.hidden=true;return}
+ w.dataset.k=warn?'warn':'info';w.firstChild.textContent=warn?'Что случилось':'Почему долго?';
+ w.lastChild.textContent=t+(extra?(t?' ':'')+extra:'');w.hidden=false}
+function acts(retry,skip){el('act').hidden=false;el('retry').hidden=!retry;el('skip').hidden=!skip}
+const unslow=()=>{if(el('why').dataset.k==='info')el('why').hidden=true};
+function calm(){el('why').hidden=true;el('act').hidden=true;root.dataset.s='';el('t').textContent='Мочи просыпается';stuck=false}
+const SPIN='|/-\\';
+function paint(){
+ const t=now();let done=0,total=0,rem=0,over=0;
+ for(const x of S){const c=x.li.children;x.li.dataset.s=x.s;c[2].textContent=x.d;
+  if(x.s==='ok'){const d=x.t1-x.t0;done+=d;total+=d;c[3].textContent=d<50?'OK':sec(d).replace(' ','')}
+  else if(x.s==='todo'){total+=x.exp;rem+=x.exp;c[3].textContent=''}
+  else{const e=t-x.t0;done+=e;total+=e<x.exp?x.exp:e*1.15+250;rem+=Math.max(0,x.exp-e);over=e-x.exp;
+   c[3].textContent=x.s==='wait'?'ЖДУ':SPIN[(t/110|0)%4]}}
+ const p=finished?100:Math.min(99,Math.max(shown,Math.floor(done/Math.max(total,1)*100)));
+ if(p!==shown||finished){shown=p;el('bar').firstChild.style.width=p+'%';el('bar').setAttribute('aria-valuenow',p);el('pct').textContent=p+'%'}
+ let eta;
+ if(finished)eta='загрузилась за '+sec(t)+(known&&t>usual*1.6&&t-usual>1500?' · обычно '+sec(usual):'');
+ else if(cur.s==='wait')eta=waitUntil>t?'повтор через '+Math.ceil((waitUntil-t)/1000)+' с':'пробую снова…';
+ else if(over>1200)eta='дольше обычного · '+(known?'обычно '+sec(usual):'жду…');
+ else eta=(rem<150?'почти готово…':'осталось ≈ '+sec(rem))+(known?' · обычно '+sec(usual):' · первый запуск');
+ el('eta').textContent=eta;
+ if(finished)return;
+ if(!petOn&&window.petSet)pet(MOOD[cur.id]);
+ /* шаг затянулся — объясняем почему; совсем застрял — предлагаем обновить или открыть как есть */
+ if(cur.s==='run'&&!cur.slow&&over>Math.max(1500,cur.exp)){cur.slow=true;if(WHY[cur.id]){why(cur.id);feel('slow')}}
+ const lim=cur.id==='page'||cur.id==='img'?60000:Math.max(15000,cur.exp*4);
+ if(cur.s==='run'&&!stuck&&t-last>lim){stuck=true;el('t').textContent='Мочи застряла';
+  why('stuck',err?'Ошибка: '+err:'',true);acts(!!B.onRetry,document.readyState!=='loading');feel('stuck')}}
+
+/* ---------- шаги ---------- */
+const find=id=>S.find(x=>x.id===id);
+/* сколько страница весила в сети; через service worker браузер знает только распакованный размер — тогда молчим */
+function net(){const n=performance.getEntriesByType&&performance.getEntriesByType('navigation')[0];
+ if(!n||!n.responseEnd||!n.encodedBodySize||n.workerStart>0)return'';
+ if(n.transferSize===0||n.transferSize<2048&&n.encodedBodySize>16384)return'из кэша';
+ const kb=n.encodedBodySize/1024;return kb>=1024?(kb/1024).toFixed(1).replace('.',',')+' МБ':Math.round(kb)+' КБ'}
+function close(x,d){if(x.s==='ok')return;if(x.s==='todo')x.t0=now();x.s='ok';x.t1=Math.max(now(),x.t0);
+ if(d!==undefined)x.d=String(d);else if(x.id==='page'&&!x.d)x.d=net()}
+function upTo(x){for(const y of S){if(y===x)break;close(y)}}
+const B=window.mochiBoot={
+ go(id,d){const x=find(id);if(finished||!x||x.s==='ok')return;upTo(x);
+  if(d!==undefined)x.d=String(d);
+  if(x.s==='todo'){x.s='run';x.t0=now()}else if(x.s==='wait')x.s='run';
+  if(cur!==x&&stuck)calm();
+  if(cur!==x||root.dataset.s==='wait'){if(cur!==x)unslow();cur=x;if(!x.waited)feel(x.id)}
+  last=now();paint()},
+ ok(id,d){const x=find(id);if(finished||!x)return;upTo(x);close(x,d);unslow();
+  cur=S.find(y=>y.s!=='ok')||x;if(cur.s==='todo'){cur.s='run';cur.t0=now();feel(cur.id)}
+  if(root.dataset.s==='wait'||stuck)calm();last=now();paint()},
+ wait(id,k,s,extra){const x=find(id);if(finished||!x||x.s==='ok')return;if(x.s!=='wait')B.go(id);
+  x.s='wait';x.waited=true;cur=x;waitUntil=now()+(s||3)*1000;root.dataset.s='wait';el('t').textContent='Мочи ждёт сервер';
+  why(k,extra||'',true);acts(!!B.onRetry,id==='chat');feel(k);last=now();paint()},
+ done(how){if(finished)return;finished=true;clearInterval(tick);root.setAttribute('aria-busy','false');
+  if(how!=='skip'){const upto=how==='auth'?find('auth'):null;for(const x of S){close(x);if(x===upto)break}}
+  /* в историю — только честные шаги: без ожиданий, повторов и фоновой вкладки */
+  if(how!=='skip'&&!hidden){for(const x of S)if(x.s==='ok'&&!x.waited){const a=(Array.isArray(mine[x.id])?mine[x.id]:[]).slice(-4);a.push(Math.round(x.t1-x.t0));mine[x.id]=a}
+   hist[MODE]=mine;try{localStorage.setItem(KEY,JSON.stringify(hist))}catch(e){}}
+  const t=now(),quick=how==='auth'||how==='skip'||t<900;
+  if(!quick){calm();el('t').textContent='Готово!';say(pick(SAY.done));pet('happy',2500)}
+  paint();
+  try{console.info('Мочи: загрузка '+sec(t),S.map(x=>x.label.toLowerCase()+' '+(x.s==='ok'?Math.round(x.t1-x.t0)+' мс':'—')+(x.d?' ('+x.d+')':'')).join(', '))}catch(e){}
+  setTimeout(()=>{root.classList.add('out');setTimeout(()=>{cancelAnimationFrame(raf);root.remove()},340)},quick?60:650)},
+ onRetry:null,
+ state:()=>S.map(x=>({id:x.id,s:x.s,ms:x.s==='ok'?Math.round(x.t1-x.t0):null,d:x.d}))};
+
+/* ---------- Мочи: копия холста из верхней панели (там она живёт и меняет настроение) ---------- */
+const cv=el('pet'),g=cv.getContext('2d');let raf=0,drawn=0;
+function mirror(t){raf=requestAnimationFrame(mirror);if(t-drawn<33)return;drawn=t;
+ const src=document.getElementById('pet');if(!src||!src.width)return;
+ if(cv.width!==src.width||cv.height!==src.height){cv.width=src.width;cv.height=src.height}
+ g.clearRect(0,0,cv.width,cv.height);g.drawImage(src,0,0)}
+raf=requestAnimationFrame(mirror);
+cv.addEventListener('click',()=>{const p=document.getElementById('pet');p&&p.click();
+ const h=document.createElement('i');h.className='ht';h.style.left=(cv.offsetWidth*.25+Math.random()*cv.offsetWidth*.5)+'px';cv.parentNode.append(h);setTimeout(()=>h.remove(),1200)});
+addEventListener('load',()=>{const p=S[0];if(!finished&&p.s==='ok'&&!p.d){p.d=net();paint()}});
+el('retry').addEventListener('click',()=>{B.onRetry&&B.onRetry()});
+el('reload').addEventListener('click',()=>location.reload());
+el('skip').addEventListener('click',()=>B.done('skip'));
+
+/* ошибки во время загрузки: покажем, если из-за них всё встанет (скрипт не скачался, исключение) */
+addEventListener('error',e=>{if(finished)return;const s=e.target;
+ if(s&&s.tagName==='SCRIPT')err='не загрузился '+(s.getAttribute('src')||'скрипт');
+ else if(e.message&&!/ResizeObserver/.test(e.message))err=e.message+(e.filename?' ('+e.filename.split('/').pop().split('?')[0]+':'+e.lineno+')':'')},true);
+/* разметка и скрипты на месте: браузерной версии этого достаточно (Linux дальше запускается в фоне — прогресс над чатом),
+   на сервере дальше ведёт client.js. Не запустился он — значит, сервер не ответил: ждём его и обновляем страницу */
+document.addEventListener('DOMContentLoaded',()=>{if(finished)return;
+ if(!SRV){B.done();return}
+ if(find('page').s==='ok')return;
+ if(err&&!/не загрузился/.test(err)){stuck=true;el('t').textContent='Мочи застряла';why('stuck','Ошибка: '+err,true);acts(false,true);feel('stuck');return}
+ let n=0,fresh=false;try{fresh=Date.now()-(+sessionStorage.getItem(KEY)||0)<20000}catch(e){}
+ const poll=async()=>{let up=false;try{up=(await fetch('api/health',{cache:'no-store'})).ok}catch(e){}
+  if(up&&!fresh){try{sessionStorage.setItem(KEY,Date.now())}catch(e){}location.reload();return}
+  if(up){stuck=true;why('script','',true);acts(false,true);return}
+  const s=[2,3,5,5,8,10][Math.min(n++,5)];B.wait('page',navigator.onLine===false?'offline':'script',s);setTimeout(poll,s*1000)};
+ B.onRetry=()=>location.reload();poll()});
+el('say').textContent=el('sr').textContent=said=pick(SAY.page);
+const tick=setInterval(paint,100);paint();
+})();
+</script>
 <div id="petbar" data-m="idle"><canvas id="pet" width="40" height="36" title="Погладить Мочи"></canvas><div id="say"><span id="sayt"></span></div><div class="ibs"><button class="ib" id="clr" title="Очистить чат" aria-label="Очистить чат"><i></i></button><button class="ib" id="set" title="Настройки" aria-label="Настройки"><i></i></button></div></div>
 <div id="pb"><i></i></div>
 <span id="stsrc" hidden><span id="dot"></span><span id="st">запуск…</span></span>
@@ -2032,8 +2259,10 @@ document.addEventListener('error',e=>{const im=e.target;if(!(im instanceof HTMLI
   const u=im.getAttribute('src');badImg.add(u);im.outerHTML=a(u,E(im.alt||u),'xil')},true);
 window.md=md;window.hl=hl;
 })();
+window.mochiBoot&&mochiBoot.go('img'); /* экран загрузки: дальше качается основной скрипт с образом Linux */
 </script>
 <script>
+window.mochiBoot&&mochiBoot.go('ui'); /* экран загрузки: основной скрипт (и образ Linux) докачан */
 const $=s=>document.querySelector(s);
 /* режим сервера: страницу отдаёт сервер Мочи (server/), агент и Linux живут там — см. server/public/client.js */
 const SRV=!!document.querySelector('meta[name=mochi-server]');
@@ -2746,7 +2975,7 @@ $('#term').addEventListener('click',()=>{if(!String(getSelection()).length&&matc
 /* ---------- Чат ---------- */
 const hist=[];let ctl=null;
 const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const hhmm=()=>new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+const HHMM=new Intl.DateTimeFormat('ru-RU',{hour:'2-digit',minute:'2-digit'}),hhmm=()=>HHMM.format(new Date());
 const WHO={u:'Ты',a:'Мочи'};
 /* автопрокрутка только если ты внизу: можно спокойно читать старое */
 let pinned=true;

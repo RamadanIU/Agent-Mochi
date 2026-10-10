@@ -163,16 +163,32 @@ export function toOpenAI(t, fn = t.name, hide = []) {
 
 /* ---------- поиск в интернете ---------- */
 const WEB_HIDE = ['session_id', 'model_name'];
-const web = { c: null, defs: null, fail: 0 };
+const web = { c: null, defs: null, fail: 0, p: null, t0: 0 };
 const webClient = () => web.c ??= new McpClient({ type: 'http', url: CFG.searchMcp });
+export const WEB_GRACE = 2500;
 
+/* Инструменты поиска для очередного шага агента. Подключение к поиску (initialize + tools/list, до 10 с) не должно
+   задерживать ответ: список уже знаем — отдаём его, а переподключение идёт в фоне (сам поиск в webCall подключится сам);
+   не знаем — ждём не дольше WEB_GRACE от начала первой попытки и идём без поиска. Не ответил — новая попытка не чаще
+   раза в минуту и только в фоне */
 export async function webTools() {
   if (!CFG.searchMcp) return [];
-  const c = webClient();
-  if (c.tools && web.defs) return web.defs;
-  if (web.fail && Date.now() - web.fail < 60000) return [];
-  try { return web.defs = (await c.connect(10000)).map(t => toOpenAI(t, t.name, WEB_HIDE)); }
-  catch (e) { web.fail = Date.now(); console.warn('mcp:', e.message); return []; }
+  if (webClient().tools && web.defs) return web.defs;
+  const failed = web.fail;
+  if (!failed || Date.now() - failed > 60000) warmWeb();
+  const left = web.t0 + WEB_GRACE - Date.now();
+  if (web.defs || failed || !web.p || left <= 0) return web.defs || [];
+  return Promise.race([web.p, new Promise(r => setTimeout(r, left).unref()).then(() => web.defs || [])]);
+}
+/* подключиться к поиску заранее (при старте сервера), чтобы первое сообщение после перезапуска его не ждало */
+export function warmWeb() {
+  if (!CFG.searchMcp) return Promise.resolve([]);
+  if (web.p) return web.p;
+  web.t0 = Date.now();
+  return web.p = webClient().connect(10000)
+    .then(ts => { web.fail = 0; return web.defs = ts.map(t => toOpenAI(t, t.name, WEB_HIDE)); })
+    .catch(e => { web.fail = Date.now(); console.warn('mcp:', e.message); return web.defs || []; })
+    .finally(() => { web.p = null; });
 }
 
 export async function webCall(name, args, { signal, session, model }) {
