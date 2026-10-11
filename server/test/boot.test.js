@@ -163,6 +163,17 @@ test('предустановленный поиск выключается и у
   const def = model.calls[model.calls.length - 1].body.tools.find(t => t.function.name === 'web__web_search');
   assert.ok(def && !def.function.parameters.properties.session_id);
   await c.json('/api/mcp/web', undefined, 'DELETE');
+  /* удалённый предустановленный сервер возвращается кнопкой — с исходными настройками */
+  assert.deepEqual((await c.json('/api/tools', undefined, 'GET')).j.presets, [{ name: 'search', title: 'Поиск в интернете' }]);
+  const back = await c.json('/api/mcp-restore', { name: 'search' });
+  assert.equal(back.j.err, null);
+  const cat = (await c.json('/api/tools', undefined, 'GET')).j;
+  assert.deepEqual(cat.presets, []);
+  const s = cat.mcp.find(x => x.name === 'search');
+  assert.ok(s.preset && s.on && !s.lazy && s.known);
+  await ask('привет');
+  assert.ok(tools().includes('search__web_search'));
+  assert.match(model.calls.at(-1).body.messages[0].content, /не меняй адрес/);
 });
 
 test('у кого поиск был выключен (раньше — в настройках модели), предустановленный сервер появляется выключенным', async () => {

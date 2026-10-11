@@ -30,6 +30,12 @@ before(async () => {
       if (last.content.startsWith('Подключил')) return { tools: [{ name: 'fake__echo', args: { text: 'hi' } }] };
       return done;
     }
+    if (ut.startsWith('перенастрой')) {
+      /* ключ в истории уже заменён меткой — модель передаёт её обратно вместе с новым адресом */
+      if (first) return { tools: [{ name: 'mcp_manage', args: { action: 'add', name: 'remote', url: mcpHttp + '?v=2', headers: { Authorization: '[секрет сохранён на сервере]' }, lazy: false } }] };
+      if (last.content.includes('подключён')) return { tools: [{ name: 'remote__ping', args: {} }] };
+      return done;
+    }
     if (ut.startsWith('объясни')) return first ? { tools: [{ name: 'remote__ping', args: { action: 'Пингую удалённый сервер' } }] } : done;
     if (ut.startsWith('http')) {
       if (first) return { tools: [{ name: 'mcp_manage', args: { action: 'add', name: 'remote', url: mcpHttp, headers: { Authorization: 'Bearer secret-token-123456' }, lazy: false } }] };
@@ -187,6 +193,51 @@ test('HTTP MCP подключает сам агент: ключ сохраняе
   assert.doesNotMatch(JSON.stringify(cat), /secret-token/);
   const log = JSON.parse(fs.readFileSync(path.join(m.env.MOCHI_DATA, 'users', fs.readdirSync(path.join(m.env.MOCHI_DATA, 'users'))[0], 'chat.json'), 'utf8'));
   assert.doesNotMatch(JSON.stringify(log), /secret-token-123456/);
+});
+
+test('метка вместо ключа (ключ в чате скрыт) не затирает сохранённый ключ', async () => {
+  seen.auth.length = 0;
+  assert.match(await ask('перенастрой remote на новый адрес'), /PONG/);
+  assert.ok(seen.auth.length && seen.auth.every(a => a === 'Bearer secret-token-123456'), seen.auth.join(', '));
+  /* новому серверу метку подставить неоткуда — понятная ошибка, а не метка вместо ключа */
+  const r = await c.json('/api/mcp', { name: 'other', url: mcpHttp, headers: 'Authorization: [секрет сохранён на сервере]' });
+  assert.equal(r.status, 400); assert.match(r.j.error, /скрыто в чате/);
+});
+
+test('сервер не пустил — в ошибке его собственный ответ; без заголовков не просим «проверить ключ»', async () => {
+  const locked = http.createServer((req, res) => { req.resume(); res.writeHead(401, { 'content-type': 'application/json' }); res.end('{"code":16,"message":"No API key provided (C.0)"}'); });
+  await new Promise(ok => locked.listen(0, '127.0.0.1', ok));
+  try {
+    const r = await c.json('/api/mcp', { name: 'locked', url: 'http://127.0.0.1:' + locked.address().port + '/mcp' });
+    assert.match(r.j.err, /HTTP 401.*No API key provided/);
+    assert.doesNotMatch(r.j.err, /проверь ключ/);
+    await c('/api/mcp/locked', { method: 'DELETE' });
+  } finally { locked.close(); }
+});
+
+test('MCP за Cloudflare, который не пускает Node.js: запросы идут через curl', async () => {
+  const uas = [];
+  const cf = http.createServer(async (req, res) => {
+    let b = ''; for await (const ch of req) b += ch;
+    uas.push(req.headers['user-agent'] || '');
+    if (!/^curl\//.test(req.headers['user-agent'] || '')) { res.writeHead(403, { 'content-type': 'application/json' }); return res.end('{"success":false,"error":"Access denied by security policy."}'); }
+    const msg = JSON.parse(b || '{}');
+    if (msg.id === undefined) { res.writeHead(202); return res.end(); }
+    const result = msg.method === 'initialize' ? { protocolVersion: msg.params.protocolVersion, capabilities: {}, serverInfo: { name: 'cf' } }
+      : msg.method === 'tools/list' ? { tools: [{ name: 'hi', inputSchema: { type: 'object', properties: {} } }] } : { content: [{ type: 'text', text: 'hello' }] };
+    /* как Parallel: ответ потоком SSE */
+    res.writeHead(200, { 'content-type': 'text/event-stream', 'mcp-session-id': 'cf1' });
+    res.end('event: message\ndata: ' + JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }) + '\n\n');
+  });
+  await new Promise(ok => cf.listen(0, '127.0.0.1', ok));
+  try {
+    const r = await c.json('/api/mcp', { name: 'cf', url: 'http://127.0.0.1:' + cf.address().port + '/mcp' });
+    assert.equal(r.j.err, null);
+    const s = (await c.json('/api/tools', undefined, 'GET')).j.mcp.find(x => x.name === 'cf');
+    assert.deepEqual(s.tools.map(t => t.name), ['hi']);
+    assert.ok(uas.some(u => /^curl\//.test(u)), uas.join(', '));
+    await c('/api/mcp/cf', { method: 'DELETE' });
+  } finally { cf.closeAllConnections(); cf.close(); }
 });
 
 test('объяснение шага (action) — у всех инструментов: подпись в журнале, а MCP-серверу поле не уходит', async () => {

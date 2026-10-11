@@ -39,11 +39,13 @@ export const PRESETS = {
       if (pr.model_name && ctx.model) a.model_name = String(ctx.model).slice(0, 100);
     },
     ms: 45000,
-    prompt: fns => '\nУ тебя есть поиск в интернете (' + fns.join(', ') + '): используй его для новостей, свежих данных и всего, что могло измениться; на простые вопросы отвечай сразу. Источники называй по имени сайта.',
+    title: 'Поиск в интернете',
+    prompt: fns => '\nУ тебя есть поиск в интернете (' + fns.join(', ') + '): используй его для новостей, свежих данных и всего, что могло измениться; на простые вопросы отвечай сразу. Источники называй по имени сайта. Ключ ему не нужен. Если поиск отвечает ошибкой, не меняй адрес и настройки сервера search и не ищи ему ключ — скажи пользователю, какая ошибка.',
     /* раньше поиск был встроенным инструментом: его выключали в настройках модели и среди встроенных */
     legacy: ['web_search', 'web_fetch'],
   },
 };
+const presetSrv = (name, { on = true, off = [] } = {}) => ({ type: 'http', url: PRESETS[name].url(), command: '', headers: {}, env: {}, on, lazy: false, desc: PRESETS[name].desc, off, tools: null, info: null, err: '', t: Date.now(), preset: name });
 /* прежние настройки пользователя для предустановленного сервера: {on, off: [выключенные legacy-инструменты]} (задаёт agent.js) */
 let presetSeed = () => ({});
 export const setPresetSeed = f => { presetSeed = f; };
@@ -57,10 +59,7 @@ function X(u) {
     const url = P.url();
     if (!url || v.presets.includes(name)) continue;
     v.presets.push(name);
-    if (!v.mcp[name] && Object.keys(v.mcp).length < 30) {
-      const old = presetSeed(u, name, P) || {};
-      v.mcp[name] = { type: 'http', url, command: '', headers: {}, env: {}, on: old.on ?? true, lazy: false, desc: P.desc, off: old.off || [], tools: null, info: null, err: '', t: Date.now(), preset: name };
-    }
+    if (!v.mcp[name] && Object.keys(v.mcp).length < 30) v.mcp[name] = presetSrv(name, presetSeed(u, name, P) || {});
     docs.get(u.id).save();
   }
   return v;
@@ -71,8 +70,13 @@ export function dropExt(u) { for (const k of [...pool.keys()]) if (k.startsWith(
 /* ======================= MCP ======================= */
 export const SRV_NAME = /^[a-z0-9][a-z0-9_-]{0,23}$/;
 
-/* заголовки / переменные окружения: объект или строки «Имя: значение» / «ИМЯ=значение» */
-function kv(x, header) {
+/* Чем заменяются ключи в истории чата, когда сервер их сохранил (scrubSecrets): модель видит только эту метку.
+   Если она передаёт метку обратно (переподключает сервер с заголовками из истории), оставляем сохранённое значение —
+   иначе метка затёрла бы настоящий ключ */
+export const SECRET_MARK = '[секрет сохранён на сервере]';
+
+/* заголовки / переменные окружения: объект или строки «Имя: значение» / «ИМЯ=значение»; old — сохранённые раньше */
+function kv(x, header, old = {}) {
   if (x == null || x === '') return {};
   let o = x;
   if (typeof x === 'string') {
@@ -89,7 +93,11 @@ function kv(x, header) {
   for (const [k, v] of Object.entries(o)) {
     if (Object.keys(out).length >= 30) throw bad('Слишком много ' + (header ? 'заголовков' : 'переменных'));
     if (header ? !/^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,100}$/.test(k) : !/^[A-Za-z_][A-Za-z0-9_]{0,100}$/.test(k) || /^MOCHI_/.test(k)) throw bad('Недопустимое имя: ' + k.slice(0, 40));
-    const s = String(v ?? '');
+    let s = String(v ?? '');
+    if (s.includes(SECRET_MARK)) {
+      if (typeof old?.[k] !== 'string' || old[k].includes(SECRET_MARK)) throw bad('Значение ' + k + ' скрыто в чате (' + SECRET_MARK + '), а сохранённого нет. Чтобы оставить сохранённые ' + (header ? 'заголовки' : 'переменные') + ', не передавай ' + (header ? 'headers' : 'env') + '; новый ключ попроси у пользователя.');
+      s = old[k];
+    }
     if (s.length > 4000 || (header && /[\r\n\0]/.test(s))) throw bad('Недопустимое значение для ' + k);
     out[k] = s;
   }
@@ -115,11 +123,11 @@ export function mcpPut(u, b) {
   if (type === 'http') {
     s.url = b.url !== undefined ? String(b.url).trim() : old?.type === 'http' ? old.url : '';
     if (!/^https?:\/\/[^\s]+$/i.test(s.url) || s.url.length > 2000) throw bad('Адрес MCP-сервера должен начинаться с http:// или https://');
-    s.headers = b.headers !== undefined && b.headers !== '' ? kv(b.headers, true) : old?.type === 'http' ? old.headers : {};
+    s.headers = b.headers !== undefined && b.headers !== '' ? kv(b.headers, true, old?.headers) : old?.type === 'http' ? old.headers : {};
   } else {
     s.command = b.command !== undefined ? String(b.command).trim() : old?.type === 'stdio' ? old.command : '';
     if (!s.command || s.command.length > 4000) throw bad('Нужна команда запуска, например: npx -y @modelcontextprotocol/server-memory');
-    s.env = b.env !== undefined && b.env !== '' ? kv(b.env, false) : old?.type === 'stdio' ? old.env : {};
+    s.env = b.env !== undefined && b.env !== '' ? kv(b.env, false, old?.env) : old?.type === 'stdio' ? old.env : {};
   }
   if (old && transport(old) === transport(s)) Object.assign(s, { tools: old.tools, info: old.info, err: old.err });
   else dropClient(u, name);
@@ -142,6 +150,18 @@ export function mcpPatch(u, name, b) {
   }
   saveX(u);
 }
+
+/* вернуть предустановленный сервер к настройкам по умолчанию (в том числе удалённый или с изменённым адресом) */
+export function mcpRestore(u, name) {
+  const P = PRESETS[name], all = X(u).mcp;
+  if (!P || !P.url()) throw bad('Нет предустановленного MCP-сервера «' + name + '»');
+  if (!all[name] && Object.keys(all).length >= 30) throw bad('Слишком много MCP-серверов (максимум 30)');
+  dropClient(u, name);
+  all[name] = presetSrv(name); saveX(u);
+  return name;
+}
+/* предустановленные серверы, которые можно вернуть: их удалили или поменяли им адрес */
+export const presetsOff = u => { const all = X(u).mcp; return Object.entries(PRESETS).filter(([n, P]) => P.url() && !(all[n]?.preset === n && all[n].url === P.url())).map(([name, P]) => ({ name, title: P.title || name })); };
 
 export function mcpDel(u, name) {
   if (!X(u).mcp[name]) throw bad('Нет MCP-сервера «' + name + '»');
@@ -395,8 +415,8 @@ const S = description => ({ type: 'string', description });
 const SKILL_TOOL = fn('skill', 'Загрузить полную инструкцию навыка из списка «Навыки» и следовать ей. Вызывай до начала задачи, к которой навык может подойти. Без name — список навыков с описаниями.', { name: S('Имя навыка из списка') });
 const CONNECT_TOOL = fn('mcp_connect', 'Подключить инструменты MCP-сервера из списка «MCP-серверы по запросу» — они появятся со следующего шага.', { server: S('Имя сервера из списка') }, ['server']);
 export const MANAGE_TOOLS = [
-  fn('mcp_manage', 'MCP-серверы — внешние инструменты. list — список и состояние; add — подключить или изменить сервер (HTTP: url и, если нужен ключ, headers; локальный: command, например «npx -y @modelcontextprotocol/server-memory», и env); enable/disable; remove. Ключи сохраняются в защищённых данных сервера.', {
-    action: { type: 'string', enum: ['list', 'add', 'enable', 'disable', 'remove'] },
+  fn('mcp_manage', 'MCP-серверы — внешние инструменты. list — список и состояние; add — подключить или изменить сервер (HTTP: url и, если нужен ключ, headers; локальный: command, например «npx -y @modelcontextprotocol/server-memory», и env); enable/disable; remove; restore — вернуть предустановленный сервер к исходным настройкам (search — поиск в интернете). Ключи сохраняются в защищённых данных сервера, а в чате заменяются меткой «' + SECRET_MARK + '»: чтобы оставить сохранённые ключи, при add не передавай headers и env.', {
+    action: { type: 'string', enum: ['list', 'add', 'enable', 'disable', 'remove', 'restore'] },
     name: S('Имя сервера: латиница, цифры, «-», «_»'),
     url: S('add, HTTP: адрес, например https://example.com/mcp'),
     headers: { type: 'object', additionalProperties: { type: 'string' }, description: 'add, HTTP: заголовки, например {"Authorization": "Bearer …"}' },
@@ -455,10 +475,10 @@ export async function agentExt(chat, off = {}) {
 function scrubSecrets(chat, o) {
   for (const v of Object.values(o || {})) {
     const s = String(v);
-    for (const x of [s, s.replace(/^\S+\s+/, '')]) if (x.length >= 12) chat.scrub(x, '[секрет сохранён на сервере]');
+    for (const x of [s, s.replace(/^\S+\s+/, '')]) if (x.length >= 12) chat.scrub(x, SECRET_MARK);
   }
 }
-const srvLine = (name, s) => name + ': ' + (s.on ? 'включён' : 'выключен') + ', ' + (s.lazy ? 'по запросу' : 'всегда') + ', '
+const srvLine = (name, s) => name + (s.preset ? ' (предустановлен)' : '') + ': ' + (s.on ? 'включён' : 'выключен') + ', ' + (s.lazy ? 'по запросу' : 'всегда') + ', '
   + (s.type === 'http' ? maskUrl(s.url) : 'команда «' + short(s.command, 80) + '»')
   + (s.tools ? ', инструментов: ' + s.tools.length + (s.off.length ? ' (выключено ' + s.off.length + ')' : '') : '') + (s.err ? ', ошибка: ' + s.err : '') + (s.desc ? ' — ' + s.desc : '');
 
@@ -493,6 +513,11 @@ export async function extTool(chat, nm, a) {
     }
     if (act === 'enable' || act === 'disable') { mcpPatch(u, key, { on: act === 'enable' }); return 'Сервер «' + key + '» ' + (act === 'enable' ? 'включён' : 'выключен') + '.'; }
     if (act === 'remove') { mcpDel(u, key); return 'Сервер «' + key + '» удалён.'; }
+    if (act === 'restore') {
+      const n = mcpRestore(u, key || 'search');
+      try { const t = await mcpRefresh(u, n); return 'Сервер «' + n + '» возвращён к исходным настройкам, инструментов: ' + t.length + '. Они доступны со следующего шага.'; }
+      catch (e) { return 'Сервер «' + n + '» возвращён к исходным настройкам, но не подключился: ' + e.message; }
+    }
     return 'Ошибка: неизвестное действие ' + act;
   }
   if (nm === 'skills_manage') {
