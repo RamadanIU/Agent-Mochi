@@ -74,6 +74,16 @@ test('в index.html нет браузерного агента: модель з�
   assert.doesNotMatch(src, /chat\/completions|search\.parallel\.ai|indexedDB/);
 });
 
+test('верхняя панель — комната Мочи; шагов работы и «Мочи печатает» в чате больше нет', () => {
+  const src = fs.readFileSync(path.join(here, '..', '..', 'index.html'), 'utf8');
+  assert.match(src, /<canvas id="room-cv"/);
+  assert.match(src, /const room=window\.mochiRoom=/);
+  assert.match(src, /id="jrnl"/);
+  assert.doesNotMatch(src, /function trayAdd|function stopTray|className='dots'|\n\.tray\{/);
+  const cl = fs.readFileSync(path.join(here, '..', 'public', 'client.js'), 'utf8');
+  assert.doesNotMatch(cl, /trayAdd|stopTray|\bdots\b/);
+});
+
 test('поиск в интернете молчит — агент отвечает, не дожидаясь его 10 секунд', async () => {
   const first = await ask('привет');
   assert.ok(first < WEB_GRACE + 3000, 'первый ответ ждал ' + first + ' мс');

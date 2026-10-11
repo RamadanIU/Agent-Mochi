@@ -5,7 +5,8 @@
      показывает и прогресс, и итог;
    • вкладка «Терминал» — настоящий терминал сервера (ttyd за авторизацией);
    • в настройках — вкладка «Сервер» (Telegram, приглашения, пароль, выход, обновления, доступ агента — root) и «Инструменты» (вкл/выкл, MCP, навыки).
-   Используем функции основного скрипта (add, trayAdd, md, think, ask…), а не дублируем их. */
+   Используем функции основного скрипта (add, md, think, ask…), а не дублируем их. Работу агента (шаги, «думаю», итог)
+   показывает комната в верхней панели — mochiRoom (index.html); в чате остаются только сообщения, файлы и ошибки. */
 (() => {
 const de = document.documentElement;
 de.classList.add('srv');
@@ -51,8 +52,9 @@ async function api(p, o = {}) {
 }
 const post = (p, json = {}) => api(p, { method: 'POST', json });
 
-let me = null, es = null, running = false, srvSet = null, bubble = null, hideT = 0, connected = false, replaying = false;
-const ents = new Map();
+let me = null, es = null, running = false, srvSet = null, bubble = null, hideT = 0, connected = false, replaying = false, olderNow = false;
+/* событие журнала → комната Мочи (при перерисовке истории — только в её журнал, без реакций; старую историю «Показать раньше» не трогаем) */
+const room = (k, e) => { if (olderNow) return; try { window.mochiRoom && mochiRoom[k](e, replaying); } catch (x) { console.error(x); } };
 const isImgN = n => /\.(png|jpe?g|gif|webp)$/i.test(n || '');
 const READY = 'готово · сервер';
 
@@ -137,7 +139,7 @@ function fileCardS(e) {
   const url = 'api/files/' + e.fid, el = document.createElement('div'); el.className = 'fc';
   if (isImgN(e.name)) { const im = document.createElement('img'); im.src = url; im.alt = e.name; im.loading = 'lazy'; el.append(im); }
   const fr = document.createElement('div'), ic = document.createElement('i'), fi = document.createElement('div'), a = document.createElement('span'), s = document.createElement('small');
-  fr.className = 'fr'; ic.className = 'pi'; fi.className = 'fi'; a.className = 'fn'; a.textContent = e.name;
+  fr.className = 'fr'; ic.className = 'pi'; fi.className = 'fci'; /* не .fi: это класс значков проводника */ a.className = 'fn'; a.textContent = e.name;
   s.textContent = sz(e.size) + (e.note ? ' · ' + String(e.note).slice(0, 120) : ''); fi.append(a, s); fr.append(ic, fi);
   const fb = document.createElement('div'), b = document.createElement('button'); fb.className = 'fb'; b.textContent = 'Скачать';
   b.onclick = () => { const l = document.createElement('a'); l.href = url + '?dl=1'; l.download = e.name; document.body.append(l); l.click(); l.remove(); };
@@ -169,28 +171,27 @@ function render(e) {
   if (cont && e.kind !== 'note') { cont.remove(); cont = null; }
   switch (e.kind) {
     case 'user': {
-      tray = null; bubble = null;
+      bubble = null;
       const d = add('u', esc(e.text || '') + (e.origin === 'tg' ? '<span class="tgm">TG</span>' : '') + (e.files || []).map(f => '<div class="uf">' + (f.fid && isImgN(f.name) ? '<img src="api/files/' + f.fid + '" alt="" loading="lazy">' : '') + '+ ' + esc(f.name) + ' <small>' + sz(f.size) + '</small></div>').join(''));
-      stamp(d, e);
+      stamp(d, e); room('user', e);
       /* сообщение из очереди ушло модели посреди задачи — она уже думает над ним */
       if (e.mid && running && !replaying) think(true);
       break;
     }
     case 'assistant': {
       const el = bubble || add('a', ''); bubble = null;
-      aText(el, e.text || ''); stamp(el, e); pin();
+      aText(el, e.text || ''); stamp(el, e); pin(); room('answer', e);
       if (!replaying) { window.mochiSpeak && mochiSpeak(e.text); window.sfx && sfx('recv'); }
       break;
     }
     case 'tool': {
-      let h = ents.get(e.seq);
-      if (!h) { h = trayAdd(e.label, e.hint, e.name); ents.set(e.seq, h); }
-      if (e.state !== 'run') { h.done(e.state === 'ok'); if (running && !replaying) think(true); }
+      room('tool', e);
+      if (e.state !== 'run' && running && !replaying) think(true);
       break;
     }
-    case 'file': fileCardS(e); break;
-    case 'error': stamp(add('e', errBox(e)), e); break;
-    case 'note': note(e.text, e.retry); break;
+    case 'file': fileCardS(e); room('file', e); break;
+    case 'error': stamp(add('e', errBox(e)), e); room('error', e); break;
+    case 'note': note(e.text, e.retry); room('note', e); break;
   }
   curT = null;
 }
@@ -202,7 +203,7 @@ function quietly(fn, keep) {
   /* и без анимации появления: перерисованное (.np) не «выпрыгивает» заново при каждом переподключении */
   const box = $('#msgs'); box.classList.add('rp');
   try { fn(); } finally {
-    box.querySelectorAll(':scope>:not(.empty),:scope>.tray li').forEach(n => n.classList.add('np')); box.classList.remove('rp');
+    box.querySelectorAll(':scope>:not(.empty)').forEach(n => n.classList.add('np')); box.classList.remove('rp');
     pin = pin0; replaying = false; unread = u0; badge(); if (!keep) pin(true);
     setTimeout(() => { cfg.sfx = sfxOn; window.mochiReplay = false; }, 0);
   }
@@ -240,10 +241,11 @@ function showOlder() {
   older = older.slice(0, cut); seq0 = part[0].seq;
   const b = box.querySelector(':scope>.more'); if (b) { moreIO && moreIO.unobserve(b); b.remove(); }
   const head = box.firstElementChild, start = document.createElement('i'); box.append(start); box._day = start;
-  const tray0 = tray, bubble0 = bubble, dots0 = dots, cont0 = cont; dots = null; cont = null; /* иначе add() уберёт «Мочи печатает» внизу ленты */
-  quietly(() => { tray = null; bubble = null; for (const e of part) render(e); }, true);
+  const bubble0 = bubble, cont0 = cont; cont = null;
+  olderNow = true;
+  try { quietly(() => { bubble = null; for (const e of part) render(e); }, true); } finally { olderNow = false; }
   if (cont) cont.remove(); /* старая отметка: после неё уже что-то было */
-  tray = tray0; bubble = bubble0; dots = dots0; cont = cont0;
+  bubble = bubble0; cont = cont0;
   const fresh = []; for (let n = start.nextSibling; n; n = n.nextSibling) fresh.push(n);
   start.remove(); box.prepend(...fresh); box._day = null;
   /* тот же день — второй разделитель на стыке не нужен */
@@ -261,7 +263,7 @@ function onSnap(s) {
   if (s.user) me = s.user;
   seenBuild(s.build);
   quietly(() => {
-    const box = $('#msgs'); box.innerHTML = ''; tray = null; bubble = null; cont = null; ents.clear(); think(false);
+    const box = $('#msgs'); box.innerHTML = ''; bubble = null; cont = null; think(false); room('reset');
     const cut = cutAt(s.log, HIST);
     older = s.log.slice(0, cut); seq0 = cut < s.log.length ? s.log[cut].seq : 0;
     for (const e of s.log.slice(cut)) render(e);
@@ -269,7 +271,8 @@ function onSnap(s) {
     if (!s.log.length) welcomeS(s.seq > 0);
     moreUI();
   });
-  setRun(s);
+  setRun(s, true);
+  try { window.mochiRoom && mochiRoom.snap(s); } catch (x) { console.error(x); }
   onQueue(s.queue);
   if (!connected) {
     connected = true; setSt(READY, 'on');
@@ -288,13 +291,16 @@ function onDelta(d) {
   think(false);
   if (!bubble) { bubble = add('a', ''); bubble._raw = ''; }
   bubble._raw += d; bubble._b.innerHTML = md(bubble._raw); pin();
+  try { window.mochiRoom && mochiRoom.delta(bubble._raw); } catch (x) {}
 }
-function setRun(r) {
+/* snap — состояние пришло с полной перерисовкой: комнату обновит mochiRoom.snap, без реакций «началась задача» */
+function setRun(r, snap) {
   const was = running; running = !!r.running;
   ctl = running ? { abort: stopNow } : null;
   sendUI(running);
-  if (running && !bubble) { const last = $('#msgs').lastElementChild; if (!last || !last.classList.contains('tray') || !last.querySelector('.th.s-run')) think(true); }
-  if (!running) { think(false); stopTray(); if (was) setSt(READY, 'on'); }
+  if (!snap) try { window.mochiRoom && mochiRoom.run(r); } catch (x) { console.error(x); }
+  if (running && !bubble) think(true);
+  if (!running) { think(false); if (was) setSt(READY, 'on'); }
 }
 
 /* «Стоп»: кнопка откликается сразу, а сервер отвечает, когда задача уже остановлена, — итог виден,
@@ -320,6 +326,7 @@ $('#chips').before(qbox);
 const held = new Map(); /* id сообщения в очереди → вложения (File) */
 function onQueue(q) {
   q = Array.isArray(q) ? q : [];
+  try { window.mochiRoom && mochiRoom.queue(q); } catch (x) {}
   for (const id of [...held.keys()]) if (!q.some(x => x.id === id)) held.delete(id);
   qbox.hidden = !q.length; qbox.innerHTML = '';
   if (!q.length) return;
@@ -457,7 +464,8 @@ $('#c-reset').onclick = async () => {
 };
 $('#c-save').onclick = async () => {
   const st = readSteps(); if (!st) return;
-  cfg.tts = $('#c-tts').checked; cfg.sfx = $('#c-sfx').checked; cfg.vlang = $('#c-vlang').value;
+  cfg.tts = $('#c-tts').checked; cfg.sfx = $('#c-sfx').checked; cfg.room = $('#c-room').checked; cfg.vlang = $('#c-vlang').value;
+  try { window.mochiRoom && mochiRoom.sndUI(); } catch (x) {}
   if (!cfg.tts && window.mochiStop) mochiStop();
   const body = { base: $('#c-base').value.trim(), model: $('#c-model').value.trim(), sys: $('#c-sys').value.trim(), search: $('#c-search').checked, vis: $('#c-vis').checked, ...st };
   const k = $('#c-key').value.trim();
@@ -620,14 +628,14 @@ upd.innerHTML = `<div class="wbar"><span></span><b id="upd-h">Обновлени
 <div class="ubody"><div class="uhead"><canvas aria-hidden="true"></canvas><p class="usay" id="upd-say" role="status" aria-live="polite"></p></div><div id="upd-m"></div></div>
 <div class="wfoot"><button class="lnk" id="upd-no" type="button">Позже</button><button class="p" id="upd-ok" type="button">Обновить</button></div>`;
 document.body.append(upd);
-/* в окошке — сама Мочи: копируем кадры её холста из верхней панели (там же меняем ей настроение) */
-const upc = upd.querySelector('canvas');
-function upDraw() {
+/* в окошке — сама Мочи: её компьютер из комнаты в верхней панели (там же меняем ей настроение; при обновлении экран показывает «ОБНОВЛЕНИЕ %») */
+const upc = upd.querySelector('canvas'); upc.width = 104; upc.height = 94;
+let upT = 0;
+function upDraw(t) {
   if (!upd.open) return;
-  const src = $('#pet');
-  if (upc.width !== src.width || upc.height !== src.height) { upc.width = src.width; upc.height = src.height; }
-  const g = upc.getContext('2d'); g.clearRect(0, 0, upc.width, upc.height); g.drawImage(src, 0, 0);
   requestAnimationFrame(upDraw);
+  if (t - upT < 33) return; upT = t;
+  try { window.mochiRoom && mochiRoom.mirror(upc.getContext('2d'), upc.width, upc.height); } catch (e) {}
 }
 
 const UPH = {
@@ -692,7 +700,9 @@ function uRun(st, down) {
   const m = $('#upd-m');
   if (!m.querySelector('.ust')) m.innerHTML = '<div class="ubar"><i></i></div><ul class="ust"></ul>';
   const steps = st.steps || [], last = steps.filter(s => s.k === 'run' || s.k === 'ok').at(-1);
-  m.querySelector('.ubar i').style.width = (st.state === 'queued' ? 3 : pct(steps)) + '%';
+  const up = st.state === 'queued' ? 3 : pct(steps);
+  m.querySelector('.ubar i').style.width = up + '%';
+  try { window.mochiRoom && mochiRoom.update(up); } catch (x) {} /* экран компьютера в комнате: «ОБНОВЛЕНИЕ n%» */
   const ul = m.querySelector('.ust'); ul.innerHTML = '';
   /* «🐾 делаю…» мигает, только пока это последний шаг; пройденные — точкой */
   steps.slice(-6).forEach((s, k, a) => ul.append(el('li', s.k === 'run' && (k < a.length - 1 || st.state !== 'running') ? 'past' : s.k, s.t)));
