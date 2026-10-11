@@ -120,12 +120,12 @@ test('обновить может только администратор; за�
 
 test('mochi-update: забирает запрос, пишет шаги и итог; полный журнал — отдельно', async () => {
   await admin.json('/api/update', {});
-  const ok = runUpdater(`echo "🐾 Устанавливаю Мочи · test"
+  const ok = runUpdater(`echo "🐾 Устанавливаю Personal Computer · test"
 echo "шум, который в браузер не попадает"
 echo "✔ Пакеты на месте"
 echo "  Код приглашения: abcd-efgh-ijkl"
 echo "args=$* commit=[\${MOCHI_COMMIT}] updater=\${MOCHI_UPDATER}"
-echo "✔ Сервер Мочи работает"`);
+echo "✔ Сервер Personal Computer работает"`);
   assert.equal(ok.status, 0, ok.stderr);
   assert.ok(!fs.existsSync(path.join(st, 'data', 'update.request')), 'запрос забран');
   const full = fs.readFileSync(path.join(st, 'update', 'install.log'), 'utf8');
@@ -137,9 +137,9 @@ echo "✔ Сервер Мочи работает"`);
   const s = (await admin.json('/api/update', undefined, 'GET')).j.status;
   assert.equal(s.state, 'done');
   assert.equal(s.by, 'web');
-  assert.deepEqual(s.steps.map(x => x.k + ':' + x.t), ['run:Смотрю, что нового на GitHub…', 'run:Устанавливаю Мочи · test', 'ok:Пакеты на месте', 'ok:Сервер Мочи работает']);
+  assert.deepEqual(s.steps.map(x => x.k + ':' + x.t), ['run:Смотрю, что нового на GitHub…', 'run:Устанавливаю Personal Computer · test', 'ok:Пакеты на месте', 'ok:Сервер Personal Computer работает']);
 
-  const bad = runUpdater('echo "🐾 Ставлю код Мочи…"\necho "✘ Код не прошёл проверку синтаксиса"\nexit 3', 'cli');
+  const bad = runUpdater('echo "🐾 Ставлю код Personal Computer…"\necho "✘ Код не прошёл проверку синтаксиса"\nexit 3', 'cli');
   assert.equal(bad.status, 3);
   assert.match(bad.stdout, /Код не прошёл проверку/, 'в терминале видно ход');
   const f = (await admin.json('/api/update', undefined, 'GET')).j.status;
@@ -150,7 +150,7 @@ echo "✔ Сервер Мочи работает"`);
   fs.writeFileSync(path.join(st, 'not-installer.sh'), '<html>404</html>\n');
   const j2 = spawnSync('bash', [SCRIPT, 'service'], { env: { ...process.env, MOCHI_STATE: st, MOCHI_ETC: path.join(st, 'etc'), MOCHI_INSTALL_SH: path.join(st, 'not-installer.sh') }, encoding: 'utf8' });
   assert.equal(j2.status, 1);
-  assert.match((await admin.json('/api/update', undefined, 'GET')).j.status.error, /не установщик Мочи/);
+  assert.match((await admin.json('/api/update', undefined, 'GET')).j.status.error, /не установщик Personal Computer/);
 });
 
 test('обновление, которое оборвалось (процесса нет), не висит вечно', async () => {

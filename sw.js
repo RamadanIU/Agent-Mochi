@@ -1,6 +1,6 @@
-/* Мочи: офлайн-кэш страницы — «сначала сеть» (обновления приходят сразу), из кэша — только если сервер
+/* Personal Computer: офлайн-кэш страницы — «сначала сеть» (обновления приходят сразу), из кэша — только если сервер
    не ответил. /api/, /term/ и /srv/ не кэшируются вовсе. */
-const V = 'mochi-v4';
+const V = 'mochi-v5';
 const CORE = ['./', './index.html', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-192.png', './icons/maskable-512.png'];
 
@@ -27,7 +27,7 @@ self.addEventListener('fetch', e => {
     const cached = () => caches.match(req, { ignoreSearch: true }).then(r => r || (req.mode === 'navigate' ? caches.match('./') : undefined));
     e.respondWith(fetch(req).then(res => {
       if (okToStore(req, res)) { const cp = res.clone(); caches.open(V).then(c => c.put(req, cp)); }
-      /* сервер Мочи перезапускается (обновление): Caddy отвечает 502 — вместо пустой страницы берём сохранённую,
+      /* сервер перезапускается (обновление): Caddy отвечает 502 — вместо пустой страницы берём сохранённую,
          её экран загрузки дождётся сервера и обновит страницу сам */
       if (res.status >= 502 && res.status <= 504) return cached().then(r => r || res);
       return res;

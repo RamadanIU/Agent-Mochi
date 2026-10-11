@@ -29,10 +29,10 @@ export function cfBlock(status, text, headers) {
 export function cfMessage(kind, url, headers) {
   let host = ''; try { host = new URL(url).host; } catch {}
   const ray = String(headers?.get?.('cf-ray') || '').replace(/[^\w-]/g, '').slice(0, 40);
-  if (kind === 'node') return 'Это не ключ: Cloudflare перед API модели не пускает запросы с этого сервера (HTTP 403 «Access denied by security policy»). Обычно помогает curl — проверь, что он установлен на сервере (curl --version), и перезапусти Мочи.';
+  if (kind === 'node') return 'Это не ключ: Cloudflare перед API модели не пускает запросы с этого сервера (HTTP 403 «Access denied by security policy»). Обычно помогает curl — проверь, что он установлен на сервере (curl --version), и перезапусти Personal Computer.';
   const sup = 'Напиши в поддержку провайдера' + (ray ? ' (Cloudflare Ray ID: ' + ray + ')' : '');
   if (kind === 'challenge') return `Это не ключ: Cloudflare перед ${host || 'API модели'} требует проверку «я не робот», которую проходит только браузер, а сервер — нет. ${sup}: API не должен так отвечать.`;
-  return `Это не ключ: Cloudflare перед ${host || 'API модели'} заблокировал запрос с этого сервера (HTTP 403 «Sorry, you have been blocked»). Так настроена защита у провайдера — обычно по IP-адресу или стране сервера. ${sup} или запусти Мочи на другом сервере.`;
+  return `Это не ключ: Cloudflare перед ${host || 'API модели'} заблокировал запрос с этого сервера (HTTP 403 «Sorry, you have been blocked»). Так настроена защита у провайдера — обычно по IP-адресу или стране сервера. ${sup} или запусти Personal Computer на другом сервере.`;
 }
 
 export async function apiFetch(url, init = {}) {

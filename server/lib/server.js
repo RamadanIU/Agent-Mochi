@@ -1,4 +1,4 @@
-/* HTTP-сервер Мочи: страница, API, поток событий чата (SSE), загрузка файлов, прокси терминала.
+/* HTTP-сервер Personal Computer: страница, API, поток событий чата (SSE), загрузка файлов, прокси терминала.
    Снаружи его закрывает Caddy (HTTPS); сам сервер слушает только 127.0.0.1. */
 import http from 'node:http';
 import fs from 'node:fs';
@@ -27,7 +27,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export const VERSION = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8')).version;
 const COOKIE = CFG.secureCookie ? '__Host-mochi' : 'mochi';
 
-/* ---------- показатели сервера для комнаты Мочи ----------
+/* ---------- показатели сервера для верхней панели ----------
    Процессор — доля занятого времени между двумя опросами (первый раз — по средней загрузке), память — по MemAvailable,
    температура — самый тёплый датчик /sys/class/thermal (на многих VPS датчиков нет — тогда null) */
 let cpuPrev = null;
@@ -227,7 +227,7 @@ const accInfo = async u => ({ ...await AC.accessInfo(u), users: A.listUsers().le
 
 /* ---------- проводник: файловая система сервера от имени агента (см. fsx.js) ----------
    Всё идёт через исполнитель (mochi-agent): у проводника ровно те же права, что у агента и терминала,
-   а данные сервера Мочи ему недоступны. Отдача байтов — с диапазонами (перемотка видео) и ETag. */
+   а данные сервера Personal Computer ему недоступны. Отдача байтов — с диапазонами (перемотка видео) и ETag. */
 const FS_CODE = { ENOENT: 404, EACCES: 403, EPERM: 403, EEXIST: 409, ENOTEMPTY: 409, ENOSPC: 507, EDQUOT: 507 };
 const fsErr = r => new HttpErr(FS_CODE[r.code] || 400, r.err, { fcode: r.code || null });
 /* что можно показать прямо в браузере; остальное — как текст (только для fetch) или скачиванием */
@@ -410,7 +410,7 @@ async function api(req, res, url) {
     case '/api/chat/unqueue': {
       if (M !== 'POST') break;
       const q = chat.unqueue(String((await jbody(req)).id || ''));
-      if (!q) throw new HttpErr(404, 'Мочи уже прочла это сообщение');
+      if (!q) throw new HttpErr(404, 'Personal Computer уже прочёл это сообщение');
       return json(res, 200, { ok: true, text: q.text, files: q.files });
     }
     case '/api/chat/retry': if (M === 'POST') { try { chat.retry('web'); } catch (e) { throw new HttpErr(e.status || 400, e.message); } return json(res, 200, { ok: true }); } break;
@@ -456,7 +456,7 @@ async function api(req, res, url) {
     case '/api/update':
       if (M === 'GET') return json(res, 200, updInfo(u));
       if (M !== 'POST' && M !== 'DELETE') break;
-      if (!u.admin) throw new HttpErr(403, 'Обновлять Мочи может только администратор сервера');
+      if (!u.admin) throw new HttpErr(403, 'Обновлять Personal Computer может только администратор сервера');
       if (M === 'POST') U.requestUpdate(u); else U.cancelUpdate();
       return json(res, 200, updInfo(u));
     case '/api/update/check': if (M === 'POST') { await U.refresh(true); return json(res, 200, updInfo(u)); } break;
@@ -521,7 +521,7 @@ async function handle(req, res) {
     if (p.startsWith('/api/')) return await api(req, res, url);
     if (p === TERM_PREFIX || p.startsWith(TERM_PREFIX + '/')) {
       const u = userOf(req);
-      if (!u) { res.writeHead(401, { ...SEC, 'content-type': 'text/plain; charset=utf-8' }); return res.end('Нужен вход в Мочи'); }
+      if (!u) { res.writeHead(401, { ...SEC, 'content-type': 'text/plain; charset=utf-8' }); return res.end('Нужен вход в Personal Computer'); }
       if (p === TERM_PREFIX) { res.writeHead(301, { location: TERM_PREFIX + '/' }); return res.end(); }
       return proxyHttp(req, res, u);
     }

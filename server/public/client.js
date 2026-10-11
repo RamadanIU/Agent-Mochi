@@ -1,12 +1,12 @@
-/* ---------- Мочи · связь с сервером ----------
-   index.html — оформление, питомец, чат, проводник; здесь — всё, что говорит с сервером:
+/* ---------- Personal Computer · связь с сервером ----------
+   index.html — оформление, компьютер в шапке, чат, проводник; здесь — всё, что говорит с сервером:
    • вход/регистрация (по приглашению);
    • агент работает на сервере в фоне: чат подписан на поток событий и после возвращения
      показывает и прогресс, и итог;
    • вкладка «Терминал» — настоящий терминал сервера (ttyd за авторизацией);
    • в настройках — вкладка «Сервер» (Telegram, приглашения, пароль, выход, обновления, доступ агента — root) и «Инструменты» (вкл/выкл, MCP, навыки).
    Используем функции основного скрипта (add, md, think, ask…), а не дублируем их. Работу агента (шаги, «думаю», итог)
-   показывает комната в верхней панели — mochiRoom (index.html); в чате остаются только сообщения, файлы и ошибки. */
+   показывает компьютер в верхней панели — mochiRoom (index.html); в чате остаются только сообщения, файлы и ошибки. */
 (() => {
 const de = document.documentElement;
 de.classList.add('srv');
@@ -53,7 +53,7 @@ async function api(p, o = {}) {
 const post = (p, json = {}) => api(p, { method: 'POST', json });
 
 let me = null, es = null, running = false, srvSet = null, bubble = null, hideT = 0, connected = false, replaying = false, olderNow = false;
-/* событие журнала → комната Мочи (при перерисовке истории — только в её журнал, без реакций; старую историю «Показать раньше» не трогаем) */
+/* событие журнала → компьютер в шапке (при перерисовке истории — только в его журнал, без реакций; старую историю «Показать раньше» не трогаем) */
 const room = (k, e) => { if (olderNow) return; try { window.mochiRoom && mochiRoom[k](e, replaying); } catch (x) { console.error(x); } };
 const isImgN = n => /\.(png|jpe?g|gif|webp)$/i.test(n || '');
 const READY = 'готово · сервер';
@@ -63,7 +63,7 @@ const auth = document.createElement('dialog');
 auth.id = 'auth'; auth.className = 'win'; auth.setAttribute('aria-labelledby', 'auth-t');
 auth.innerHTML = `<div class="wbar"><span></span><b id="auth-t">Вход</b><span></span></div>
 <div class="stabs" role="tablist"><button role="tab" data-m="login" class="on">Вход</button><button role="tab" data-m="reg">Регистрация</button></div>
-<div class="sbody"><div class="wtitle" aria-hidden="true">МОЧИ</div><p class="ws" id="auth-w"></p>
+<div class="sbody"><div class="wtitle" aria-hidden="true">PERSONAL<br>COMPUTER</div><p class="ws" id="auth-w"></p>
 <label class="f">Имя<input id="a-name" autocapitalize="off" autocomplete="username" spellcheck="false" maxlength="32"></label>
 <label class="f">Пароль<input id="a-pw" type="password" autocomplete="current-password" maxlength="256"></label>
 <label class="f" id="a-pw2f" hidden>Пароль ещё раз<input id="a-pw2" type="password" autocomplete="new-password" maxlength="256"></label>
@@ -84,7 +84,7 @@ function authMode(m) {
   $('#a-pw').autocomplete = reg ? 'new-password' : 'current-password';
   $('#auth-w').textContent = reg
     ? (authInfo.setup ? 'Первый вход на этот сервер! Придумай имя и пароль — ты станешь администратором. Код приглашения напечатал установщик.' : 'Нужен код приглашения от администратора сервера.')
-    : 'Мочи живёт на этом сервере и работает, даже когда браузер закрыт. Войди, чтобы продолжить.';
+    : 'Personal Computer живёт на этом сервере и работает, даже когда браузер закрыт. Войди, чтобы продолжить.';
   $('#a-err').textContent = '';
 }
 auth.querySelectorAll('.stabs button').forEach(b => b.onclick = () => authMode(b.dataset.m));
@@ -196,7 +196,7 @@ function render(e) {
   curT = null;
 }
 
-/* на время перерисовки истории — без звуков, счётчиков, озвучки и реакций питомца. И без прокрутки вниз после каждого
+/* на время перерисовки истории — без звуков, счётчиков, озвучки и реакций компьютера. И без прокрутки вниз после каждого
    сообщения: она заставляет браузер заново раскладывать всю ленту. Вниз — один раз в конце (keep — оставить, где есть) */
 function quietly(fn, keep) {
   replaying = true; window.mochiReplay = true; const sfxOn = cfg.sfx, u0 = unread, pin0 = pin; cfg.sfx = false; pin = () => {};
@@ -215,7 +215,7 @@ function quietly(fn, keep) {
 const HIST = 100;
 let older = [], seq0 = 0;
 const isMsg = e => e.kind === 'user' || e.kind === 'assistant';
-/* откуда рисовать: последние n сообщений (твоих и Мочи), начиная с твоего — чтобы шаги инструментов не рвались */
+/* откуда рисовать: последние n сообщений (твоих и его), начиная с твоего — чтобы шаги инструментов не рвались */
 function cutAt(log, n) {
   let k = log.length, c = 0;
   while (k > 0 && c < n) { k--; if (isMsg(log[k])) c++; }
@@ -278,7 +278,7 @@ function onSnap(s) {
     connected = true; setSt(READY, 'on');
     const n = s.log.filter(e => e.kind === 'user' || e.kind === 'assistant').length;
     bt('ok', 'chat', n ? plural(n, 'сообщение', 'сообщения', 'сообщений') : 'пусто');
-    bt('ok', 'agent', s.running ? 'работает' + (s.steps ? ' · шаг ' + s.steps : '') : 'свободна');
+    bt('ok', 'agent', s.running ? 'работает' + (s.steps ? ' · шаг ' + s.steps : '') : 'свободен');
     bt('done');
   }
 }
@@ -293,7 +293,7 @@ function onDelta(d) {
   bubble._raw += d; bubble._b.innerHTML = md(bubble._raw); pin();
   try { window.mochiRoom && mochiRoom.delta(bubble._raw); } catch (x) {}
 }
-/* snap — состояние пришло с полной перерисовкой: комнату обновит mochiRoom.snap, без реакций «началась задача» */
+/* snap — состояние пришло с полной перерисовкой: компьютер в шапке обновит mochiRoom.snap, без реакций «началась задача» */
 function setRun(r, snap) {
   const was = running; running = !!r.running;
   ctl = running ? { abort: stopNow } : null;
@@ -317,7 +317,7 @@ async function stopNow() {
 }
 
 /* ---------- сообщения во время работы ----------
-   Пока Мочи работает, написанное ждёт ближайшей паузы между шагами (после команды или ответа модели) — здесь, над полем
+   Пока Personal Computer работает, написанное ждёт ближайшей паузы между шагами (после команды или ответа модели) — здесь, над полем
    ввода. Уйдёт модели — появится в переписке на своём месте. «Прочитать сейчас» бросает текущий шаг, «X» — отзывает
    сообщение: текст (и вложения, если отправляла эта вкладка) возвращаются в поле ввода */
 const qbox = document.createElement('div');
@@ -332,7 +332,7 @@ function onQueue(q) {
   if (!q.length) return;
   const h = document.createElement('div'); h.className = 'qh';
   h.innerHTML = '<span></span><button class="pbtn sm" type="button" data-qnow title="Бросить текущий шаг и прочитать сразу"><i class="pi"></i><span>Прочитать сейчас</span></button>';
-  h.firstChild.textContent = (q.length > 1 ? plural(q.length, 'сообщение', 'сообщения', 'сообщений') + ' · ' : '') + 'Мочи прочтёт после текущего шага';
+  h.firstChild.textContent = (q.length > 1 ? plural(q.length, 'сообщение', 'сообщения', 'сообщений') + ' · ' : '') + 'Personal Computer прочтёт после текущего шага';
   qbox.append(h);
   for (const x of q) {
     const d = document.createElement('span'), n = document.createElement('span'), b = document.createElement('button');
@@ -403,7 +403,7 @@ function mirror() {
 }
 
 /* ---------- отправка ---------- */
-/* во время работы сообщение не отклоняется: сервер ставит его в очередь, и Мочи прочтёт его между шагами */
+/* во время работы сообщение не отклоняется: сервер ставит его в очередь, и Personal Computer прочтёт его между шагами */
 window.srvSubmit = async () => {
   if (upBusy) return;
   const i = $('#inp'), t = i.value.trim(), fs = staged.slice();
@@ -440,7 +440,7 @@ $('#msgs').addEventListener('click', e => {
   post('api/chat/retry').catch(x => add('e', esc(x.message)));
 }, true);
 $('#clr').onclick = async () => {
-  if (!await ask('Очистить чат', 'Вся переписка исчезнет, а Мочи забудет разговор. Файлы на сервере останутся.', null, 'Очистить')) return;
+  if (!await ask('Очистить чат', 'Вся переписка исчезнет, а Personal Computer забудет разговор. Файлы на сервере останутся.', null, 'Очистить')) return;
   staged.length = 0; renderChips();
   post('api/chat/clear').catch(e => add('e', esc(e.message)));
 };
@@ -542,7 +542,7 @@ async function refreshPane() {
     $('#s-tokf').hidden = t.connected; $('#s-ntf').hidden = !t.connected;
     foldMeta(fTg, !t.connected ? 'не подключён' : t.error ? 'ошибка' : '@' + t.bot + (t.linked ? '' : ' · не привязан'), t.connected && !!t.error);
     if (!t.connected) {
-      s.textContent = 'Не подключён. Создай бота у @BotFather (/newbot) и вставь токен — или просто попроси Мочи в чате: «подключи Telegram».';
+      s.textContent = 'Не подключён. Создай бота у @BotFather (/newbot) и вставь токен — или просто попроси в чате: «подключи Telegram».';
       bb.append(tgBtn('Подключить', async () => {
         try { await post('api/telegram', { token: $('#s-tok').value.trim() }); $('#s-tok').value = ''; refreshPane(); }
         catch (e) { s.textContent = 'Не получилось: ' + e.message; }
@@ -555,7 +555,7 @@ async function refreshPane() {
       if (!t.linked && t.link) { s.append(document.createElement('br'), 'Открой ссылку и нажми «Старт»: '); const l = document.createElement('a'); l.href = t.link; l.target = '_blank'; l.rel = 'noopener'; l.textContent = t.link; s.append(l); }
       bb.append(tgBtn(t.linked ? 'Привязать заново' : 'Новая ссылка', async () => { await post('api/telegram/link'); refreshPane(); }));
       bb.append(tgBtn('Отключить', async () => {
-        if (!await ask('Telegram', 'Отключить бота от Мочи? Управление и уведомления перестанут работать.', null, 'Отключить')) return;
+        if (!await ask('Telegram', 'Отключить бота от Personal Computer? Управление и уведомления перестанут работать.', null, 'Отключить')) return;
         await api('api/telegram', { method: 'DELETE' }); refreshPane();
       }));
       document.querySelectorAll('#s-nt button').forEach(b => { const on = b.dataset.v === t.notify; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); });
@@ -575,12 +575,12 @@ $('#s-pw').onclick = async () => {
 $('#s-inv').onclick = async () => {
   try {
     const r = await post('api/invite');
-    const v = await ask('Приглашение', 'Одноразовая ссылка для регистрации (7 дней). Помни: у каждого пользователя Мочи есть доступ к терминалу сервера — приглашай только тех, кому доверяешь.', r.url, 'Скопировать');
+    const v = await ask('Приглашение', 'Одноразовая ссылка для регистрации (7 дней). Помни: у каждого пользователя Personal Computer есть доступ к терминалу сервера — приглашай только тех, кому доверяешь.', r.url, 'Скопировать');
     if (v != null) navigator.clipboard?.writeText(r.url).catch(() => {});
   } catch (e) { await ask('Приглашение', e.message, null, 'OK'); }
 };
 const logout = async all => {
-  if (!await ask('Выход', all ? 'Выйти на всех устройствах? Мочи продолжит работать на сервере.' : 'Выйти? Мочи продолжит работать на сервере.', null, 'Выйти')) return;
+  if (!await ask('Выход', all ? 'Выйти на всех устройствах? Personal Computer продолжит работать на сервере.' : 'Выйти? Personal Computer продолжит работать на сервере.', null, 'Выйти')) return;
   await post('api/logout' + (all ? '?all=1' : '')).catch(() => {});
   $('#dlg').close(); me = null; if (es) { es.close(); es = null; } connected = false;
   $('#msgs').innerHTML = ''; check();
@@ -590,14 +590,14 @@ $('#s-outall').onclick = () => logout(true);
 
 /* ---------- обновления ----------
    Сервер сам смотрит на GitHub, что нового. Если вышла новая версия, администратору при входе
-   показывается окошко с Мочи: что изменилось и «Позже» / «Обновить». Обновляет root-служба на сервере
+   показывается окошко с Personal Computer: что изменилось и «Позже» / «Обновить». Обновляет root-служба на сервере
    (server/bin/mochi-update): окошко показывает её шаги, переживает перезапуск сервера и перезагружает страницу.
    Остальные открытые страницы перезагружаются сами, когда видят новую сборку (build в snap). */
 css.textContent += `
 #upd{max-width:460px}
 #upd .ubody{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:18px 20px 20px;font-size:9px;line-height:1.8}
 #upd .uhead{display:flex;align-items:center;gap:18px}
-#upd canvas{flex:none;width:120px;height:108px;image-rendering:pixelated}
+#upd canvas{flex:none;width:106px;height:106px;image-rendering:pixelated}
 #upd .usay{flex:1;min-width:0;position:relative;margin:4px;padding:10px 12px;background:var(--bg);font-size:10px;line-height:1.7;box-shadow:var(--sh4)}
 #upd .usay::before{content:"";position:absolute;left:-8px;top:14px;width:8px;height:8px;background:var(--bg);box-shadow:-4px 0 var(--ink),0 -4px var(--ink),0 4px var(--ink)}
 #upd .uver{margin-top:16px;color:var(--mut);font-size:8px;white-space:pre-line}
@@ -628,8 +628,8 @@ upd.innerHTML = `<div class="wbar"><span></span><b id="upd-h">Обновлени
 <div class="ubody"><div class="uhead"><canvas aria-hidden="true"></canvas><p class="usay" id="upd-say" role="status" aria-live="polite"></p></div><div id="upd-m"></div></div>
 <div class="wfoot"><button class="lnk" id="upd-no" type="button">Позже</button><button class="p" id="upd-ok" type="button">Обновить</button></div>`;
 document.body.append(upd);
-/* в окошке — сама Мочи: её компьютер из комнаты в верхней панели (там же меняем ей настроение; при обновлении экран показывает «ОБНОВЛЕНИЕ %») */
-const upc = upd.querySelector('canvas'); upc.width = 104; upc.height = 94;
+/* в окошке — сам Personal Computer из верхней панели (там же меняем ему настроение; при обновлении экран показывает «ОБНОВЛЕНИЕ %») */
+const upc = upd.querySelector('canvas'); upc.width = 106; upc.height = 106;
 let upT = 0;
 function upDraw(t) {
   if (!upd.open) return;
@@ -639,10 +639,10 @@ function upDraw(t) {
 }
 
 const UPH = {
-  offer: ['Ура! Вышло обновление!', 'Ура, есть обновление! Обновимся?', 'Смотри, я научилась новому! Обновим?', 'Свеженькая версия приехала!'],
+  offer: ['Ура! Вышло обновление!', 'Ура, есть обновление! Обновимся?', 'Смотри, я научился новому! Обновим?', 'Свеженькая версия приехала!'],
   unknown: ['Не знаю, какая у меня версия… Обновимся до свежей?'],
-  fresh: ['У меня самая свежая версия!', 'Обновлений нет — я и так новенькая ^_^'],
-  done: ['Готово! Я обновилась ^_^', 'Ура! Я теперь новенькая!', 'Обновилась! Сейчас перезагружусь~'],
+  fresh: ['У меня самая свежая версия!', 'Обновлений нет — я и так новенький ^_^'],
+  done: ['Готово! Я обновился ^_^', 'Ура! Я теперь новенький!', 'Обновился! Сейчас перезагружусь~'],
   fail: ['Ой… обновиться не получилось', 'Хнык… обновление не вышло'],
 };
 const upick = a => a[Math.random() * a.length | 0];
@@ -651,8 +651,8 @@ const dday = s => { const d = s ? new Date(s) : null; return d && !isNaN(d) ? d.
 const ago = t => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'только что' : m < 60 ? m + ' мин назад' : m < 1440 ? Math.round(m / 60) + ' ч назад' : dday(t); };
 const ver = (c, d) => (c && c.commit ? c.commit : 'неизвестно') + ((d || c && c.date) ? ' от ' + dday(d || c.date) : '');
 /* доля готовности — по шагам установщика (он печатает их по порядку) */
-const UPCT = [[/что нового/, 4], [/Устанавливаю Мочи/, 8], [/системные пакеты/, 12], [/Пакеты на месте/, 26], [/Node\.js/, 38], [/ttyd/, 46], [/Caddy/, 52],
-  [/код Мочи/, 58], [/^Код:/, 68], [/Запускаю службы/, 76], [/Сервер Мочи работает/, 88], [/сертификат/, 92], [/HTTPS/, 96]];
+const UPCT = [[/что нового/, 4], [/Устанавливаю (Мочи|Personal Computer)/, 8], [/системные пакеты/, 12], [/Пакеты на месте/, 26], [/Node\.js/, 38], [/ttyd/, 46], [/Caddy/, 52],
+  [/код (Мочи|Personal Computer)/, 58], [/^Код:/, 68], [/Запускаю службы/, 76], [/Сервер (Мочи|Personal Computer) работает/, 88], [/сертификат/, 92], [/HTTPS/, 96]];
 const pct = steps => steps.reduce((p, s) => Math.max(p, ...UPCT.filter(([re]) => re.test(s.t)).map(x => x[1])), 3);
 /* «Позже» — не напоминать об этой версии сутки */
 const LATER = 'mochi-upd-later';
@@ -683,7 +683,7 @@ function uOffer(i) {
     m.append(ul);
   }
   const can = i.admin && i.ready && i.available !== false;
-  if (!i.admin) unote(m, 'Обновить Мочи может администратор сервера.');
+  if (!i.admin) unote(m, 'Обновить Personal Computer может администратор сервера.');
   else if (!i.ready) unote(m, 'Чтобы обновлять прямо отсюда, один раз выполни на сервере «sudo mochi update» — эта команда поставит службу обновления. Дальше хватит кнопки.');
   else if (can) unote(m, 'Сервер перезапустится примерно на минуту. Переписка, настройки и файлы сохранятся' + (i.busy ? ', а начатые задачи продолжатся сами.' : '.'));
   uSay(i.available === false ? upick(UPH.fresh) : i.available ? upick(UPH.offer) : upick(UPH.unknown), i.available === false ? 'happy' : 'wow', 2500);
@@ -702,7 +702,7 @@ function uRun(st, down) {
   const steps = st.steps || [], last = steps.filter(s => s.k === 'run' || s.k === 'ok').at(-1);
   const up = st.state === 'queued' ? 3 : pct(steps);
   m.querySelector('.ubar i').style.width = up + '%';
-  try { window.mochiRoom && mochiRoom.update(up); } catch (x) {} /* экран компьютера в комнате: «ОБНОВЛЕНИЕ n%» */
+  try { window.mochiRoom && mochiRoom.update(up); } catch (x) {} /* экран компьютера в шапке: «ОБНОВЛЕНИЕ n%» */
   const ul = m.querySelector('.ust'); ul.innerHTML = '';
   /* «🐾 делаю…» мигает, только пока это последний шаг; пройденные — точкой */
   steps.slice(-6).forEach((s, k, a) => ul.append(el('li', s.k === 'run' && (k < a.length - 1 || st.state !== 'running') ? 'past' : s.k, s.t)));
@@ -756,7 +756,7 @@ function uFail(st) {
   const m = $('#upd-m'); m.innerHTML = '';
   m.append(el('small', 'uerr', st.error || 'Обновление не удалось'));
   if (st.steps && st.steps.length) { const ul = el('ul', 'ust'); for (const s of st.steps.slice(-6)) ul.append(el('li', s.k === 'run' ? 'past' : s.k, s.t)); m.append(ul); }
-  unote(m, 'Повторять не страшно: установщик сохраняет данные и настройки, а Мочи работает дальше.');
+  unote(m, 'Повторять не страшно: установщик сохраняет данные и настройки, а Personal Computer работает дальше.');
   uSay(upick(UPH.fail), 'sad', 6000);
   uBtns(['Закрыть', () => upd.close()], updI && updI.admin && updI.ready ? ['Повторить', uGo] : null);
 }
@@ -771,7 +771,7 @@ upd.addEventListener('close', () => { if (uMode !== 'run' && window.petSet) petS
 /* сервер обновился, пока страница была открыта: перезагружаемся, как только это никому не помешает */
 function reloadSoon() {
   if (reloadT) return;
-  window.petSet && petSet('wow', 'Я обновилась! Сейчас перезагружусь~', 3000);
+  window.petSet && petSet('wow', 'Я обновился! Сейчас перезагружусь~', 3000);
   const go = () => { if (!$('#inp').value.trim() && !document.querySelector('dialog[open]')) location.reload(); else reloadT = setTimeout(go, 3000); };
   reloadT = setTimeout(go, 2000);
 }
@@ -793,17 +793,17 @@ function updState(i) {
   const st = i.status, on = !!(i.admin && i.available);
   $('#set').classList.toggle('upd', on); lxTab.classList.toggle('upd', on);
   const busy = st.state === 'running' || st.state === 'queued';
-  const lines = [i.known ? 'Стоит версия ' + ver(i.current, i.current.date || i.current.installed) : 'Неизвестно, какая версия стоит: Мочи установлена без сведений о сборке.'];
+  const lines = [i.known ? 'Стоит версия ' + ver(i.current, i.current.date || i.current.installed) : 'Неизвестно, какая версия стоит: Personal Computer установлен без сведений о сборке.'];
   if (busy) lines.push('Сейчас идёт обновление…');
   else if (i.available) lines.push('Есть новая версия: ' + ver(i.latest) + (i.changes.length ? ' · ' + plural(i.changes.length, 'изменение', 'изменения', 'изменений') + (i.more ? ' и больше' : '') : ''));
   else if (i.available === false) lines.push('Это последняя версия ✓');
   if (i.error) lines.push('Не получилось проверить: ' + i.error);
   if (i.checked) lines.push('Проверено ' + ago(i.checked) + '.');
-  else if (i.known && !i.error) lines.push('Ещё не проверяла.');
+  else if (i.known && !i.error) lines.push('Ещё не проверял.');
   $('#s-upd').textContent = lines.join('\n'); $('#s-upd').style.whiteSpace = 'pre-line';
   $('#s-updgo').hidden = !(i.admin && i.ready && (busy || i.available || (i.available === null && i.latest)));
   $('#s-updgo span').textContent = busy ? 'Показать ход' : 'Обновить';
-  $('#s-updn').textContent = !i.admin ? 'Обновляет администратор сервера.' : !i.ready ? 'Чтобы обновлять из браузера, один раз выполни на сервере «sudo mochi update» — она поставит службу обновления.' : 'Мочи проверяет GitHub раз в 6 часов и сама предложит обновиться. Откуда берётся код: ' + (i.repo || '?') + (i.ref && i.ref !== 'HEAD' ? ' (ветка ' + i.ref + ')' : '') + '.';
+  $('#s-updn').textContent = !i.admin ? 'Обновляет администратор сервера.' : !i.ready ? 'Чтобы обновлять из браузера, один раз выполни на сервере «sudo mochi update» — она поставит службу обновления.' : 'Personal Computer проверяет GitHub раз в 6 часов и сам предложит обновиться. Откуда берётся код: ' + (i.repo || '?') + (i.ref && i.ref !== 'HEAD' ? ' (ветка ' + i.ref + ')' : '') + '.';
   foldMeta(fUpd, busy ? 'обновляется…' : i.available ? 'есть новая' : i.available === false ? 'последняя' : i.error ? 'не проверить' : i.current && i.current.commit || '', !busy && !i.available && !!i.error);
   fUpd.querySelector(':scope>summary>.fm').classList.toggle('new', !!(busy || i.available));
 }
@@ -842,7 +842,7 @@ function accState(i) {
   if (busy) line(st.want === 'on' ? 'Даю агенту root… Исполнитель команд и терминал перезапускаются.' : st.want === 'off' ? 'Забираю root… Исполнитель команд и терминал перезапускаются.' : 'Переключаю доступ…');
   else if (i.root) {
     box.append(el('b', null, 'Полный доступ: root')); box.append(' — sudo без пароля. Агент ставит пакеты, настраивает службы, правит /etc.');
-    if (i.mode === 'off') line('Права дала не Мочи: sudo для ' + i.user + ' настроен на сервере вручную.');
+    if (i.mode === 'off') line('Права дал не Personal Computer: sudo для ' + i.user + ' настроен на сервере вручную.');
   } else {
     line('Обычный пользователь ' + i.user + ': без root, только свои папки и то, что разрешено всем.');
     if (i.mode === 'on') line('Root включён, но sudo у агента сейчас не работает. Включи ещё раз или выполни на сервере: sudo mochi root on', 'bad');
@@ -857,7 +857,7 @@ function accState(i) {
     : !i.ready ? 'Переключатель заработает после «sudo mochi update» на сервере. Сразу — командой там же: sudo mochi root ' + (i.root ? 'off' : 'on') + '.'
     : st.state === 'queued' && Date.now() - st.since > 30e3 ? 'Служба на сервере пока не взяла запрос. Проверь её: «systemctl status mochi-access.path» (на Alpine — «rc-service mochi-updater status») или переключи командой: sudo mochi root ' + (st.want || 'on') + '.'
     : i.root ? 'Терминал: sudo -i — root-оболочка. Забрать root можно в любой момент; то, что агент уже поменял в системе, останется как есть.'
-    : 'Полный доступ — как у администратора сервера: sudo без пароля, системные пакеты, службы, файлы в /etc. Включается с паролем от Мочи.';
+    : 'Полный доступ — как у администратора сервера: sudo без пароля, системные пакеты, службы, файлы в /etc. Включается с паролем от Personal Computer.';
   foldMeta(fAcc, busy ? 'переключается…' : i.root ? 'root' : 'без root', !busy && st.state === 'failed');
   fAcc.querySelector(':scope>summary>.fm').classList.toggle('root', !busy && !!i.root);
 }
@@ -874,7 +874,7 @@ function accTick() {
       if (i.status.state === 'failed') { window.petSet && petSet('sad', 'Не вышло переключить доступ…', 4000); return; }
       /* сразу после перезапуска исполнитель мог ещё не ответить — переспросим пару раз */
       if (accWait && i.root !== (accWait > 0) && Date.now() - Math.abs(accWait) < 20e3) return accTick();
-      if (accWait) window.petSet && petSet(i.root ? 'love' : 'happy', i.root ? 'Теперь у меня root! Буду бережной ^_^' : 'Root отдала — я снова обычный пользователь', 3500);
+      if (accWait) window.petSet && petSet(i.root ? 'love' : 'happy', i.root ? 'Теперь у меня root! Буду бережным ^_^' : 'Root отдал — я снова обычный пользователь', 3500);
       accWait = 0;
       if (was !== i.root) refreshPane();
       return;
@@ -888,12 +888,12 @@ async function accSet(on) {
     const n = accI ? accI.users : 1;
     const ok = await askML('Полный доступ', 'Агент получит root на этом сервере: sudo без пароля, системные пакеты и службы, любые файлы.'
       + '\n\nЧем это опасно:'
-      + '\n· root получат все пользователи Мочи' + (n > 1 ? ' (их ' + n + ')' : '') + ' — агент и терминал у всех общие;'
+      + '\n· root получат все пользователи Personal Computer' + (n > 1 ? ' (их ' + n + ')' : '') + ' — агент и терминал у всех общие;'
       + '\n· инструкция, спрятанная на сайте или в файле, который прочтёт агент, сможет управлять всем сервером;'
-      + '\n· агенту станут доступны ключи API и пароли Мочи.'
+      + '\n· агенту станут доступны ключи API и пароли Personal Computer.'
       + '\n\nИсполнитель команд и терминал перезапустятся' + (accI && accI.busy ? ': идущие команды оборвутся, агент продолжит сам.' : '.'), null, 'Дальше');
     if (!ok) return;
-    const pw = await pwAsk('Полный доступ', 'Подтверди паролем от Мочи');
+    const pw = await pwAsk('Полный доступ', 'Подтверди паролем от Personal Computer');
     if (pw == null) return;
     b.disabled = true;
     try { accState(await post('api/access', { root: true, password: pw })); accWait = Date.now(); accTick(); }
@@ -969,12 +969,12 @@ async function loadTools() {
   tl.innerHTML = '';
   const bOn = c.builtin.filter(t => t.on), live = c.mcp.filter(s => s.on && !s.lazy);
   const weight = sum(bOn, t => t.size) + sum(live, s => sum(s.tools.filter(t => t.on), t => t.size));
-  tl.append(el('small', 'xsum', 'Мочи видит только включённое. Сейчас описания инструментов занимают ' + tok(weight) + ' в каждом запросе.'));
+  tl.append(el('small', 'xsum', 'Personal Computer видит только включённое. Сейчас описания инструментов занимают ' + tok(weight) + ' в каждом запросе.'));
   const msg = el('small', 'xmsg'); msg.id = 'x-msg'; msg.setAttribute('role', 'status'); msg.textContent = keep[0]; if (keep[1]) msg.dataset.s = keep[1]; tl.append(msg);
 
   /* встроенные — по группам; внутри группы с несколькими инструментами есть общий переключатель */
   const B = fold('b', 'Встроенные', bOn.length + ' из ' + c.builtin.length + ' · ' + tok(sum(bOn, t => t.size)));
-  B.body.append(el('small', 'xs', 'Включает и выключает их только пользователь — Мочи этого не может.'));
+  B.body.append(el('small', 'xs', 'Включает и выключает их только пользователь — Personal Computer этого не может.'));
   const groups = {};
   for (const t of c.builtin) (groups[t.group] ||= []).push(t);
   for (const [g, ts] of Object.entries(groups)) {
@@ -990,7 +990,7 @@ async function loadTools() {
   const mOn = c.mcp.filter(s => s.on);
   const mBad = c.mcp.some(s => s.on && s.err);
   const M = fold('m', 'MCP-серверы', c.mcp.length ? mOn.length + ' из ' + c.mcp.length + ' вкл.' + (mBad ? ' · ошибка' : '') : 'нет', mBad);
-  if (!c.mcp.length) M.body.append(el('small', 'xs', 'Внешние инструменты. Подключи ниже или попроси Мочи в чате: «подключи MCP-сервер …».'));
+  if (!c.mcp.length) M.body.append(el('small', 'xs', 'Внешние инструменты. Подключи ниже или попроси в чате: «подключи MCP-сервер …».'));
   for (const s of c.mcp) {
     const on = s.tools.filter(t => t.on);
     const S = fold('m:' + s.name, s.name, !s.on ? 'выкл.' : s.err ? 'ошибка' : (s.lazy ? 'по запросу' : 'всегда') + (s.known ? ' · ' + on.length + '/' + s.tools.length : ''), s.on && !!s.err);
@@ -998,7 +998,7 @@ async function loadTools() {
     if (s.desc) S.body.append(el('small', 'xs', s.desc));
     if (s.err) S.body.append(el('small', 'xs bad', 'Ошибка: ' + s.err));
     S.body.append(swRow('Включён', null, s.on, v => post('api/mcp/' + s.name, { on: v }).then(loadTools)));
-    S.body.append(swRow('По запросу', 'Инструменты подключаются, только когда нужны Мочи', s.lazy, v => post('api/mcp/' + s.name, { lazy: v }).then(loadTools)));
+    S.body.append(swRow('По запросу', 'Инструменты подключаются, только когда понадобятся в работе', s.lazy, v => post('api/mcp/' + s.name, { lazy: v }).then(loadTools)));
     if (s.tools.length) {
       const T = fold('mt:' + s.name, 'Инструменты', on.length + '/' + s.tools.length + ' · ' + tok(sum(on, t => t.size)));
       if (s.tools.length > 1) T.body.append(swRow('Все', null, on.length === s.tools.length, v => post('api/mcp/' + s.name, { tools: Object.fromEntries(s.tools.map(t => [t.name, v])) }).then(loadTools)));
@@ -1030,7 +1030,7 @@ async function loadTools() {
   /* навыки: каждый — своя папка; ниже — установка по ссылке и создание */
   const kOn = c.skills.filter(k => k.on);
   const K = fold('k', 'Навыки', c.skills.length ? kOn.length + ' из ' + c.skills.length + ' вкл.' : 'нет');
-  K.body.append(el('small', 'xs', 'Навык — инструкция SKILL.md для определённых задач. Мочи помнит только имена включённых и читает навык целиком, когда он нужен.'));
+  K.body.append(el('small', 'xs', 'Навык — инструкция SKILL.md для определённых задач. Personal Computer помнит только имена включённых и читает навык целиком, когда он нужен.'));
   for (const k of c.skills) {
     const S = fold('k:' + k.name, k.name, k.on ? 'вкл.' : 'выкл.');
     if (k.title) S.body.append(el('small', 'xs', k.title));
@@ -1092,7 +1092,7 @@ function skillForm(name, raw, d = $('#x-skf')) {
 }
 
 /* ---------- терминал: ttyd за авторизацией ----------
-   ttyd рисует xterm.js в iframe с того же адреса, поэтому оформляем его как ЭЛТ-экран Мочи:
+   ttyd рисует xterm.js в iframe с того же адреса, поэтому оформляем его как ЭЛТ-экран:
    шрифт VT323, свечение люминофора, отступы, палитра из текущей темы (и меняется вместе с ней). */
 let tty = null;
 function ttyFrame() {

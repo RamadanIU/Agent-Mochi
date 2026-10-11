@@ -18,7 +18,7 @@ function adminCall(a) {
     c.on('connect', () => c.write(JSON.stringify(a) + '\n'));
     c.on('data', d => buf += d);
     c.on('end', () => { try { ok(JSON.parse(buf)); } catch { no(new Error('пустой ответ')); } });
-    c.on('error', e => no(new Error(e.code === 'EACCES' ? 'нет доступа: запусти через sudo' : e.code === 'ENOENT' || e.code === 'ECONNREFUSED' ? 'сервер Мочи не запущен (sudo mochi restart)' : e.message)));
+    c.on('error', e => no(new Error(e.code === 'EACCES' ? 'нет доступа: запусти через sudo' : e.code === 'ENOENT' || e.code === 'ECONNREFUSED' ? 'сервер Personal Computer не запущен (sudo mochi restart)' : e.message)));
   });
 }
 

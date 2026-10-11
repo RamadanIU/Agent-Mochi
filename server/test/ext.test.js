@@ -8,7 +8,7 @@ import { fakeModel, startMochi, registered } from './helpers.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let m, model, mcpHttp, mcpSrv, c;
-const seen = { auth: [] };
+const seen = { auth: [], calls: [] };
 const doneRun = evs => evs.some(e => e.ev === 'run' && e.d.running === false);
 const names = body => (body.tools || []).map(t => t.function.name);
 const sys = body => body.messages[0].content;
@@ -27,9 +27,10 @@ before(async () => {
     if (ut.startsWith('создай навык')) return first ? { tools: [{ name: 'skills_manage', args: { action: 'create', name: 'notes', description: 'Как вести заметки', instructions: 'Пиши кратко.' } }] } : done;
     if (ut.startsWith('mcp')) {
       if (first) return { tools: [{ name: 'mcp_connect', args: { server: 'fake' } }] };
-      if (last.content.startsWith('Подключила')) return { tools: [{ name: 'fake__echo', args: { text: 'hi' } }] };
+      if (last.content.startsWith('Подключил')) return { tools: [{ name: 'fake__echo', args: { text: 'hi' } }] };
       return done;
     }
+    if (ut.startsWith('объясни')) return first ? { tools: [{ name: 'remote__ping', args: { action: 'Пингую удалённый сервер' } }] } : done;
     if (ut.startsWith('http')) {
       if (first) return { tools: [{ name: 'mcp_manage', args: { action: 'add', name: 'remote', url: mcpHttp, headers: { Authorization: 'Bearer secret-token-123456' }, lazy: false } }] };
       if (last.content.includes('подключён')) return { tools: [{ name: 'remote__ping', args: {} }] };
@@ -43,6 +44,7 @@ before(async () => {
     seen.auth.push(req.headers.authorization);
     const msg = JSON.parse(b || '{}');
     if (msg.id === undefined) { res.writeHead(202); return res.end(); }
+    if (msg.method === 'tools/call') seen.calls.push(msg.params);
     const result = msg.method === 'initialize' ? { protocolVersion: msg.params.protocolVersion, capabilities: {}, serverInfo: { name: 'remote' } }
       : msg.method === 'tools/list' ? { tools: [{ name: 'ping', description: 'Пинг', inputSchema: { type: 'object', properties: {} } }] }
       : { content: [{ type: 'text', text: 'PONG' }] };
@@ -185,4 +187,22 @@ test('HTTP MCP подключает сам агент: ключ сохраняе
   assert.doesNotMatch(JSON.stringify(cat), /secret-token/);
   const log = JSON.parse(fs.readFileSync(path.join(m.env.MOCHI_DATA, 'users', fs.readdirSync(path.join(m.env.MOCHI_DATA, 'users'))[0], 'chat.json'), 'utf8'));
   assert.doesNotMatch(JSON.stringify(log), /secret-token-123456/);
+});
+
+test('объяснение шага (action) — у всех инструментов: подпись в журнале, а MCP-серверу поле не уходит', async () => {
+  let ready; const rp = new Promise(r => ready = r);
+  const w = c.events(evs => { if (evs.some(e => e.ev === 'snap')) ready(); const k = evs.findIndex(e => e.ev === 'run' && e.d.running === true); return k >= 0 && doneRun(evs.slice(k)); }, 20000);
+  await rp;
+  assert.equal((await c.json('/api/chat', { text: 'объясни пинг' })).status, 200);
+  const evs = await w;
+  const step = evs.find(e => e.ev === 'log' && e.d.kind === 'tool' && e.d.name === 'remote__ping').d;
+  assert.equal(step.label, 'Пингую удалённый сервер');
+  assert.deepEqual(seen.calls.at(-1), { name: 'ping', arguments: {} });
+  const fn = n => lastReq().tools.find(t => t.function.name === n).function.parameters;
+  /* MCP-инструменту поле добавлено (необязательное), встроенным — обязательное, а свой action (mcp_manage) не тронут */
+  assert.equal(fn('remote__ping').properties.action.type, 'string');
+  assert.ok(!(fn('remote__ping').required || []).includes('action'));
+  assert.ok(fn('read_file').required.includes('action') && fn('read_file').required.includes('path'));
+  assert.ok(Array.isArray(fn('mcp_manage').properties.action.enum));
+  assert.match(sys(lastReq()), /В поле action/);
 });

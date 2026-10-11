@@ -44,7 +44,7 @@ function kv(x, header) {
     for (const l of x.split(/\r?\n/)) {
       const t = l.trim(); if (!t) continue;
       const m = t.match(header ? /^([^:\s]+)\s*:\s*(.*)$/ : /^([^=\s]+)\s*=\s*(.*)$/);
-      if (!m) throw bad('Не поняла строку «' + t.slice(0, 40) + '»: нужно ' + (header ? 'Имя: значение' : 'ИМЯ=значение'));
+      if (!m) throw bad('Не понял строку «' + t.slice(0, 40) + '»: нужно ' + (header ? 'Имя: значение' : 'ИМЯ=значение'));
       o[m[1]] = m[2];
     }
   }
@@ -309,7 +309,7 @@ export async function skillInstall(u, src, want) {
     let items = top.map(rel => ({ rel, name: normSkill(rel ? path.posix.basename(rel) : want || path.posix.basename(g.sub) || g.name) }));
     if (want && items.length > 1) items = items.filter(i => i.name === normSkill(want));
     items = items.filter((i, k) => SKILL_NAME.test(i.name) && items.findIndex(j => j.name === i.name) === k);
-    if (!items.length) throw bad(want ? 'Навыка «' + want + '» в репозитории нет. Есть: ' + found.map(f => path.posix.basename(f)).join(', ') : 'Не нашла навыков с подходящими именами');
+    if (!items.length) throw bad(want ? 'Навыка «' + want + '» в репозитории нет. Есть: ' + found.map(f => path.posix.basename(f)).join(', ') : 'Не нашёл навыков с подходящими именами');
     const root = skillsRoot(u);
     const c = await runCmd({ cmd: ['set -e', `mkdir -p ${sq(root)}`, ...items.map(i => `rm -rf ${sq(root + '/' + i.name)} && cp -R ${sq(base + (i.rel ? '/' + i.rel : ''))} ${sq(root + '/' + i.name)} && rm -rf ${sq(root + '/' + i.name + '/.git')}`)].join('\n'), cwd: userDir(u), timeout: 120 });
     if (c.code !== 0) throw bad('Не получилось скопировать навык: ' + String(c.out).slice(0, 300));
@@ -411,7 +411,7 @@ export async function extTool(chat, nm, a) {
     if (!act.includes(key)) act.push(key);
     chat.doc.save();
     const on = s.tools.filter(t => !s.off.includes(t.name));
-    return 'Подключила «' + key + '»: ' + (on.map(t => fnName(key, t.name)).join(', ') || 'инструментов нет') + '. Они доступны со следующего шага.' + (s.info?.instructions ? '\nПодсказка сервера: ' + s.info.instructions : '');
+    return 'Подключил «' + key + '»: ' + (on.map(t => fnName(key, t.name)).join(', ') || 'инструментов нет') + '. Они доступны со следующего шага.' + (s.info?.instructions ? '\nПодсказка сервера: ' + s.info.instructions : '');
   }
   const act = String(a.action || '');
   if (nm === 'mcp_manage') {

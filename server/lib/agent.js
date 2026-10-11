@@ -1,4 +1,4 @@
-/* Агент Мочи на сервере. Работа не зависит от браузера: чат только подписывается на события.
+/* Агент Personal Computer на сервере. Работа не зависит от браузера: чат только подписывается на события.
    Состояние чата (история для модели + журнал для экрана) лежит на диске и переживает перезапуск сервера:
    незаконченная задача после рестарта продолжается сама. */
 import { EventEmitter } from 'node:events';
@@ -13,7 +13,9 @@ import { webTools, webCall } from './mcp.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
 import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens } from './ext.js';
 
-export const DEF_SYS = 'Тебя зовут Мочи — ты милый пиксельный зверёк-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. В поле action кратко и по-человечески пиши, что делаешь. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
+export const DEF_SYS = 'Тебя зовут Personal Computer — ты ламповый пиксельный компьютер-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
+/* прежние подсказки по умолчанию: кто их не менял (сохранил как было), получает новую */
+export const OLD_SYS = new Set(['Тебя зовут Мочи — ты милый пиксельный зверёк-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. В поле action кратко и по-человечески пиши, что делаешь. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.']);
 /* что умеет показывать веб-чат — модель должна знать, чтобы рисовать таблицы и схемы, а не ASCII-картинки */
 const FMT = 'Оформление: чат показывает Markdown — заголовки, списки, таблицы, цитаты и врезки (> [!NOTE], > [!TIP], > [!WARNING]), `код` и блоки кода с языком, формулы LaTeX ($…$, $$…$$) и схемы в блоке ```mermaid (flowchart, sequenceDiagram, stateDiagram, pie, mindmap, timeline). Пользуйся этим, только когда правда помогает: сравнение — таблицей, процесс или связи — схемой, вычисления — формулой. Короткий ответ оставляй простым текстом.';
 export const DEF_SETTINGS = { base: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', sys: DEF_SYS, search: true, vis: true, stepLimit: true, maxSteps: CFG.maxSteps };
@@ -55,15 +57,15 @@ const SEND_TOOL = { type: 'function', function: { name: 'send_file', description
     name: { type: 'string', description: 'Имя файла для пользователя (необязательно)' },
     note: { type: 'string', description: 'Короткая подпись на языке пользователя (необязательно)' } }, required: ['path'] } } };
 export const TG_TOOLS = [
-  { type: 'function', function: { name: 'telegram_connect', description: 'Подключить Telegram-бота для управления Мочи и уведомлений. Нужен токен бота от @BotFather. Возвращает ссылку, по которой пользователь привязывает свой Telegram (её обязательно передай пользователю).',
+  { type: 'function', function: { name: 'telegram_connect', description: 'Подключить Telegram-бота для управления Personal Computer и уведомлений. Нужен токен бота от @BotFather. Возвращает ссылку, по которой пользователь привязывает свой Telegram (её обязательно передай пользователю).',
     parameters: { type: 'object', properties: { token: { type: 'string', description: 'Токен бота вида 123456789:AA…' } }, required: ['token'] } } },
   { type: 'function', function: { name: 'telegram_status', description: 'Узнать, подключён ли Telegram: имя бота, привязан ли чат пользователя, режим уведомлений. Может выдать новую ссылку для привязки.',
     parameters: { type: 'object', properties: { new_link: { type: 'boolean', description: 'true — выдать новую ссылку привязки' } } } } },
   { type: 'function', function: { name: 'telegram_send', description: 'Отправить пользователю сообщение в Telegram (если бот подключён и привязан). Используй, когда пользователь просил уведомить его или прислать что-то в Telegram.',
     parameters: { type: 'object', properties: { text: { type: 'string', description: 'Текст сообщения' } }, required: ['text'] } } },
-  { type: 'function', function: { name: 'telegram_notify_mode', description: 'Настроить, когда Мочи пишет в Telegram о завершении задач: away — только если пользователь не смотрит чат, always — всегда, off — никогда.',
+  { type: 'function', function: { name: 'telegram_notify_mode', description: 'Настроить, когда Personal Computer пишет в Telegram о завершении задач: away — только если пользователь не смотрит чат, always — всегда, off — никогда.',
     parameters: { type: 'object', properties: { mode: { type: 'string', enum: ['away', 'always', 'off'] } }, required: ['mode'] } } },
-  { type: 'function', function: { name: 'telegram_disconnect', description: 'Отключить Telegram-бота от Мочи.', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'telegram_disconnect', description: 'Отключить Telegram-бота от Personal Computer.', parameters: { type: 'object', properties: {} } } },
 ];
 
 /* встроенные инструменты, которые пользователь может выключить (Настройки → Инструменты) */
@@ -85,6 +87,23 @@ export function setTools(chat, m) {
   for (const [n, on] of Object.entries(m || {})) if (/^[\w-]{1,64}$/.test(n)) { if (on) delete t[n]; else t[n] = false; }
   chat.set.save();
 }
+
+/* Объяснение шага для пользователя: у run_command оно своё (action), остальным инструментам (файлы, поиск, MCP, навыки)
+   добавляем такое же поле action. Его текст — подпись шага в облачке над компьютером и в журнале; самому инструменту
+   поле не передаём (MCP-сервер о нём не знает). Инструменты со своим параметром action (mcp_manage, skills_manage) не трогаем */
+const ACTION = { type: 'string', description: 'Что ты делаешь сейчас — для пользователя: 2–6 слов на его языке. Без технических деталей.' };
+function withAction(tools) {
+  const said = new Set();
+  const out = tools.map(t => {
+    const f = t.function, ps = f.parameters || {}, pr = ps.properties || {};
+    if (pr.action || (ps.type && ps.type !== 'object')) return t;
+    said.add(f.name);
+    const req = BUILTIN.has(f.name) ? ['action', ...(ps.required || []).filter(x => x !== 'action')] : ps.required;
+    return { ...t, function: { ...f, parameters: { ...ps, type: 'object', properties: { action: ACTION, ...pr }, ...(req ? { required: req } : {}) } } };
+  });
+  return { tools: out, said };
+}
+const actionText = a => typeof a === 'string' ? a.replace(/\s+/g, ' ').trim().slice(0, 80) : '';
 
 const tailLine = out => (String(out).split('\n').map(l => l.trim()).filter(l => l && !/^\[(код выхода|таймаут|прервано)/.test(l)).pop() || '').slice(0, 200);
 const argsOk = s => { try { const a = JSON.parse(s); return !!a && typeof a === 'object' && !Array.isArray(a); } catch { return false; } };
@@ -130,7 +149,7 @@ export function friendly(e) {
   if ((s === 401 || s === 403) && /quota|额度|余额|balance|credits?\b|insufficient[ _](funds|balance|credits?)/i.test(e.detail || '')) return 'На ключе кончились деньги или квота (HTTP ' + s + '). Пополни баланс у провайдера или выбери модель подешевле.';
   if (s === 401 || s === 403) return 'Ключ API не подошёл (HTTP ' + s + '). Проверь его в настройках.';
   if (s === 402) return 'На счёте нет денег для этой модели (HTTP 402). Пополни баланс или выбери бесплатную модель (у OpenRouter — с «:free» в конце).';
-  if (s === 404) return 'Не нашла модель или адрес API (HTTP 404). Проверь их в настройках.';
+  if (s === 404) return 'Не нашёл модель или адрес API (HTTP 404). Проверь их в настройках.';
   if (s === 429) return 'Слишком много запросов или на счёте кончились деньги (HTTP 429). Подожди минутку и повтори.';
   if (s >= 500) return 'У сервера модели что-то сломалось (HTTP ' + s + '). Повтори чуть позже.';
   return e.message || 'ошибка';
@@ -161,7 +180,7 @@ export class Chat extends EventEmitter {
   }
   get running() { return !!this.ctl; }
   get away() { return this.clients.size === 0; }
-  settings() { return { ...DEF_SETTINGS, ...this.set.v }; }
+  settings() { const s = { ...DEF_SETTINGS, ...this.set.v }; if (OLD_SYS.has(s.sys)) s.sys = DEF_SYS; return s; }
   runState() {
     const r = this.doc.v.run;
     return { running: this.running, ...(r ? { origin: r.origin, t: r.t, steps: r.steps } : {}) };
@@ -228,13 +247,13 @@ export class Chat extends EventEmitter {
   }
 
   /* ---------- управление ---------- */
-  /* Мочи свободна — сообщение начинает задачу. Занята — ждёт в очереди и уходит модели в ближайшей паузе между шагами
+  /* Personal Computer свободен — сообщение начинает задачу. Занят — ждёт в очереди и уходит модели в ближайшей паузе между шагами
      (после текущей команды или ответа модели) с пометкой MID: модель понимает, что это дополнение или вопрос по ходу дела */
   submit({ text = '', files = [], parts = [], origin = 'web' }) {
     text = String(text).slice(0, 100000);
     if (!text.trim() && !files.length) throw Object.assign(new Error('пустое сообщение'), { status: 400 });
     const busy = this.running, Q = this.doc.v.queue ||= [];
-    if (busy && Q.length >= MAX_QUEUE) throw Object.assign(new Error('Мочи ещё не прочла прошлые сообщения — подожди немного'), { status: 429 });
+    if (busy && Q.length >= MAX_QUEUE) throw Object.assign(new Error('Personal Computer ещё не прочёл прошлые сообщения — подожди немного'), { status: 429 });
     const content = (text.trim() || 'Файлы во вложении.') + (files.length
       ? '\n\n[Пользователь загрузил файлы на сервер:\n' + files.map(f => '- ' + f.path + ' (' + sz(f.size) + ')').join('\n') + ']' : '');
     const m = busy ? { role: 'user', content: MID + content, _mid: 1 } : { role: 'user', content };
@@ -290,7 +309,7 @@ export class Chat extends EventEmitter {
   }
 
   retry(origin = 'web') {
-    if (this.running) throw Object.assign(new Error('Мочи уже работает'), { status: 409 });
+    if (this.running) throw Object.assign(new Error('Personal Computer уже работает'), { status: 409 });
     const H = this.doc.v.hist, last = H[H.length - 1];
     if (!last || last.role === 'assistant') throw Object.assign(new Error('нечего повторять'), { status: 400 });
     this.start(origin);
@@ -337,7 +356,7 @@ export class Chat extends EventEmitter {
     /* сообщения, которые модель так и не прочла, остаются в переписке: «Повторить» или «Продолжить» ответит на них */
     const left = this.takeQueue().length;
     if (err) { console.warn('agent:', this.u.name, err.message); this.push({ kind: 'error', text: friendly(err), detail: err.detail || '', retry: true }); }
-    else if (ctl.signal.aborted) this.push({ kind: 'note', text: left ? 'Остановлено · Мочи ещё не ответила на сообщения выше' : 'Остановлено', ...(left ? { retry: true } : {}) });
+    else if (ctl.signal.aborted) this.push({ kind: 'note', text: left ? 'Остановлено · Personal Computer ещё не ответил на сообщения выше' : 'Остановлено', ...(left ? { retry: true } : {}) });
     this.doc.v.run = null; this.doc.save();
     this.ctl = null;
     this.emit('run', this.runState());
@@ -358,6 +377,7 @@ export class Chat extends EventEmitter {
       : 'Прав root и sudo нет: системные пакеты ставить нельзя. Инструменты ставь к себе: python3 -m venv ~/venv && ~/venv/bin/pip install …, npm install -g … (префикс ~/.local), бинарники — в ~/.local/bin. Если для задачи нужен root (системные пакеты, службы, /etc), скажи пользователю: полный доступ включает администратор в настройках → Сервер → «Доступ агента» (или на сервере: sudo mochi root on).';
     return S.sys
       + '\n' + FMT
+      + '\nВ поле action у инструментов коротко (2–6 слов) и по-человечески пиши, что делаешь сейчас, — пользователь видит это, пока идёт шаг.'
       + `\nСегодня ${now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}, время сервера ${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}.`
       + (run ? `\nСервер: ${I.os}, ядро ${I.kernel}, ${I.arch}, ${I.cpus || '?'} CPU, ${I.mem || '?'} МБ RAM. Ты работаешь как пользователь ${I.user}. ${pkg} Установлено: ${(I.tools || []).join(', ') || '—'}, node.` : '')
       + `\nРабочая папка пользователя: ${dir} (inbox/ — файлы от пользователя, outbox/ — для файлов пользователю). Задачи выполняются на сервере в фоне: пользователь может закрыть браузер, работа продолжится, а результат он увидит в чате.`
@@ -404,12 +424,12 @@ export class Chat extends EventEmitter {
     const chk = () => { if (sig.aborted || g !== this.gen) throw abortErr(); };
     const S = this.settings(), on = t => isOn(S, t.function.name);
     /* лимит — шагов подряд без сообщений пользователя */
-    if (S.stepLimit !== false && run.steps - (run.base || 0) >= S.maxSteps) throw new Error('Мочи сделала ' + S.maxSteps + ' шагов подряд и остановилась, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить. Лимит шагов меняется в настройках → Модель.');
+    if (S.stepLimit !== false && run.steps - (run.base || 0) >= S.maxSteps) throw new Error('Personal Computer сделал ' + S.maxSteps + ' шагов подряд и остановился, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить. Лимит шагов меняется в настройках → Модель.');
     run.steps++;
     const web0 = S.search ? await until(webTools(), sig) : [], web = web0.filter(on); chk();
     const offB = [...builtins(), ...web0, ...MANAGE_TOOLS].filter(t => !on(t)).map(t => t.function.name);
     const X = await until(agentExt(this, S.tools), sig); chk();
-    const tools = [...builtins().filter(on), ...web, ...X.defs], names = new Set(tools.map(t => t.function.name));
+    const { tools, said } = withAction([...builtins().filter(on), ...web, ...X.defs]), names = new Set(tools.map(t => t.function.name));
     const ctx = { web, X, names };
     const sys = await until(this.system(names, X.prompt, web.length > 0, offB), sig); chk();
     const { text, calls } = await until(this.callModel(sys, tools, sig), sig); chk();
@@ -425,7 +445,10 @@ export class Chat extends EventEmitter {
       try { a = JSON.parse(tc.function.arguments || '{}') || {}; } catch { bad = true; }
       if (typeof a !== 'object' || Array.isArray(a)) { a = {}; bad = true; }
       const nm = tc.function.name;
-      const e = this.push({ kind: 'tool', name: nm, label: labelFor(nm, a), hint: nm === 'run_command' ? String(a.command || '').slice(0, 2000) : FILE_TOOLS.has(nm) || nm === 'view_image' ? String(a.path || '').slice(0, 500) : '', state: 'run' });
+      /* объяснение модели — подпись шага; инструменту поле не нужно */
+      const act = said.has(nm) ? actionText(a.action) : '';
+      if (said.has(nm)) delete a.action;
+      const e = this.push({ kind: 'tool', name: nm, label: act || labelFor(nm, a), hint: nm === 'run_command' ? String(a.command || '').slice(0, 2000) : FILE_TOOLS.has(nm) || nm === 'view_image' ? String(a.path || '').slice(0, 500) : '', state: 'run' });
       this.emit('tool', e);
       let out;
       try {
@@ -577,7 +600,7 @@ export class Chat extends EventEmitter {
         if (sig.aborted) throw abortErr();
         const net = e instanceof TypeError || idle.signal.aborted || e.name === 'AbortError';
         if (net && attempt < 3) { await sleep([3000, 10000, 30000][attempt], sig); if (sig.aborted) throw abortErr(); continue; }
-        if (net) throw Object.assign(new Error(idle.signal.aborted ? 'Модель не отвечает уже 3 минуты. Нажми «Повторить».' : 'Не достучалась до модели (' + (e.cause?.code || e.message) + '). Проверь адрес API в настройках.'), { detail: '' });
+        if (net) throw Object.assign(new Error(idle.signal.aborted ? 'Модель не отвечает уже 3 минуты. Нажми «Повторить».' : 'Не достучался до модели (' + (e.cause?.code || e.message) + '). Проверь адрес API в настройках.'), { detail: '' });
         throw e;
       } finally { clearTimeout(it); }
     }

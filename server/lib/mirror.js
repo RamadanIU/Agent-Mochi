@@ -1,4 +1,4 @@
-/* Команды агента — на экране терминала: видно, как Мочи печатает команду
+/* Команды агента — на экране терминала: видно, как Personal Computer печатает команду
    и что та выводит. Сами команды по-прежнему выполняет исполнитель (свой bash на каждую команду),
    а сюда приходит только их «картинка»: пишем прямо в tty первой панели tmux (его и pid оболочки
    запоминает bin/mochi-pane). Ввод пользователя не трогаем: после команды отправляем в панель M-1 C-l —
@@ -53,8 +53,8 @@ export function mirror(cmd, cwd) {
   const put = s => { q = q.then(() => new Promise(r => fs.write(fd, s, () => r()))); };
   const home = os.homedir();
   const dir = cwd === home ? '~' : cwd && cwd.startsWith(home + '/') ? '~' + cwd.slice(home.length) : cwd || '~';
-  /* приглашение агента: метка МОЧИ в инверсии, дальше — как обычная строка оболочки */
-  put('\r\x1b[K\x1b[7m МОЧИ \x1b[27m ' + dir + '$ ');
+  /* приглашение агента: метка PC в инверсии, дальше — как обычная строка оболочки */
+  put('\r\x1b[K\x1b[7m PC \x1b[27m ' + dir + '$ ');
   const chars = Array.from(String(cmd).replace(/\r/g, '').replace(ESC, '').replace(/\n/g, '\r\n> '));
   const step = chars.length > 400 ? 0 : Math.min(28, 1400 / Math.max(chars.length, 1));
   q = q.then(async () => {
