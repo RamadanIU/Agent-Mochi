@@ -1,7 +1,7 @@
 /* Telegram: у каждого пользователя может быть свой бот.
    • Подключение: токен от @BotFather (через инструмент агента telegram_connect или настройки) →
      одноразовая ссылка t.me/<бот>?start=<код> (30 минут) → бот принимает команды только из привязанного чата.
-   • Управление: обычные сообщения/файлы → задача для Мочи (во время работы — дополнение к ней); /status, /stop, /now, /new, /help.
+   • Управление: обычные сообщения/файлы → задача для Personal Computer (во время работы — дополнение к ней); /status, /stop, /now, /new, /help.
    • Уведомления: по окончании задачи (режим away — только когда чат в браузере закрыт). */
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -81,10 +81,10 @@ class Bot {
     const st = txt.match(/^\/start(?:@\w+)?\s+(\S+)/);
     if (st) {
       const ok = v.link && v.linkExp > Date.now() && st[1].length === v.link.length && crypto.timingSafeEqual(Buffer.from(st[1]), Buffer.from(v.link));
-      if (!ok) { await api(v.token, 'sendMessage', { chat_id: m.chat.id, text: 'Ссылка не подошла или устарела. Попроси Мочи выдать новую (в чате: «дай новую ссылку для Telegram»).' }); return; }
+      if (!ok) { await api(v.token, 'sendMessage', { chat_id: m.chat.id, text: 'Ссылка не подошла или устарела. Попроси Personal Computer выдать новую (в чате: «дай новую ссылку для Telegram»).' }); return; }
       Object.assign(v, { chatId: m.chat.id, tgUser: m.from.username || m.from.first_name || String(m.from.id), link: null, linkExp: 0, error: null });
       this.c.save();
-      await this.send(`✅ Готово! Теперь я, Мочи, слушаюсь тебя здесь (аккаунт на сервере: ${this.u.name}).\n\nПросто пиши задачи или присылай файлы. Команды: /status, /stop, /new, /help`);
+      await this.send(`✅ Готово! Теперь я, Personal Computer, слушаюсь тебя здесь (аккаунт на сервере: ${this.u.name}).\n\nПросто пиши задачи или присылай файлы. Команды: /status, /stop, /new, /help`);
       getChat(this.u).push({ kind: 'note', text: 'Telegram привязан: @' + v.tgUser });
       return;
     }
@@ -93,10 +93,10 @@ class Bot {
       return;
     }
     const chat = getChat(this.u), cmd = (txt.match(/^\/(\w+)/) || [])[1];
-    if (cmd === 'help' || cmd === 'start') return this.send('Я Мочи — агент на твоём сервере 🐾\nПиши задачу обычным сообщением, присылай файлы и фото. Пока я работаю, можно дописать или спросить — прочту по ходу дела.\n\n/status — что я сейчас делаю\n/stop — остановить задачу\n/now — прочитать новые сообщения сейчас, не дожидаясь конца шага\n/new — очистить чат\n/web — ссылка на веб-чат\n/notify — уведомления (away/always/off)');
+    if (cmd === 'help' || cmd === 'start') return this.send('Я Personal Computer — агент на твоём сервере 🖥\nПиши задачу обычным сообщением, присылай файлы и фото. Пока я работаю, можно дописать или спросить — прочту по ходу дела.\n\n/status — что я сейчас делаю\n/stop — остановить задачу\n/now — прочитать новые сообщения сейчас, не дожидаясь конца шага\n/new — очистить чат\n/web — ссылка на веб-чат\n/notify — уведомления (away/always/off)');
     if (cmd === 'status') {
       const r = chat.runState(), last = [...chat.doc.v.log].reverse().find(e => e.kind === 'tool');
-      return this.send(r.running ? `⏳ Работаю уже ${dur(Date.now() - r.t)}, шагов: ${r.steps}.${last ? '\nСейчас: ' + last.label : ''}` : '😴 Свободна. Жду задачу!');
+      return this.send(r.running ? `⏳ Работаю уже ${dur(Date.now() - r.t)}, шагов: ${r.steps}.${last ? '\nСейчас: ' + last.label : ''}` : '😴 Свободен. Жду задачу!');
     }
     if (cmd === 'stop') { if (chat.running) { chat.stop(); return this.send('⏹ Останавливаю…'); } return this.send('Я и так ничего не делаю ^_^'); }
     if (cmd === 'now') return this.send(chat.hurry() ? '⚡ Бросаю текущий шаг и читаю твои сообщения' : chat.running ? 'Новых сообщений нет — продолжаю работу' : 'Я и так ничего не делаю ^_^');
@@ -120,14 +120,14 @@ class Bot {
         const saved = await putInbox(this.u, name, Buffer.from(await r.arrayBuffer()));
         const copy = await storeCopy(this.u, saved);
         files.push({ ...saved, fid: copy?.fid });
-      } catch (e) { return this.send('⚠️ Не смогла принять файл: ' + e.message); }
+      } catch (e) { return this.send('⚠️ Не смог принять файл: ' + e.message); }
     }
     if (!txt && !files.length) return;
     let r;
     try { r = chat.submit({ text: txt, files, origin: 'tg' }); }
     catch (e) { return this.send('⚠️ ' + e.message); }
-    /* Мочи занята: сообщение ждёт ближайшей паузы между шагами */
-    if (r.queued) return this.send('📝 Передала Мочи — прочтёт после текущего шага. /now — прочитать сейчас, /stop — остановить.', { reply_to_message_id: m.message_id }).catch(() => {});
+    /* Personal Computer занят: сообщение ждёт ближайшей паузы между шагами */
+    if (r.queued) return this.send('📝 Передал Personal Computer — прочтёт после текущего шага. /now — прочитать сейчас, /stop — остановить.', { reply_to_message_id: m.message_id }).catch(() => {});
   }
 
   /* ход работы и итог — в Telegram */
@@ -159,7 +159,7 @@ class Bot {
       if (d.err) return this.say('⚠️ ' + (d.err.status ? 'Ошибка модели: HTTP ' + d.err.status : d.err.message));
       if (d.stopped) return tgRun ? undefined : this.say('⏹ Задача остановлена.');
       const text = d.text || 'Готово.';
-      await this.say(tgRun ? text : '✅ Мочи закончила задачу (' + dur(d.ms) + '):\n\n' + text);
+      await this.say(tgRun ? text : '✅ Personal Computer закончил задачу (' + dur(d.ms) + '):\n\n' + text);
     };
     chat.on('run', onRun); chat.on('tool', onTool); chat.on('file', onFile); chat.on('done', onDone); chat.on('aside', onAside);
     this.unwatch = () => { chat.off('run', onRun); chat.off('tool', onTool); chat.off('file', onFile); chat.off('done', onDone); chat.off('aside', onAside); };
@@ -188,7 +188,7 @@ export async function connect(u, token) {
   const me = await api(token, 'getMe').catch(e => { throw new Error('Telegram не принял токен: ' + e.message); });
   await api(token, 'deleteWebhook', {}).catch(() => {});
   await api(token, 'setMyCommands', { commands: [
-    { command: 'status', description: 'Что Мочи сейчас делает' }, { command: 'stop', description: 'Остановить задачу' }, { command: 'now', description: 'Прочитать новые сообщения сейчас' },
+    { command: 'status', description: 'Что Personal Computer сейчас делает' }, { command: 'stop', description: 'Остановить задачу' }, { command: 'now', description: 'Прочитать новые сообщения сейчас' },
     { command: 'new', description: 'Очистить чат' }, { command: 'web', description: 'Ссылка на веб-чат' }, { command: 'help', description: 'Помощь' }] }).catch(() => {});
   bots.get(u.id)?.stop();
   const c = conf(u), keep = c.v.token === token ? { chatId: c.v.chatId, tgUser: c.v.tgUser } : {};

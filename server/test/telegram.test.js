@@ -74,7 +74,7 @@ test('подключение Telegram через инструмент агент
 
   /* привязка по ссылке */
   tg.push(777, '/start ' + link.split('=')[1]);
-  await tg.waitSent(/Готово! Теперь я, Мочи/);
+  await tg.waitSent(/Готово! Теперь я, Personal Computer/);
   const s = (await c.json('/api/telegram', undefined, 'GET')).j;
   assert.equal(s.linked, true); assert.equal(s.link, null);
 
@@ -85,7 +85,7 @@ test('подключение Telegram через инструмент агент
   await sleep(300);
   assert.ok(tg.sent.some(x => x.edit && /Готово/.test(x.text)));
   tg.push(777, '/status');
-  await tg.waitSent(/Свободна/);
+  await tg.waitSent(/Свободен/);
   tg.push(777, '/web');
   await tg.waitSent(/^https:\/\/mochi\.example\/$/);
 
@@ -96,21 +96,21 @@ test('подключение Telegram через инструмент агент
   tg.push(777, '/now');
   await tg.waitSent(/Новых сообщений нет/);
   tg.push(777, 'а сколько ещё?');
-  await tg.waitSent(/Передала Мочи — прочтёт после текущего шага/);
+  await tg.waitSent(/Передал Personal Computer — прочтёт после текущего шага/);
   fs.writeFileSync(flag, '');
   await tg.waitSent(/^по ходу: а сколько ещё/);
   await tg.waitSent(/Готово: финиш/);
 
   /* задача из веба, когда чат закрыт → уведомление в Telegram */
   await c.json('/api/chat', { text: 'веб-задача' });
-  await tg.waitSent(/закончила задачу[\s\S]*Ответ на: веб-задача/);
+  await tg.waitSent(/закончил задачу[\s\S]*Ответ на: веб-задача/);
 
   /* после перезапуска бот снова слушает */
   await m.restart();
-  const n = tg.sent.filter(x => /Свободна/.test(x.text || '')).length;
+  const n = tg.sent.filter(x => /Свободен/.test(x.text || '')).length;
   tg.push(777, '/status');
-  for (let i = 0; i < 80 && tg.sent.filter(x => /Свободна/.test(x.text || '')).length === n; i++) await sleep(100);
-  assert.equal(tg.sent.filter(x => /Свободна/.test(x.text || '')).length, n + 1);
+  for (let i = 0; i < 80 && tg.sent.filter(x => /Свободен/.test(x.text || '')).length === n; i++) await sleep(100);
+  assert.equal(tg.sent.filter(x => /Свободен/.test(x.text || '')).length, n + 1);
   /* старые сообщения после перезапуска не выполнились повторно */
   await sleep(1000);
   assert.equal(tg.sent.filter(x => /Ответ на: привет из тг/.test(x.text || '')).length, 1);

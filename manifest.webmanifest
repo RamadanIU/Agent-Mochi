@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "Мочи · Linux-питомец",
-  "short_name": "Мочи",
-  "description": "Пиксельный зверёк-помощник с настоящим Linux внутри",
+  "name": "Personal Computer",
+  "short_name": "Personal Computer",
+  "description": "Ламповый пиксельный компьютер-помощник с настоящим Linux внутри",
   "lang": "ru",
   "start_url": "./",
   "scope": "./",

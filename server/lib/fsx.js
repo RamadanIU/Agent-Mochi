@@ -30,7 +30,7 @@ export function errText(e, p) {
   p = e.path || p || '';
   switch (e.code) {
     case 'ENOENT': return 'нет такого файла или папки: ' + p;
-    case 'EACCES': case 'EPERM': return `нет прав: ${p} (Мочи работает как ${who()})`;
+    case 'EACCES': case 'EPERM': return `нет прав: ${p} (Personal Computer работает как ${who()})`;
     case 'EEXIST': return 'уже есть: ' + path.basename(p);
     case 'ENOTDIR': return 'это не папка: ' + p;
     case 'EISDIR': return 'это папка: ' + p;

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Полный доступ агента Мочи: root через sudo без пароля. Работает только от root:
+# Полный доступ агента Personal Computer: root через sudo без пароля. Работает только от root:
 #   mochi-access cli on|off|status — «sudo mochi root on|off|status» в терминале сервера;
 #   mochi-access service           — запускает служба mochi-access (systemd .path, в OpenRC — mochi-updater),
-#                                    когда администратор переключил доступ в настройках: сервер Мочи (без прав)
+#                                    когда администратор переключил доступ в настройках: сервер Personal Computer (без прав)
 #                                    лишь кладёт файл-запрос в свои данные. Из запроса берётся одно слово — on или off;
 #   mochi-access apply on|off [--no-restart] — само переключение (его же зовёт установщик).
 # «on»: правило /etc/sudoers.d/mochi-agent (проверяется visudo), drop-in mochi-root.conf для исполнителя команд
@@ -46,7 +46,7 @@ step() { [ "$BY" = web ] || printf '%s\n' "$1"; }
 ERR=""; NOTE=""; CHANGED=0
 note() { NOTE="${NOTE:+$NOTE; }$1"; step "! $1"; }
 
-# что сейчас настроено: правило Мочи на месте — значит, root включён
+# что сейчас настроено: наше правило на месте — значит, root включён
 cur_mode() { if [ -e "$RULE" ]; then echo on; else echo off; fi; }
 
 T0=$(date +%s)
@@ -61,7 +61,7 @@ status() { # status running|done|failed — пишем атомарно, сер�
   mv -f "$tmp" "$DIR/access.json"
 }
 
-# «изнутри агента»: команда идёт из исполнителя или терминала Мочи (например, агент сам выполнил «sudo mochi root off»).
+# «изнутри агента»: команда идёт из исполнителя или терминала Personal Computer (например, агент сам выполнил «sudo mochi root off»).
 # Перезапуск этих служб оборвал бы и её — поэтому просим root-службу, она работает отдельно
 inside_agent() { grep -qE 'mochi-(runner|term)' "${MOCHI_CGROUP:-/proc/self/cgroup}" 2>/dev/null; }
 
@@ -87,7 +87,7 @@ need_sudo() {
 }
 
 # правило. Полный вариант: без tty, umask root'а (иначе файлы в /etc и /var/www выходили бы 0640 — из UMask=0007 службы),
-# PATH с Node.js Мочи и переменные, без которых apt и pip задают вопросы. Если sudo не понимает Defaults
+# PATH с нашим Node.js и переменные, без которых apt и pip задают вопросы. Если sudo не понимает Defaults
 # (например, sudo-rs) — только само правило
 SPATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
 [ -x "$PREFIX/node/bin/node" ] && SPATH="$SPATH:$PREFIX/node/bin"
@@ -187,7 +187,7 @@ verify() {
     fi
   else
     # не «sudo -n true» от имени агента: без прав это «incident», письмо root'у и запись в журнал
-    agent_listed && note "у $AGENT остались права sudo из другого правила, не от Мочи — проверь /etc/sudoers и /etc/sudoers.d (sudo -l -U $AGENT)"
+    agent_listed && note "у $AGENT остались права sudo из другого правила, не от Personal Computer — проверь /etc/sudoers и /etc/sudoers.d (sudo -l -U $AGENT)"
     local g; g=$(id -nG "$AGENT" 2>/dev/null | tr ' ' '\n' | grep -xE 'sudo|wheel|admin|root|docker|lxd' | tr '\n' ' ')
     [ -n "$g" ] && note "$AGENT состоит в группах ${g% } — они тоже дают права root (убрать: gpasswd -d $AGENT ГРУППА)"
   fi
@@ -219,8 +219,8 @@ lock() { # одно переключение за раз и не посреди 
   exec 9>"$DIR/.lock"
   command -v flock >/dev/null 2>&1 || return 0
   flock -n 9 && return 0
-  step "🐾 Идёт обновление Мочи — жду, пока оно закончится…"
-  flock -w 1800 9 || { ERR="обновление Мочи идёт больше 30 минут — попробуй позже"; return 1; }
+  step "🐾 Идёт обновление Personal Computer — жду, пока оно закончится…"
+  flock -w 1800 9 || { ERR="обновление Personal Computer идёт больше 30 минут — попробуй позже"; return 1; }
 }
 
 case "$CMD" in
@@ -260,7 +260,7 @@ case "$CMD" in
       echo "   Исполнитель команд и терминал при этом перезапустятся — эта команда оборвётся, это нормально."
       exit 0
     fi
-    [ "$WANT" = on ] && printf '%s\n' "! Агент получит полный root: любой пользователь Мочи (и любая инструкция, которую агент прочтёт в интернете или в файле) сможет менять систему целиком."
+    [ "$WANT" = on ] && printf '%s\n' "! Агент получит полный root: любой пользователь Personal Computer (и любая инструкция, которую агент прочтёт в интернете или в файле) сможет менять систему целиком."
     lock || { step "✘ $ERR"; exit 1; }
     status running
     apply; code=$?

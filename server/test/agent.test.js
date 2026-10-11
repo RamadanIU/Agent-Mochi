@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fakeModel, startMochi, registered, client, sleep } from './helpers.js';
+import { DEF_SYS, OLD_SYS } from '../lib/agent.js';
 
 let m, model;
 const doneRun = evs => evs.some(e => e.ev === 'run' && e.d.running === false);
@@ -51,7 +52,7 @@ test('без входа API закрыт, CSRF-заголовок обязате
   assert.equal(r2.status, 403);
 });
 
-test('показатели сервера для комнаты: только после входа, доли от 0 до 1', async () => {
+test('показатели сервера для верхней панели: только после входа, доли от 0 до 1', async () => {
   assert.equal((await client(m.base)('/api/sys')).status, 401);
   const c = await registered(m, 'sysmon');
   for (let i = 0; i < 2; i++) {
@@ -60,6 +61,15 @@ test('показатели сервера для комнаты: только п
     for (const k of ['cpu', 'mem']) assert.ok(typeof r.j[k] === 'number' && r.j[k] >= 0 && r.j[k] <= 1, k + ' = ' + r.j[k]);
     assert.ok(r.j.temp === null || typeof r.j.temp === 'number');
   }
+});
+
+test('прежний характер по умолчанию («Мочи») сменяется новым — Personal Computer, свой текст не трогаем', async () => {
+  const c = await registered(m, 'rename');
+  assert.match(DEF_SYS, /^Тебя зовут Personal Computer/);
+  await c.json('/api/settings', { sys: [...OLD_SYS][0] }, 'PUT');
+  assert.equal((await c.json('/api/settings', undefined, 'GET')).j.sys, DEF_SYS);
+  await c.json('/api/settings', { sys: 'Ты строгий админ' }, 'PUT');
+  assert.equal((await c.json('/api/settings', undefined, 'GET')).j.sys, 'Ты строгий админ');
 });
 
 test('регистрация только по приглашению; вход и выход', async () => {

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ┌──────────────────────────────────────────────────────────────────────────┐
-# │  Мочи — облачный агент. Установка на сервер одной командой:              │
+# │  Personal Computer — облачный агент. Установка одной командой:           │
 # │                                                                          │
 # │  curl -fsSL https://raw.githubusercontent.com/RamadanIU/Agent-Mochi/HEAD/install.sh | sudo bash
 # │                                                                          │
@@ -38,16 +38,16 @@ trap 'die "Ошибка в строке $LINENO (команда: $BASH_COMMAND).
 
 usage() {
 cat <<EOF
-Установка Мочи.  Использование: install.sh [параметры]
+Установка Personal Computer.  Использование: install.sh [параметры]
 
   --domain NAME      свой домен (A-запись должна указывать на этот сервер); HTTPS — Let's Encrypt
   --email ADDR       почта для Let's Encrypt (необязательно)
-  --no-tls           без Caddy/HTTPS: Мочи слушает только 127.0.0.1:${PORT}
+  --no-tls           без Caddy/HTTPS: Personal Computer слушает только 127.0.0.1:${PORT}
                      (вход через SSH-туннель: ssh -L ${PORT}:127.0.0.1:${PORT} сервер → http://localhost:${PORT})
   --public-url URL   свой обратный прокси (nginx и т. п.) перед 127.0.0.1:${PORT}; вместе с --no-tls
   --port N           внутренний порт сервера (по умолчанию ${PORT})
   --root             полный доступ агента: root через sudo без пароля (то же — --with-sudo).
-                     Потом переключается в настройках Мочи или командой «sudo mochi root on|off»
+                     Потом переключается в настройках Personal Computer или командой «sudo mochi root on|off»
   --no-root          забрать у агента root (то же — --no-sudo)
   --no-firewall      не открывать порты 80/443 в ufw/firewalld
   --ref BRANCH       ветка/тег репозитория ${REPO} (по умолчанию ${REF})
@@ -148,7 +148,7 @@ SERVICES="mochi-runner mochi-term mochi"
 
 # ---------- удаление ----------
 if [ "$MODE" = uninstall ]; then
-  say "Удаляю Мочи…"
+  say "Удаляю Personal Computer…"
   if [ "$INIT" = systemd ]; then UPD="mochi-update.path mochi-access.path"; else UPD="mochi-updater"; fi
   for s in $UPD mochi mochi-term mochi-runner mochi-caddy; do svc stop "$s" >/dev/null 2>&1 || true; svc disable "$s"; done
   rm -rf /etc/systemd/system/mochi-runner.service.d /etc/systemd/system/mochi-term.service.d
@@ -159,9 +159,9 @@ if [ "$MODE" = uninstall ]; then
     rm -rf "$STATE" "$CADDY_HOME" "$ETC" /var/log/mochi
     for u in mochi-agent mochi mochi-caddy; do userdel "$u" >/dev/null 2>&1 || deluser "$u" >/dev/null 2>&1 || true; done
     groupdel mochi >/dev/null 2>&1 || delgroup mochi >/dev/null 2>&1 || true
-    ok "Мочи удалена полностью, вместе с данными."
+    ok "Personal Computer удалён полностью, вместе с данными."
   else
-    ok "Мочи удалена. Данные остались в $STATE и $ETC (удалить: --uninstall --purge)."
+    ok "Personal Computer удалён. Данные остались в $STATE и $ETC (удалить: --uninstall --purge)."
   fi
   exit 0
 fi
@@ -182,7 +182,7 @@ fi
 [[ "$REF" =~ ^[A-Za-z0-9._/-]+$ ]] || die "Неверная ветка: $REF"
 [ -z "$COMMIT" ] || [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "Неверный MOCHI_COMMIT: $COMMIT"
 
-say "${B}Устанавливаю Мочи${N} · $OS_NAME · $(uname -m) · $INIT · пакеты: $PM"
+say "${B}Устанавливаю Personal Computer${N} · $OS_NAME · $(uname -m) · $INIT · пакеты: $PM"
 
 # ---------- пакеты ----------
 pkgs() {
@@ -285,8 +285,8 @@ fi
 SECURE=0; [[ "$PUBLIC_URL" == https://* ]] && SECURE=1
 TRUST=0; [ "$TLS" = on ] || [ -n "$PUBLIC_URL" ] && TRUST=1
 
-# ---------- код Мочи ----------
-say "Ставлю код Мочи…"
+# ---------- код Personal Computer ----------
+say "Ставлю код Personal Computer…"
 here=""; [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ] && here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 if [ -z "$SRC" ] && [ -n "$here" ] && [ -f "$here/server/mochi.js" ] && [ -f "$here/index.html" ]; then SRC="$here"; fi
 BUILD_COMMIT=""  # коммит, из которого ставим: по нему сервер проверяет, есть ли обновление
@@ -302,7 +302,7 @@ elif [ -e "$SRC/.git" ] && command -v git >/dev/null 2>&1; then
   BUILD_COMMIT=$(git -c safe.directory='*' -C "$SRC" rev-parse HEAD 2>/dev/null || true)
 fi
 [[ "$BUILD_COMMIT" =~ ^[0-9a-f]{40}$ ]] || BUILD_COMMIT=""
-[ -f "$SRC/server/mochi.js" ] && [ -f "$SRC/index.html" ] || die "В $SRC нет server/mochi.js — это точно код Мочи?"
+[ -f "$SRC/server/mochi.js" ] && [ -f "$SRC/index.html" ] || die "В $SRC нет server/mochi.js — это точно код Personal Computer?"
 rm -rf "$PREFIX/app.new"; mkdir -p "$PREFIX/app.new"
 cp -r "$SRC/index.html" "$SRC/sw.js" "$SRC/manifest.webmanifest" "$SRC/icons" "$SRC/server" "$PREFIX/app.new/"
 rm -rf "$PREFIX/app.new/server/test" "$PREFIX/app.new/server/.dev"
@@ -354,14 +354,14 @@ export NPM_CONFIG_PREFIX="\$HOME/.local"
 EOF
 chown mochi-agent:mochi "$A/.profile"; }
 chmod 0640 "$A/.profile" 2>/dev/null || true
-[ -f "$A/.bashrc" ] || { printf '%s\n' 'PS1="\[\e[35m\]мочи\[\e[0m\]:\[\e[32m\]\w\[\e[0m\]\$ "' 'alias ll="ls -la"' > "$A/.bashrc"; chown mochi-agent:mochi "$A/.bashrc"; }
+[ -f "$A/.bashrc" ] || { printf '%s\n' 'PS1="\[\e[35m\]pc\[\e[0m\]:\[\e[32m\]\w\[\e[0m\]\$ "' 'alias ll="ls -la"' > "$A/.bashrc"; chown mochi-agent:mochi "$A/.bashrc"; }
 chmod 0640 "$A/.bashrc" 2>/dev/null || true
-[ -f "$A/README.txt" ] || { printf '%s\n' "Это рабочая папка агента Мочи." "Папки пользователей: <имя>/inbox (файлы от пользователя), <имя>/outbox (результаты)." > "$A/README.txt"; chown mochi-agent:mochi "$A/README.txt"; }
+[ -f "$A/README.txt" ] || { printf '%s\n' "Это рабочая папка агента Personal Computer." "Папки пользователей: <имя>/inbox (файлы от пользователя), <имя>/outbox (результаты)." > "$A/README.txt"; chown mochi-agent:mochi "$A/README.txt"; }
 chmod 0640 "$A/README.txt" 2>/dev/null || true
 
 # ---------- настройки ----------
 cat > "$ETC/mochi.env" <<EOF
-# Настройки Мочи (после правки: sudo mochi restart). Секретов здесь нет.
+# Настройки Personal Computer (после правки: sudo mochi restart). Секретов здесь нет.
 MOCHI_HOST=127.0.0.1
 MOCHI_PORT=$PORT
 MOCHI_DATA=$STATE/data
@@ -456,7 +456,7 @@ RestrictSUIDSGID=yes"
 
   cat > /etc/systemd/system/mochi-runner.service <<EOF
 [Unit]
-Description=Мочи — исполнитель команд агента
+Description=Personal Computer — исполнитель команд агента
 After=network-online.target
 Wants=network-online.target
 
@@ -480,7 +480,7 @@ WantedBy=multi-user.target
 EOF
   cat > /etc/systemd/system/mochi-term.service <<EOF
 [Unit]
-Description=Мочи — терминал (ttyd на unix-сокете)
+Description=Personal Computer — терминал (ttyd на unix-сокете)
 After=network-online.target
 
 [Service]
@@ -502,7 +502,7 @@ WantedBy=multi-user.target
 EOF
   cat > /etc/systemd/system/mochi.service <<EOF
 [Unit]
-Description=Мочи — облачный агент (веб, API, Telegram)
+Description=Personal Computer — облачный агент (веб, API, Telegram)
 After=network-online.target mochi-runner.service mochi-term.service
 Wants=network-online.target mochi-runner.service mochi-term.service
 
@@ -524,7 +524,7 @@ EOF
   if [ "$TLS" = on ]; then
     cat > /etc/systemd/system/mochi-caddy.service <<EOF
 [Unit]
-Description=Мочи — HTTPS (Caddy)
+Description=Personal Computer — HTTPS (Caddy)
 After=network-online.target mochi.service
 Wants=network-online.target
 
@@ -560,7 +560,7 @@ EOF
   # и запускает обновление от root. Что и откуда ставить, решает только mochi-update (из install.conf)
   cat > /etc/systemd/system/mochi-update.service <<EOF
 [Unit]
-Description=Мочи — обновление (по кнопке в настройках)
+Description=Personal Computer — обновление (по кнопке в настройках)
 
 [Service]
 Type=oneshot
@@ -570,7 +570,7 @@ TimeoutStartSec=30min
 EOF
   cat > /etc/systemd/system/mochi-update.path <<EOF
 [Unit]
-Description=Мочи — ждёт запрос на обновление из настроек
+Description=Personal Computer — ждёт запрос на обновление из настроек
 
 [Path]
 PathExists=$STATE/data/update.request
@@ -582,7 +582,7 @@ EOF
   # переключатель «Доступ агента» в настройках: так же — файл-запрос сервера и root-служба
   cat > /etc/systemd/system/mochi-access.service <<EOF
 [Unit]
-Description=Мочи — доступ агента (root вкл/выкл из настроек)
+Description=Personal Computer — доступ агента (root вкл/выкл из настроек)
 
 [Service]
 Type=oneshot
@@ -592,7 +592,7 @@ TimeoutStartSec=40min
 EOF
   cat > /etc/systemd/system/mochi-access.path <<EOF
 [Unit]
-Description=Мочи — ждёт запрос на смену доступа агента из настроек
+Description=Personal Computer — ждёт запрос на смену доступа агента из настроек
 
 [Path]
 PathExists=$STATE/data/access.request
@@ -630,22 +630,22 @@ start_pre() {
 EOF
     chmod 0755 "/etc/init.d/$n"
   }
-  orc mochi-runner mochi-agent:mochi "Мочи — исполнитель команд" mochi-runner "$STATE/agent" "HOME=$STATE/agent" "$NODE $APP/mochi.js runner"
-  orc mochi-term mochi-agent:mochi "Мочи — терминал" mochi-term "$STATE/agent" "HOME=$STATE/agent SHELL=/bin/bash" "$APP/bin/mochi-ttyd"
-  orc mochi mochi:mochi "Мочи — облачный агент" "" "$STATE/data" "HOME=$STATE" "$NODE $APP/mochi.js serve" "after mochi-runner mochi-term"
+  orc mochi-runner mochi-agent:mochi "Personal Computer — исполнитель команд" mochi-runner "$STATE/agent" "HOME=$STATE/agent" "$NODE $APP/mochi.js runner"
+  orc mochi-term mochi-agent:mochi "Personal Computer — терминал" mochi-term "$STATE/agent" "HOME=$STATE/agent SHELL=/bin/bash" "$APP/bin/mochi-ttyd"
+  orc mochi mochi:mochi "Personal Computer — облачный агент" "" "$STATE/data" "HOME=$STATE" "$NODE $APP/mochi.js serve" "after mochi-runner mochi-term"
   if [ "$TLS" = on ]; then
     command -v setcap >/dev/null 2>&1 || pkgs libcap-setcap >/dev/null 2>&1 || pkgs libcap >/dev/null 2>&1 || true
     setcap cap_net_bind_service=+ep "$PREFIX/bin/caddy" || die "Не удалось разрешить Caddy порты 80/443 (нужен setcap)"
-    orc mochi-caddy mochi-caddy:mochi-caddy "Мочи — HTTPS" "" "$CADDY_HOME" "HOME=$CADDY_HOME XDG_DATA_HOME=$CADDY_HOME XDG_CONFIG_HOME=$CADDY_HOME" "$PREFIX/bin/caddy run --config $ETC/Caddyfile --adapter caddyfile" "after mochi"
+    orc mochi-caddy mochi-caddy:mochi-caddy "Personal Computer — HTTPS" "" "$CADDY_HOME" "HOME=$CADDY_HOME XDG_DATA_HOME=$CADDY_HOME XDG_CONFIG_HOME=$CADDY_HOME" "$PREFIX/bin/caddy run --config $ETC/Caddyfile --adapter caddyfile" "after mochi"
   fi
   # кнопки «Обновить» и «Доступ агента» в браузере: следит за файлами-запросами сервера и выполняет их от root
-  orc mochi-updater root:root "Мочи — обновление и доступ агента по кнопкам в настройках" "" "$STATE" "HOME=/root" "$APP/bin/mochi-update watch"
+  orc mochi-updater root:root "Personal Computer — обновление и доступ агента по кнопкам в настройках" "" "$STATE" "HOME=/root" "$APP/bin/mochi-update watch"
 fi
 
 # ---------- команда mochi ----------
 cat > /usr/local/bin/mochi <<EOF
 #!/bin/sh
-# Управление Мочи. Подробнее: mochi help
+# Управление Personal Computer. Подробнее: mochi help
 INIT=$INIT
 NODE=$NODE
 APP=$APP
@@ -656,14 +656,14 @@ EOF
 cat >> /usr/local/bin/mochi <<'EOF'
 need_root() { [ "$(id -u)" -eq 0 ] || { echo "Нужно через sudo: sudo mochi $*" >&2; exit 1; }; }
 each() { for s in $SERVICES; do if [ "$INIT" = systemd ]; then systemctl "$1" "$s"; else rc-service "$s" "$1"; fi; done; }
-# команда из исполнителя или терминала Мочи (агент с root): перезапуск их служб оборвал бы её на полпути
+# команда из исполнителя или терминала Personal Computer (агент с root): перезапуск их служб оборвал бы её на полпути
 inside() { grep -qE 'mochi-(runner|term)' /proc/self/cgroup 2>/dev/null; }
 case "${1:-help}" in
   start|stop|restart)
     need_root "$@"
     if [ "$INIT" = systemd ] && inside; then
       # shellcheck disable=SC2086
-      systemctl "$1" --no-block $SERVICES && echo "Готово: службы Мочи перезапускаются (эта команда оборвётся вместе с ними — это нормально)"
+      systemctl "$1" --no-block $SERVICES && echo "Готово: службы Personal Computer перезапускаются (эта команда оборвётся вместе с ними — это нормально)"
     else each "$1"; fi ;;
   logs)
     if [ "$INIT" = systemd ]; then shift; exec journalctl -u 'mochi*' -n 200 "${@:--f}"; else exec tail -n 200 -f /var/log/mochi/*.log; fi ;;
@@ -686,7 +686,7 @@ mochi admin <имя> [off] — сделать (снять) администра�
 mochi deluser <имя>     — удалить пользователя
 mochi status | logs     — состояние и журнал
 mochi start | stop | restart
-mochi update            — обновить Мочи (данные сохраняются; то же — кнопка в настройках → Сервер)
+mochi update            — обновить Personal Computer (данные сохраняются; то же — кнопка в настройках → Сервер)
 mochi root [on|off]     — полный доступ агента: root через sudo без пароля (то же — настройки → Сервер)
 mochi uninstall [--purge]
 H
@@ -722,9 +722,9 @@ up=0
 for _ in $(seq 1 60); do curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && { up=1; break; }; sleep 0.5; done
 if [ "$up" != 1 ]; then
   [ "$INIT" = systemd ] && journalctl -u mochi -n 30 --no-pager >&2 || tail -n 30 /var/log/mochi/mochi.log >&2 || true
-  die "Сервер Мочи не запустился (журнал выше; подробнее: mochi logs)"
+  die "Сервер Personal Computer не запустился (журнал выше; подробнее: mochi logs)"
 fi
-ok "Сервер Мочи работает"
+ok "Сервер Personal Computer работает"
 
 set -a; . "$ETC/mochi.env"; set +a
 nusers=$("$NODE" "$APP/mochi.js" status 2>/dev/null | grep -oE '"users": *[0-9]+' | grep -oE '[0-9]+$' || echo 0)
@@ -740,7 +740,7 @@ fi
 
 echo
 printf '%s\n' "${B}${P}  ╭─────────────────────────────────────────────╮${N}"
-printf '%s\n' "${B}${P}  │   Мочи установлена!  (=^･ω･^=)               │${N}"
+printf '%s\n' "${B}${P}  │   Personal Computer установлен!  [^_^]       │${N}"
 printf '%s\n' "${B}${P}  ╰─────────────────────────────────────────────╯${N}"
 if [ "${nusers:-0}" = 0 ]; then
   inv=$("$NODE" "$APP/mochi.js" invite 7 | grep -oE '[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}' | head -1)
@@ -755,11 +755,11 @@ else
 fi
 if [ "$TLS" = off ] && [ -z "$PUBLIC_URL" ]; then
   echo
-  echo "  Мочи слушает только 127.0.0.1. С компьютера: ssh -L $PORT:127.0.0.1:$PORT $(id -un 2>/dev/null)@<сервер>"
+  echo "  Personal Computer слушает только 127.0.0.1. С компьютера: ssh -L $PORT:127.0.0.1:$PORT $(id -un 2>/dev/null)@<сервер>"
   echo "  и открой http://localhost:$PORT"
 fi
 echo
-echo "  Дальше: в настройках Мочи → «Модель» — вставь ключ API. Telegram: попроси Мочи «подключи Telegram»."
+echo "  Дальше: в настройках Personal Computer → «Модель» — вставь ключ API. Telegram: попроси в чате «подключи Telegram»."
 if [ "$WITH_SUDO" = 1 ]; then
   echo "  ${Y}У агента полный доступ: root через sudo без пароля.${N} Забрать: ${B}sudo mochi root off${N}"
 else

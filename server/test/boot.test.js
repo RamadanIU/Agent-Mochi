@@ -74,14 +74,31 @@ test('в index.html нет браузерного агента: модель з�
   assert.doesNotMatch(src, /chat\/completions|search\.parallel\.ai|indexedDB/);
 });
 
-test('верхняя панель — комната Мочи; шагов работы и «Мочи печатает» в чате больше нет', () => {
+test('верхняя панель — компактная, с Personal Computer в углу; шагов работы и «печатает» в чате нет', () => {
   const src = fs.readFileSync(path.join(here, '..', '..', 'index.html'), 'utf8');
-  assert.match(src, /<canvas id="room-cv"/);
+  assert.match(src, /<header id="petbar"[^>]*><div class="rv"><canvas id="room-cv"/);
   assert.match(src, /const room=window\.mochiRoom=/);
   assert.match(src, /id="jrnl"/);
+  /* облачко: объяснение шага, строчка ниже для реплик, ход задачи */
+  assert.match(src, /id="rbubt"[\s\S]*id="rbubs"[\s\S]*id="rbubf"/);
+  /* панель не растягивается, кнопки звука на ней нет — звук в настройках; комнаты (окно, кот, лампа) больше нет */
+  assert.doesNotMatch(src, /id="rgrip"|id="snd"|function buildBG|function drawCat|function computeLight/);
+  assert.match(src, /id="c-sfx"[\s\S]*id="c-room"[\s\S]*id="c-vol"/);
   assert.doesNotMatch(src, /function trayAdd|function stopTray|className='dots'|\n\.tray\{/);
   const cl = fs.readFileSync(path.join(here, '..', 'public', 'client.js'), 'utf8');
   assert.doesNotMatch(cl, /trayAdd|stopTray|\bdots\b/);
+});
+
+test('приложение называется Personal Computer — и в окне браузера, и при установке', () => {
+  const src = fs.readFileSync(path.join(here, '..', '..', 'index.html'), 'utf8');
+  assert.match(src, /<title>Personal Computer<\/title>/);
+  assert.match(src, /name="apple-mobile-web-app-title" content="Personal Computer"/);
+  const mf = JSON.parse(fs.readFileSync(path.join(here, '..', '..', 'manifest.webmanifest'), 'utf8'));
+  assert.equal(mf.name, 'Personal Computer'); assert.equal(mf.short_name, 'Personal Computer');
+  const cl = fs.readFileSync(path.join(here, '..', 'public', 'client.js'), 'utf8');
+  /* прежнее имя в интерфейсе не осталось (кроме разбора строк старого установщика при обновлении) */
+  assert.doesNotMatch(src, /Мочи|МОЧИ/);
+  assert.doesNotMatch(cl.replace(/\(Мочи\|Personal Computer\)/g, ''), /Мочи|МОЧИ/);
 });
 
 test('поиск в интернете молчит — агент отвечает, не дожидаясь его 10 секунд', async () => {

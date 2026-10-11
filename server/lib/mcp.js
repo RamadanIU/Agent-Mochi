@@ -33,7 +33,7 @@ class HttpT {
     if (this.sid) h['Mcp-Session-Id'] = this.sid;
     const id = notify ? undefined : ++this.id;
     const r = await fetch(this.url, { method: 'POST', headers: h, signal, body: JSON.stringify({ jsonrpc: '2.0', method, ...(params ? { params } : {}), ...(notify ? {} : { id }) }) })
-      .catch(e => { throw signal?.aborted ? e : new Error('не достучалась до ' + new URL(this.url).host + ' (' + (e.cause?.code || e.cause?.message || e.message) + ')'); });
+      .catch(e => { throw signal?.aborted ? e : new Error('не достучался до ' + new URL(this.url).host + ' (' + (e.cause?.code || e.cause?.message || e.message) + ')'); });
     this.sid = r.headers.get('Mcp-Session-Id') || this.sid;
     if (!r.ok) {
       r.body?.cancel().catch(() => {});
