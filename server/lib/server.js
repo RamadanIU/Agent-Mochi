@@ -21,7 +21,6 @@ import { TERM_PREFIX, proxyHttp, proxyUpgrade } from './term.js';
 import * as U from './update.js';
 import * as AC from './access.js';
 import { fsCmd, fsGet, fsUpload, agentInfo } from './runner-client.js';
-import { warmWeb } from './mcp.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const VERSION = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8')).version;
@@ -166,7 +165,6 @@ function putSettings(c, b) {
   else if (typeof b.key === 'string' && b.key.trim()) s.key = b.key.trim().slice(0, 500);
   if (b.model !== undefined) s.model = String(b.model).trim().slice(0, 200) || DEF_SETTINGS.model;
   if (b.sys !== undefined) s.sys = String(b.sys).trim().slice(0, 20000) || DEF_SETTINGS.sys;
-  if (b.search !== undefined) s.search = !!b.search;
   if (b.vis !== undefined) { s.vis = !!b.vis; c.noVis = 0; }
   if (b.stepLimit !== undefined) s.stepLimit = !!b.stepLimit;
   if (steps !== undefined) s.maxSteps = steps;
@@ -599,8 +597,9 @@ export function startServer() {
   A.initAuth();
   TG.initTelegram(A.listUsers);
   resumeAll(A.listUsers());
-  /* поиск в интернете подключаем заранее: иначе первое сообщение после перезапуска ждёт его (см. webTools) */
-  if (A.listUsers().some(u => getChat(u).settings().search !== false)) warmWeb();
+  /* MCP-серверы (и предустановленный поиск в интернете) подключаем заранее: иначе первое сообщение после перезапуска
+     ждёт их (см. toolsSoon в ext.js). Заодно у каждого пользователя появляются предустановленные серверы */
+  for (const u of A.listUsers()) X.warmExt(u);
   loadPage();
   U.initUpdates();
   const srv = http.createServer({ requestTimeout: 0, headersTimeout: 30000 }, handle);

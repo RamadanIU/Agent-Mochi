@@ -399,7 +399,7 @@ async function started() {
 }
 function mirror() {
   if (!srvSet) return;
-  Object.assign(cfg, { base: srvSet.base, model: srvSet.model, sys: srvSet.sys, search: srvSet.search, vis: srvSet.vis, stepLimit: srvSet.stepLimit, maxSteps: srvSet.maxSteps, key: '' });
+  Object.assign(cfg, { base: srvSet.base, model: srvSet.model, sys: srvSet.sys, vis: srvSet.vis, stepLimit: srvSet.stepLimit, maxSteps: srvSet.maxSteps, key: '' });
 }
 
 /* ---------- отправка ---------- */
@@ -467,7 +467,7 @@ $('#c-save').onclick = async () => {
   cfg.tts = $('#c-tts').checked; cfg.sfx = $('#c-sfx').checked; cfg.room = $('#c-room').checked; cfg.vlang = $('#c-vlang').value;
   try { window.mochiRoom && mochiRoom.sndUI(); } catch (x) {}
   if (!cfg.tts && window.mochiStop) mochiStop();
-  const body = { base: $('#c-base').value.trim(), model: $('#c-model').value.trim(), sys: $('#c-sys').value.trim(), search: $('#c-search').checked, vis: $('#c-vis').checked, ...st };
+  const body = { base: $('#c-base').value.trim(), model: $('#c-model').value.trim(), sys: $('#c-sys').value.trim(), vis: $('#c-vis').checked, ...st };
   const k = $('#c-key').value.trim();
   if (k) body.key = k; else if (clearKey) body.clearKey = true;
   try {
@@ -941,7 +941,7 @@ css.textContent += `
 #p-tl .pbtn.xgo{margin-top:16px}
 #p-tl .lnk{margin-top:12px}
 `;
-const TL_NAMES = { run_command: 'Команды на сервере', send_file: 'Отправка файлов', web_search: 'Поиск в интернете', web_fetch: 'Чтение страниц',
+const TL_NAMES = { run_command: 'Команды на сервере', send_file: 'Отправка файлов',
   telegram_connect: 'Подключение бота', telegram_status: 'Состояние бота', telegram_send: 'Сообщения в Telegram', telegram_notify_mode: 'Режим уведомлений', telegram_disconnect: 'Отключение бота',
   mcp_manage: 'Подключать MCP-серверы', skills_manage: 'Ставить и создавать навыки' };
 const tok = n => '≈' + n + ' ток.';
@@ -983,7 +983,6 @@ async function loadTools() {
     for (const t of ts) G.body.append(swRow(TL_NAMES[t.name] || t.name, t.name + ' · ' + tok(t.size), t.on, v => setTools({ [t.name]: v })));
     B.body.append(G);
   }
-  if (!c.search) B.body.append(el('small', 'xs', 'Поиск в интернете выключен на вкладке «Модель».'));
   tl.append(B);
 
   /* MCP-серверы: каждый — своя папка */
@@ -994,6 +993,7 @@ async function loadTools() {
   for (const s of c.mcp) {
     const on = s.tools.filter(t => t.on);
     const S = fold('m:' + s.name, s.name, !s.on ? 'выкл.' : s.err ? 'ошибка' : (s.lazy ? 'по запросу' : 'всегда') + (s.known ? ' · ' + on.length + '/' + s.tools.length : ''), s.on && !!s.err);
+    if (s.preset) S.body.append(el('small', 'xs', 'Предустановлен в Personal Computer. Его можно выключить или удалить, как любой другой.'));
     S.body.append(el('small', 'xs', (s.server && s.server !== s.name ? s.server + ' · ' : '') + (s.type === 'http' ? s.url : s.command) + (s.headers.length ? ' · заголовки: ' + s.headers.join(', ') : '') + (s.env.length ? ' · env: ' + s.env.join(', ') : '')));
     if (s.desc) S.body.append(el('small', 'xs', s.desc));
     if (s.err) S.body.append(el('small', 'xs bad', 'Ошибка: ' + s.err));
@@ -1007,7 +1007,7 @@ async function loadTools() {
     }
     const b = el('div', 'xb');
     b.append(sbtn('Обновить', async () => { const r = await post('api/mcp/' + s.name, { refresh: true }); tlMsg(r.err ? s.name + ': ' + r.err : s.name + ': подключён', !r.err); loadTools(); }));
-    b.append(sbtn('Удалить', async () => { if (!await ask('MCP', 'Удалить сервер «' + s.name + '»?', null, 'Удалить')) return; await api('api/mcp/' + s.name, { method: 'DELETE' }); loadTools(); }));
+    b.append(sbtn('Удалить', async () => { if (!await ask('MCP', 'Удалить сервер «' + s.name + '»?' + (s.preset ? ' Сам он не вернётся: подключить снова можно здесь же, по адресу ' + s.url : ''), null, 'Удалить')) return; await api('api/mcp/' + s.name, { method: 'DELETE' }); loadTools(); }));
     S.body.append(b); M.body.append(S);
   }
   {

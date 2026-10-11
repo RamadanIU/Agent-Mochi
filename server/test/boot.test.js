@@ -1,5 +1,5 @@
 /* Быстрый старт: лёгкая страница без встроенного Linux, экран загрузки
-   и агент, который не ждёт подключения к поиску в интернете */
+   и агент, который не ждёт подключения к поиску в интернете; поиск — предустановленный MCP-сервер */
 import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,23 +9,28 @@ import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { fakeModel, startMochi, registered } from './helpers.js';
-import { WEB_GRACE } from '../lib/mcp.js';
+import { MCP_GRACE } from '../lib/ext.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let m, model, mcp, c, mode = 'hang';
-const seen = [];
+const seen = [], calls = [];
 
 before(async () => {
-  model = await fakeModel(() => ({ text: 'ок' }));
+  model = await fakeModel(body => {
+    const last = body.messages[body.messages.length - 1];
+    if (last.role === 'user' && String(last.content).startsWith('поищи')) return { tools: [{ name: 'search__web_search', args: { q: 'погода' } }] };
+    return { text: 'ок' };
+  });
   /* поиск в интернете (MCP): «hang» — принимает запрос и молчит, «ok» — отвечает */
   mcp = http.createServer(async (req, res) => {
     let b = ''; for await (const ch of req) b += ch;
     const msg = JSON.parse(b || '{}');
     seen.push(msg.method);
+    if (msg.method === 'tools/call') calls.push(msg.params);
     if (mode === 'hang') return;
     if (msg.id === undefined) { res.writeHead(202); return res.end(); }
     const result = msg.method === 'initialize' ? { protocolVersion: msg.params.protocolVersion, capabilities: {}, serverInfo: { name: 'search' } }
-      : msg.method === 'tools/list' ? { tools: [{ name: 'web_search', description: 'Поиск в интернете', inputSchema: { type: 'object', properties: { q: { type: 'string' } } } }] }
+      : msg.method === 'tools/list' ? { tools: [{ name: 'web_search', description: 'Поиск в интернете', inputSchema: { type: 'object', properties: { q: { type: 'string' }, session_id: { type: 'string' } }, required: ['q', 'session_id'] } }] }
       : { content: [{ type: 'text', text: 'нашлось' }] };
     res.writeHead(200, { 'content-type': 'application/json', 'mcp-session-id': 's1' });
     res.end(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }));
@@ -33,7 +38,7 @@ before(async () => {
   await new Promise(ok => mcp.listen(0, '127.0.0.1', ok));
   m = await startMochi({ MOCHI_SEARCH_MCP: 'http://127.0.0.1:' + mcp.address().port + '/mcp' });
   c = await registered(m, 'boot');
-  await c.json('/api/settings', { base: model.url, key: 'k', model: 'fake-1', search: true }, 'PUT');
+  await c.json('/api/settings', { base: model.url, key: 'k', model: 'fake-1' }, 'PUT');
 });
 after(async () => { await m?.stop(); model?.close(); mcp?.closeAllConnections(); mcp?.close(); });
 
@@ -103,8 +108,8 @@ test('приложение называется Personal Computer — и в ок
 
 test('поиск в интернете молчит — агент отвечает, не дожидаясь его 10 секунд', async () => {
   const first = await ask('привет');
-  assert.ok(first < WEB_GRACE + 3000, 'первый ответ ждал ' + first + ' мс');
-  assert.ok(!tools().includes('web_search'));
+  assert.ok(first < MCP_GRACE + 3000, 'первый ответ ждал ' + first + ' мс');
+  assert.ok(!tools().includes('search__web_search'));
   /* попытка подключения ещё висит — второе сообщение не ждёт совсем */
   const second = await ask('ещё раз');
   assert.ok(second < 2000, 'второй ответ ждал ' + second + ' мс');
@@ -116,5 +121,64 @@ test('поиск подключается заранее, при старте с
   for (let i = 0; i < 100 && !seen.includes('tools/list'); i++) await new Promise(r => setTimeout(r, 50));
   assert.ok(seen.includes('tools/list'), 'сервер не подключился к поиску при старте: ' + seen.join(', '));
   await ask('найди что-нибудь');
-  assert.ok(tools().includes('web_search'), 'в запросе нет поиска: ' + tools().join(', '));
+  assert.ok(tools().includes('search__web_search'), 'в запросе нет поиска: ' + tools().join(', '));
+});
+
+const srv = async () => (await c.json('/api/tools', undefined, 'GET')).j.mcp.find(s => s.name === 'search');
+
+test('поиск — обычный MCP-сервер в общем списке: сам появился, служебные параметры подставляет сервер', async () => {
+  const cat = (await c.json('/api/tools', undefined, 'GET')).j;
+  assert.ok(!cat.builtin.some(t => /web_/.test(t.name)), 'поиск остался среди встроенных');
+  const s = cat.mcp.find(x => x.name === 'search');
+  assert.ok(s && s.preset && s.on && !s.lazy, JSON.stringify(cat.mcp));
+  assert.deepEqual(s.tools.map(t => t.name), ['web_search']);
+  await ask('поищи погоду');
+  const req = model.calls.find(x => x.body.messages[x.body.messages.length - 1].content === 'поищи погоду').body;
+  assert.match(req.messages[0].content, /поиск в интернете \(search__web_search\)/);
+  const def = req.tools.find(t => t.function.name === 'search__web_search').function.parameters;
+  assert.ok(!def.properties.session_id && !def.required.includes('session_id'), 'модель видит session_id');
+  const call = calls.pop();
+  assert.equal(call.name, 'web_search'); assert.equal(call.arguments.q, 'погода');
+  assert.match(call.arguments.session_id, /^\w{8,}$/);
+});
+
+test('предустановленный поиск выключается и удаляется — и после перезапуска не возвращается', async () => {
+  assert.equal((await c.json('/api/mcp/search', { on: false })).status, 200);
+  await ask('привет');
+  assert.ok(!tools().includes('search__web_search'));
+  assert.equal((await srv()).on, false);
+  assert.equal((await c.json('/api/mcp/search', { on: true })).status, 200);
+  assert.equal((await c.json('/api/mcp/search', undefined, 'DELETE')).status, 200);
+  await m.restart();
+  assert.equal(await srv(), undefined, 'удалённый поиск вернулся');
+  await ask('привет');
+  assert.ok(!tools().includes('search__web_search'));
+  /* подключили снова по тому же адресу, под другим именем — служебные параметры по-прежнему скрыты */
+  const r = await c.json('/api/mcp', { name: 'web', url: m.env.MOCHI_SEARCH_MCP });
+  assert.equal(r.j.err, null);
+  const w = (await c.json('/api/tools', undefined, 'GET')).j.mcp.find(x => x.name === 'web');
+  assert.ok(w.preset);
+  assert.equal((await c.json('/api/mcp/web', { lazy: false })).status, 200);
+  await ask('привет');
+  const def = model.calls[model.calls.length - 1].body.tools.find(t => t.function.name === 'web__web_search');
+  assert.ok(def && !def.function.parameters.properties.session_id);
+  await c.json('/api/mcp/web', undefined, 'DELETE');
+});
+
+test('у кого поиск был выключен (раньше — в настройках модели), предустановленный сервер появляется выключенным', async () => {
+  const c2 = await registered(m, 'old');
+  let id;
+  for (let i = 0; i < 40 && !id; i++) {
+    id = JSON.parse(fs.readFileSync(path.join(m.env.MOCHI_DATA, 'users.json'), 'utf8')).users.find(u => u.name === 'old')?.id;
+    if (!id) await new Promise(r => setTimeout(r, 50));
+  }
+  const dir = path.join(m.env.MOCHI_DATA, 'users', id);
+  assert.ok(id && !fs.existsSync(path.join(dir, 'ext.json')));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ search: false, tools: { web_fetch: false } }));
+  await m.restart();
+  const s = (await c2.json('/api/tools', undefined, 'GET')).j.mcp.find(x => x.name === 'search');
+  assert.ok(s && s.preset && s.on === false, JSON.stringify(s));
+  for (let i = 0; i < 40 && !fs.existsSync(path.join(dir, 'ext.json')); i++) await new Promise(r => setTimeout(r, 50));
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'ext.json'), 'utf8')).mcp.search.off, ['web_fetch']);
 });
