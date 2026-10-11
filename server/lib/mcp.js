@@ -2,9 +2,12 @@
    поиска в интернете (Parallel Search, см. PRESETS в ext.js).
    stdio-сервер запускает исполнитель от имени mochi-agent — у процесса нет доступа к данным сервера. */
 import { spawnProc } from './runner-client.js';
+import { apiFetch, cfBlock, cfMessage } from './net.js';
 
 const PROTO = '2025-06-18';
 const rpcErr = e => Object.assign(new Error((e && e.message) || 'ошибка сервера'), { code: e && e.code });
+/* начало ответа сервера с ошибкой — одной строкой, без разметки: по нему видно, что случилось на самом деле */
+const gist = t => { const s = String(t || '').replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(); return s ? ': ' + (s.length > 200 ? s.slice(0, 200) + '…' : s) : ''; };
 
 async function readSSE(r, id) {
   const dec = new TextDecoder(); let buf = '';
@@ -30,13 +33,17 @@ class HttpT {
     const h = { ...this.headers, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': PROTO };
     if (this.sid) h['Mcp-Session-Id'] = this.sid;
     const id = notify ? undefined : ++this.id;
-    const r = await fetch(this.url, { method: 'POST', headers: h, signal, body: JSON.stringify({ jsonrpc: '2.0', method, ...(params ? { params } : {}), ...(notify ? {} : { id }) }) })
+    /* как к API модели: если Cloudflare не пускает Node.js, apiFetch повторит запрос через curl */
+    const r = await apiFetch(this.url, { method: 'POST', headers: h, signal, body: JSON.stringify({ jsonrpc: '2.0', method, ...(params ? { params } : {}), ...(notify ? {} : { id }) }) })
       .catch(e => { throw signal?.aborted ? e : new Error('не достучался до ' + new URL(this.url).host + ' (' + (e.cause?.code || e.cause?.message || e.message) + ')'); });
     this.sid = r.headers.get('Mcp-Session-Id') || this.sid;
     if (!r.ok) {
-      r.body?.cancel().catch(() => {});
-      /* сессия на сервере истекла — начинаем заново */
-      throw Object.assign(new Error(r.status === 429 ? 'слишком много запросов, подождите' : r.status === 401 || r.status === 403 ? 'сервер не пустил (HTTP ' + r.status + '): проверь ключ в заголовках' : 'HTTP ' + r.status), { session: r.status === 404 && !!this.sid, status: r.status });
+      const text = await r.text().catch(() => ''), cf = cfBlock(r.status, text, r.headers);
+      /* сессия на сервере истекла (404) — начинаем заново */
+      throw Object.assign(new Error(cf ? cfMessage(cf, this.url, r.headers)
+        : r.status === 429 ? 'слишком много запросов (HTTP 429), подождите' + gist(text)
+        : r.status === 401 || r.status === 403 ? 'сервер не пустил (HTTP ' + r.status + ')' + gist(text) + (this.headers && Object.keys(this.headers).length ? ' — проверь ключ в заголовках' : '')
+        : 'HTTP ' + r.status + gist(text)), { session: r.status === 404 && !!this.sid, status: r.status });
     }
     if (notify) { r.body?.cancel().catch(() => {}); return null; }
     const m = (r.headers.get('content-type') || '').includes('event-stream') ? await readSSE(r, id) : await r.json();
@@ -46,7 +53,7 @@ class HttpT {
   reset() { this.sid = null; }
   close() {
     if (!this.sid) return;
-    fetch(this.url, { method: 'DELETE', headers: { ...this.headers, 'Mcp-Session-Id': this.sid }, signal: AbortSignal.timeout(5000) }).then(r => r.body?.cancel(), () => {});
+    apiFetch(this.url, { method: 'DELETE', headers: { ...this.headers, 'Mcp-Session-Id': this.sid }, signal: AbortSignal.timeout(5000) }).then(r => r.body?.cancel(), () => {});
     this.sid = null;
   }
 }

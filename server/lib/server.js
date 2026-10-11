@@ -443,6 +443,13 @@ async function api(req, res, url) {
       try { await X.mcpRefresh(u, name); } catch (e) { err = e.message; }
       return json(res, 200, { name, err });
     }
+    case '/api/mcp-restore': {
+      if (M !== 'POST') break;
+      const name = X.mcpRestore(u, String((await jbody(req)).name || ''));
+      let err = null;
+      try { await X.mcpRefresh(u, name); } catch (e) { err = e.message; }
+      return json(res, 200, { name, err });
+    }
     case '/api/skills':
       if (M === 'GET') return json(res, 200, { skills: await X.skillList(u), dir: X.skillsRoot(u) });
       if (M === 'POST') return json(res, 200, { name: await X.skillWrite(u, await jbody(req, 256 * 1024)) });

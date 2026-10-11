@@ -990,6 +990,12 @@ async function loadTools() {
   const mBad = c.mcp.some(s => s.on && s.err);
   const M = fold('m', 'MCP-серверы', c.mcp.length ? mOn.length + ' из ' + c.mcp.length + ' вкл.' + (mBad ? ' · ошибка' : '') : 'нет', mBad);
   if (!c.mcp.length) M.body.append(el('small', 'xs', 'Внешние инструменты. Подключи ниже или попроси в чате: «подключи MCP-сервер …».'));
+  /* предустановленный сервер удалили или поменяли ему адрес — его можно вернуть как было */
+  for (const p of c.presets || []) {
+    const b = el('div', 'xb');
+    b.append(sbtn('Вернуть: ' + p.title, async () => { const r = await post('api/mcp-restore', { name: p.name }); opened['m:' + p.name] = true; tlMsg(r.err ? p.title + ': вернул, но не подключился: ' + r.err : p.title + ': вернул исходные настройки', !r.err); loadTools(); }));
+    M.body.append(b);
+  }
   for (const s of c.mcp) {
     const on = s.tools.filter(t => t.on);
     const S = fold('m:' + s.name, s.name, !s.on ? 'выкл.' : s.err ? 'ошибка' : (s.lazy ? 'по запросу' : 'всегда') + (s.known ? ' · ' + on.length + '/' + s.tools.length : ''), s.on && !!s.err);

@@ -10,7 +10,7 @@ import { Doc, ensureDir, rid, writeJSONSync, readJSON } from './store.js';
 import { runCmd, fileCmd, agentInfo } from './runner-client.js';
 import { userDir, pullFile, storeFile, sz } from './files.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
-import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens, setPresetSeed } from './ext.js';
+import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens, setPresetSeed, presetsOff } from './ext.js';
 
 export const DEF_SYS = 'Тебя зовут Personal Computer — ты ламповый пиксельный компьютер-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
 /* прежние подсказки по умолчанию: кто их не менял (сохранил как было), получает новую */
@@ -86,7 +86,7 @@ setPresetSeed((u, name, P) => {
 export async function toolCatalog(chat) {
   const S = chat.settings();
   const row = t => ({ name: t.function.name, group: groupOf(t.function.name), desc: t.function.description.split(/(?<=[.!?])\s/)[0].slice(0, 200), on: isOn(S, t.function.name), size: tokens(t) });
-  return { builtin: [...builtins(), ...MANAGE_TOOLS].map(row), mcp: mcpPublic(chat.u), skills: await skillList(chat.u) };
+  return { builtin: [...builtins(), ...MANAGE_TOOLS].map(row), mcp: mcpPublic(chat.u), presets: presetsOff(chat.u), skills: await skillList(chat.u) };
 }
 export function setTools(chat, m) {
   const t = chat.set.v.tools ||= {};

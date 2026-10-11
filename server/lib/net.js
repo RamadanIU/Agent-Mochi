@@ -1,4 +1,4 @@
-/* Запросы к API модели.
+/* Запросы к API модели и к MCP-серверам по HTTP.
    Cloudflare перед некоторыми API (так делает OpenRouter) узнаёт Node.js по TLS-отпечатку и отвечает
    403 {"success":false,"error":"Access denied by security policy."} — ещё до проверки ключа. Браузер и curl он пускает.
    apiFetch делает обычный fetch, а на такой ответ повторяет запрос через curl и дальше ходит к этому хосту только через него.
@@ -29,7 +29,7 @@ export function cfBlock(status, text, headers) {
 export function cfMessage(kind, url, headers) {
   let host = ''; try { host = new URL(url).host; } catch {}
   const ray = String(headers?.get?.('cf-ray') || '').replace(/[^\w-]/g, '').slice(0, 40);
-  if (kind === 'node') return 'Это не ключ: Cloudflare перед API модели не пускает запросы с этого сервера (HTTP 403 «Access denied by security policy»). Обычно помогает curl — проверь, что он установлен на сервере (curl --version), и перезапусти Personal Computer.';
+  if (kind === 'node') return `Это не ключ: Cloudflare перед ${host || 'API модели'} не пускает запросы с этого сервера (HTTP 403 «Access denied by security policy»). Обычно помогает curl — проверь, что он установлен на сервере (curl --version), и перезапусти Personal Computer.`;
   const sup = 'Напиши в поддержку провайдера' + (ray ? ' (Cloudflare Ray ID: ' + ray + ')' : '');
   if (kind === 'challenge') return `Это не ключ: Cloudflare перед ${host || 'API модели'} требует проверку «я не робот», которую проходит только браузер, а сервер — нет. ${sup}: API не должен так отвечать.`;
   return `Это не ключ: Cloudflare перед ${host || 'API модели'} заблокировал запрос с этого сервера (HTTP 403 «Sorry, you have been blocked»). Так настроена защита у провайдера — обычно по IP-адресу или стране сервера. ${sup} или запусти Personal Computer на другом сервере.`;
