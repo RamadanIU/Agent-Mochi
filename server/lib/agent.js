@@ -86,6 +86,7 @@ export function setTools(chat, m) {
   chat.set.save();
 }
 
+const tailLine = out => (String(out).split('\n').map(l => l.trim()).filter(l => l && !/^\[(код выхода|таймаут|прервано)/.test(l)).pop() || '').slice(0, 200);
 const argsOk = s => { try { const a = JSON.parse(s); return !!a && typeof a === 'object' && !Array.isArray(a); } catch { return false; } };
 const sleep = (ms, sig) => new Promise(ok => { const t = setTimeout(ok, ms); sig?.addEventListener('abort', () => { clearTimeout(t); ok(); }, { once: true }); });
 const abortErr = () => Object.assign(new Error('остановлено'), { name: 'AbortError' });
@@ -435,6 +436,9 @@ export class Chat extends EventEmitter {
       if (g !== this.gen) throw abortErr();
       out = String(out);
       e.state = /^Ошибка|\[таймаут|\[прервано|\[не выполнено/.test(out) ? 'bad' : 'ok';
+      /* для журнала на экране: код выхода команды и последняя строка вывода, если что-то не так («E: Could not get lock …») */
+      if (nm === 'run_command') { const m = out.match(/\[код выхода: (-?\d+)\]/); if (m) e.code = +m[1]; }
+      if (e.state === 'bad' || e.code) e.tail = tailLine(out);
       this.update(e);
       H.push({ role: 'tool', tool_call_id: tc.id, content: out });
       this.doc.save();

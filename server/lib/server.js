@@ -4,6 +4,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
@@ -25,6 +26,29 @@ import { warmWeb } from './mcp.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const VERSION = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8')).version;
 const COOKIE = CFG.secureCookie ? '__Host-mochi' : 'mochi';
+
+/* ---------- показатели сервера для комнаты Мочи ----------
+   Процессор — доля занятого времени между двумя опросами (первый раз — по средней загрузке), память — по MemAvailable,
+   температура — самый тёплый датчик /sys/class/thermal (на многих VPS датчиков нет — тогда null) */
+let cpuPrev = null;
+function sysStats() {
+  const cs = os.cpus(), t = cs.reduce((a, c) => { const v = c.times; a.idle += v.idle; a.all += v.user + v.nice + v.sys + v.idle + v.irq; return a; }, { idle: 0, all: 0 });
+  let cpu = os.loadavg()[0] / Math.max(1, cs.length);
+  if (cpuPrev && t.all > cpuPrev.all) cpu = 1 - (t.idle - cpuPrev.idle) / (t.all - cpuPrev.all);
+  cpuPrev = t;
+  let mem = 1 - os.freemem() / os.totalmem();
+  try { const m = fs.readFileSync('/proc/meminfo', 'utf8'), tot = +m.match(/MemTotal:\s+(\d+)/)[1], av = +m.match(/MemAvailable:\s+(\d+)/)[1]; if (tot > 0) mem = 1 - av / tot; } catch {}
+  let temp = null;
+  try {
+    for (const z of fs.readdirSync('/sys/class/thermal')) {
+      if (!z.startsWith('thermal_zone')) continue;
+      const v = +fs.readFileSync(path.join('/sys/class/thermal', z, 'temp'), 'utf8') / 1000;
+      if (v > 0 && v < 130) temp = Math.max(temp ?? 0, v);
+    }
+  } catch {}
+  const r3 = v => Math.round(Math.min(1, Math.max(0, v)) * 1000) / 1000;
+  return { cpu: r3(cpu), mem: r3(mem), temp: temp == null ? null : Math.round(temp) };
+}
 
 /* ---------- мелочи ---------- */
 class HttpErr extends Error { constructor(status, msg, extra) { super(msg); this.status = status; Object.assign(this, extra); } }
@@ -361,6 +385,7 @@ async function api(req, res, url) {
       return json(res, 200, { ok: true }, { 'set-cookie': setCookie(A.newSession(u, req.headers['user-agent']), A.SESSION_MAX_AGE) });
     }
     case '/api/stream': return stream(req, res, u);
+    case '/api/sys': if (M === 'GET') return json(res, 200, sysStats()); break;
     case '/api/settings':
       if (M === 'GET') return json(res, 200, pubSettings(chat));
       if (M === 'PUT') { putSettings(chat, await jbody(req)); return json(res, 200, pubSettings(chat)); }

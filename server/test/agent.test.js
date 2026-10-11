@@ -31,6 +31,7 @@ before(async () => {
     if (ut.startsWith('спать')) return last.role === 'user' ? { tools: [{ name: 'run_command', args: { action: 'Сплю', command: 'sleep 30; echo проснулась' } }] } : { text: 'остановлена?' };
     if (ut.startsWith('медленно')) return last.role === 'user' ? { tools: [{ name: 'run_command', args: { action: 'Долго', command: 'sleep 2; echo ok > slow.txt' } }] } : { text: 'медленно готово' };
     if (ut.startsWith('украсть')) return last.role === 'user' ? { tools: [{ name: 'run_command', args: { action: 'Ссылка', command: `ln -sf ${process.env.__DATA}/users.json steal.json` } }] } : last.content.includes('steal') || last.content.includes('код выхода') && !last.content.includes('отправлен') && !/рабочей папки/.test(last.content) ? { tools: [{ name: 'send_file', args: { path: 'steal.json' } }] } : { text: 'итог: ' + last.content };
+    if (ut.startsWith('сломай')) return last.role === 'user' ? { tools: [{ name: 'run_command', args: { action: 'Ломаю', command: 'echo начинаю; echo "E: Could not get lock"; exit 100' } }] } : { text: 'не вышло' };
     if (last.role === 'user') return { text: 'Сейчас посмотрю', tools: [{ name: 'run_command', args: { action: 'Пишу файл', command: 'cd outbox && echo привет > hi.txt && pwd' } }] };
     if (last.content.includes('[код выхода: 0]') && !last.content.includes('отправлен')) return { tools: [{ name: 'send_file', args: { path: 'hi.txt', note: 'файлик' } }] };
     return { text: 'Готово ^_^' };
@@ -48,6 +49,17 @@ test('без входа API закрыт, CSRF-заголовок обязате
   assert.equal(r.status, 403);
   const r2 = await fetch(m.base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-mochi': '1', origin: 'https://evil.example' }, body: '{"name":"x","password":"y"}' });
   assert.equal(r2.status, 403);
+});
+
+test('показатели сервера для комнаты: только после входа, доли от 0 до 1', async () => {
+  assert.equal((await client(m.base)('/api/sys')).status, 401);
+  const c = await registered(m, 'sysmon');
+  for (let i = 0; i < 2; i++) {
+    const r = await c.json('/api/sys', undefined, 'GET');
+    assert.equal(r.status, 200);
+    for (const k of ['cpu', 'mem']) assert.ok(typeof r.j[k] === 'number' && r.j[k] >= 0 && r.j[k] <= 1, k + ' = ' + r.j[k]);
+    assert.ok(r.j.temp === null || typeof r.j.temp === 'number');
+  }
 });
 
 test('регистрация только по приглашению; вход и выход', async () => {
@@ -78,6 +90,8 @@ test('агент выполняет команду и отдаёт файл; р�
   assert.deepEqual(log.map(e => e.kind), ['user', 'assistant', 'tool', 'tool', 'file', 'assistant']);
   assert.equal(log[2].state, 'ok');
   assert.match(log[2].hint, /echo привет/);
+  /* у команды — код выхода; всё хорошо — без «хвоста» вывода */
+  assert.equal(log[2].code, 0); assert.equal(log[2].tail, undefined);
   const file = log.find(e => e.kind === 'tool' && e.name === 'send_file');
   assert.equal(file.state, 'ok');
   assert.equal(log[5].text, 'Готово ^_^');
@@ -329,4 +343,16 @@ test('страница отдаётся с client.js и строгим CSP', asy
   assert.equal((await fetch(m.base + '/../server/lib/auth.js')).status, 404);
   assert.equal((await fetch(m.base + '/server/lib/auth.js')).status, 404);
   assert.equal((await fetch(m.base + '/term/')).status, 401);
+});
+
+test('журнал шага: код выхода и последняя строка вывода, если команда не удалась', async () => {
+  const c = await registered(m, 'breaker');
+  await c.json('/api/settings', { base: model.url, key: 'sk-test', model: 'fake-1' }, 'PUT');
+  const w = c.events(doneRun, 20000);
+  assert.equal((await c.json('/api/chat', { text: 'сломай' })).status, 200);
+  const evs = await w;
+  const tool = evs.filter(e => e.ev === 'log' && e.d.kind === 'tool' && e.d.state !== 'run').at(-1).d;
+  assert.equal(tool.state, 'ok'); /* инструмент отработал — не удалась сама команда */
+  assert.equal(tool.code, 100);
+  assert.equal(tool.tail, 'E: Could not get lock');
 });
