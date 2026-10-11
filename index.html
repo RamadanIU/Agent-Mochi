@@ -1519,7 +1519,6 @@ const tick=setInterval(paint,100);paint();
     <label class="f">Модель<input id="c-model" autocapitalize="off" autocomplete="off" spellcheck="false"></label><div id="ml" hidden></div><small id="mh"></small>
     </div>
     <div class="grp" data-i="abil"><h3 class="gh">Возможности</h3>
-    <label class="sw"><span>Поиск в интернете<small>Модель сама ищет свежие данные и читает страницы</small></span><input type="checkbox" role="switch" id="c-search"></label>
     <label class="sw"><span>Показывать файлы модели<small>Картинки и PDF уходят прямо в модель. Выключи, если она не умеет их читать</small></span><input type="checkbox" role="switch" id="c-vis"></label>
     </div>
     <div class="grp" data-i="steps"><h3 class="gh">Шаги агента</h3>
@@ -2215,7 +2214,9 @@ function updBubble(){
 const TOOLS={run_command:['shell'],web_search:['searching'],web_fetch:['browsing'],read_file:['reading'],edit_file:['coding'],write_file:['writing'],
  view_image:['drawing'],send_file:['sending'],telegram_send:['sending'],telegram_connect:['update'],telegram_status:['update'],telegram_notify_mode:['update'],telegram_disconnect:['update'],
  skill:['memory'],mcp_connect:['update'],mcp_manage:['update'],skills_manage:['update']};
-const toolState=n=>(TOOLS[n]||['processing'])[0];
+/* инструменты MCP-серверов приходят как сервер__инструмент (поиск в интернете — search__web_search) */
+const toolBase=n=>String(n||'').replace(/^[\w-]*?__/,'');
+const toolState=n=>(TOOLS[toolBase(n)]||['processing'])[0];
 const MIN={stopped:1200,success:2600,error:2400,sending:1800,confused:1400,surprised:1100,hello:1500,listening:900,happy:1100};
 /* сколько держится реакция, если её никто не сменит, — потом resume() */
 const AUTO={stopped:2.6,confused:1.8,sending:2.4,surprised:1.8,hello:2.8,happy:2,listening:1.6,success:2.8,error:2.8,talking:4.5,sad:5,love:3,wink:3,laugh:3,cool:4};
@@ -2275,7 +2276,7 @@ const room=window.mochiRoom={
   if(e.state==='run'){if(work.seen.has(e.seq))return;work.seen.add(e.seq);work.tool=e;lastActive=T;
    const n=e.name;live.res=null;live.pct=null;
    if(n==='run_command'){live.cmd=String(e.hint||e.label||'')}
-   else if(n==='web_search'){live.q=crtText(String(e.label||'').replace(/^Ищу в интернете:?\s*/,'')).replace(/[^А-ЯЁA-Z0-9 ]/g,'').slice(0,12)||'ПОИСК'}
+   else if(toolBase(n)==='web_search'){live.q=crtText(String(e.label||'').replace(/^Ищу в интернете:?\s*/,'')).replace(/[^А-ЯЁA-Z0-9 ]/g,'').slice(0,12)||'ПОИСК'}
    const base=String(e.hint||'').split('/').filter(Boolean).pop()||'';live.bar=crtText(base).slice(0,11);
    /* объяснение — сразу, даже если прошлая реакция ещё не отыграла свой минимум */
    const a=actSay(e);speak(a.say,a);want(toolState(n),{force:true,quiet:1});SND.play('step');hudRun()}
@@ -2371,7 +2372,7 @@ function unlock(id){if(found.has(id))return;found.add(id);try{localStorage.setIt
    Задача — от твоего сообщения до следующего; хранятся последние 12, листаются стрелками */
 const ICO={run_command:'--j-term',read_file:'--j-book',edit_file:'--j-pencil',write_file:'--j-pencil',web_search:'--j-globe',web_fetch:'--j-globe',
  send_file:'--j-floppy',view_image:'--j-eye',skill:'--j-spark',mcp_connect:'--j-plug',mcp_manage:'--j-plug',skills_manage:'--j-spark',answer:'--j-chat'};
-const icoOf=n=>'var('+(ICO[n]||(n&&n.startsWith('telegram_')?'--j-plane':'--j-wrench'))+')';
+const icoOf=n=>'var('+(ICO[toolBase(n)]||(n&&n.startsWith('telegram_')?'--j-plane':'--j-wrench'))+')';
 const jEl=$('#jrnl'),jList=$('#jlist'),jBtn=$('#jrn'),jB=$('#jrnb');
 const HMS=new Intl.DateTimeFormat('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 const secs=ms=>ms<9950?(ms/1000).toFixed(1).replace('.',',')+' с':ms<60000?Math.round(ms/1000)+' с':mmss(ms);
@@ -3270,7 +3271,7 @@ window.md=md;window.hl=hl;
 const $=s=>document.querySelector(s);
 const DEF={base:'https://api.openai.com/v1',key:'',model:'gpt-4o-mini',
  sys:'',
- search:true,stepLimit:true,maxSteps:40};
+ stepLimit:true,maxSteps:40};
 /* лимит шагов подряд: целое от 1 до MAXSTEPS_CAP, иначе null */
 const MAXSTEPS_CAP=10000,stepsOk=v=>{const n=Math.round(+v);return String(v).trim()&&n>=1&&n<=MAXSTEPS_CAP?n:null};
 let cfg={...DEF};
@@ -3324,7 +3325,7 @@ function syncSet(){const p=prov.value;$('#f-steps').hidden=!$('#c-lim').checked;
 function fill(s){
   for(const k in F)$(F[k]).value=s[k]||'';
   prov.value=Object.keys(PRESETS).find(k=>PRESETS[k]===s.base)||CUSTOM;
-  $('#c-sfx').checked=s.sfx!==false;$('#c-room').checked=s.room!==false;$('#c-vol').value=Number.isFinite(+s.vol)&&s.vol!==''?s.vol:60;$('#c-crt').value=s.crt||'';$('#c-key').type='password';$('#c-eye').setAttribute('aria-pressed','false');$('#c-search').checked=s.search!==false;$('#c-vis').checked=s.vis!==false;$('#c-lim').checked=s.stepLimit!==false;$('#c-steps').value=s.maxSteps||DEF.maxSteps;$('#c-tts').checked=s.tts!==false;$('#c-vlang').value=s.vlang||(window.mochiGuess?mochiGuess():'ru-RU');
+  $('#c-sfx').checked=s.sfx!==false;$('#c-room').checked=s.room!==false;$('#c-vol').value=Number.isFinite(+s.vol)&&s.vol!==''?s.vol:60;$('#c-crt').value=s.crt||'';$('#c-key').type='password';$('#c-eye').setAttribute('aria-pressed','false');$('#c-vis').checked=s.vis!==false;$('#c-lim').checked=s.stepLimit!==false;$('#c-steps').value=s.maxSteps||DEF.maxSteps;$('#c-tts').checked=s.tts!==false;$('#c-vlang').value=s.vlang||(window.mochiGuess?mochiGuess():'ru-RU');
   syncSet()}
 /* сменили провайдера — модель из старого списка там, скорее всего, не найдётся: loadModels подберёт новую */
 let provNew=false;

@@ -2,7 +2,8 @@
    Главное правило — в контекст модели попадает только нужное:
    • навыки: в системной подсказке только имена; описания и полный текст — по вызову skill;
    • MCP-сервер «по запросу» (по умолчанию): в подсказке одна строка, инструменты появляются после mcp_connect;
-   • любой инструмент сервера можно выключить, как и встроенные (см. agent.js).
+   • любой инструмент сервера можно выключить, как и встроенные (см. agent.js);
+   • предустановленные серверы (поиск в интернете) появляются у каждого сами, а дальше — обычные: их выключают и удаляют.
    Настройки MCP (адреса, заголовки и переменные окружения с ключами) лежат в приватных данных сервера и в браузер не уходят.
    Навыки — папки в рабочей папке пользователя (<папка>/skills/<имя>/SKILL.md), их видит и агент. Сервер читает их
    с проверкой пути (readWork), а пишет только через исполнитель — от имени mochi-agent, без доступа к данным сервера. */
@@ -22,11 +23,46 @@ const sq = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
 /* грубая оценка: сколько токенов описание инструмента занимает в каждом запросе к модели */
 export const tokens = x => Math.ceil(JSON.stringify(x).length / 3.5);
 
+/* ---------- предустановленные MCP-серверы ----------
+   Появляются у пользователя один раз — при первом обращении к его расширениям — и дальше ничем не отличаются от
+   подключённых им самим: их выключают, переводят «по запросу», выключают отдельные инструменты и удаляют
+   (удалённый сам не вернётся: в ext.json помним, какие уже ставили). Поле preset у сервера — какие особенности
+   клиента к нему применять: их получает любой сервер с адресом предустановленного, под каким бы именем его ни подключили. */
+export const PRESETS = {
+  search: {
+    url: () => CFG.searchMcp,
+    desc: 'Поиск в интернете и чтение страниц',
+    /* Parallel Search: служебные параметры модели не показываем — подставляем сами */
+    hide: ['session_id', 'model_name'],
+    fill(a, pr, ctx) {
+      if (pr.session_id) a.session_id = ctx.session || rid(16);
+      if (pr.model_name && ctx.model) a.model_name = String(ctx.model).slice(0, 100);
+    },
+    ms: 45000,
+    prompt: fns => '\nУ тебя есть поиск в интернете (' + fns.join(', ') + '): используй его для новостей, свежих данных и всего, что могло измениться; на простые вопросы отвечай сразу. Источники называй по имени сайта.',
+    /* раньше поиск был встроенным инструментом: его выключали в настройках модели и среди встроенных */
+    legacy: ['web_search', 'web_fetch'],
+  },
+};
+/* прежние настройки пользователя для предустановленного сервера: {on, off: [выключенные legacy-инструменты]} (задаёт agent.js) */
+let presetSeed = () => ({});
+export const setPresetSeed = f => { presetSeed = f; };
+
 /* ---------- хранилище ---------- */
 const docs = new Map();
 function X(u) {
   if (!docs.has(u.id)) docs.set(u.id, new Doc(path.join(CFG.data, 'users', u.id, 'ext.json'), () => ({ mcp: {}, skills: {} })));
-  const v = docs.get(u.id).v; v.mcp ||= {}; v.skills ||= {};
+  const v = docs.get(u.id).v; v.mcp ||= {}; v.skills ||= {}; v.presets ||= [];
+  for (const [name, P] of Object.entries(PRESETS)) {
+    const url = P.url();
+    if (!url || v.presets.includes(name)) continue;
+    v.presets.push(name);
+    if (!v.mcp[name] && Object.keys(v.mcp).length < 30) {
+      const old = presetSeed(u, name, P) || {};
+      v.mcp[name] = { type: 'http', url, command: '', headers: {}, env: {}, on: old.on ?? true, lazy: false, desc: P.desc, off: old.off || [], tools: null, info: null, err: '', t: Date.now(), preset: name };
+    }
+    docs.get(u.id).save();
+  }
   return v;
 }
 const saveX = u => docs.get(u.id)?.save();
@@ -87,6 +123,9 @@ export function mcpPut(u, b) {
   }
   if (old && transport(old) === transport(s)) Object.assign(s, { tools: old.tools, info: old.info, err: old.err });
   else dropClient(u, name);
+  /* адрес предустановленного сервера (например, поиск удалили и подключили снова) — с его особенностями */
+  const pre = type === 'http' && Object.keys(PRESETS).find(k => PRESETS[k].url() === s.url);
+  if (pre) s.preset = pre;
   all[name] = s; saveX(u);
   return name;
 }
@@ -116,7 +155,7 @@ function client(u, name) {
   const k = u.id + '/' + name, sig = transport(s);
   let p = pool.get(k);
   if (p && p.sig !== sig) { p.c.close(); p = null; }
-  if (!p) pool.set(k, p = { c: new McpClient({ ...s, cwd: userDir(u) }), sig, fail: 0 });
+  if (!p) pool.set(k, p = { c: new McpClient({ ...s, cwd: userDir(u) }), sig, fail: 0, ref: null, t0: 0 });
   return p;
 }
 function dropClient(u, name) { const k = u.id + '/' + name; pool.get(k)?.c.close(); pool.delete(k); }
@@ -134,12 +173,29 @@ export async function mcpRefresh(u, name, ms = 30000) {
   } catch (e) { s.err = String(e.message).slice(0, 300); p.fail = Date.now(); throw e; }
   finally { saveX(u); }
 }
-async function ensureTools(u, name) {
+/* список инструментов сервера; подключение одно на всех (mcpRefresh закрывает соединение — второе оборвало бы первое) */
+function ensureTools(u, name) {
   const s = X(u).mcp[name];
-  if (s.tools) return s.tools;
+  if (s.tools) return Promise.resolve(s.tools);
   const p = client(u, name);
-  if (p.fail && Date.now() - p.fail < 60e3) return null;
-  try { return await mcpRefresh(u, name, 20000); } catch { return null; }
+  if (p.ref) return p.ref;
+  if (p.fail && Date.now() - p.fail < 60e3) return Promise.resolve(null);
+  p.t0 = Date.now();
+  return p.ref = mcpRefresh(u, name, 20000).catch(() => null).finally(() => { p.ref = null; });
+}
+/* Подключение к серверу (до 20 с) не должно задерживать ответ: инструменты, которых ещё не знаем, ждём не дольше
+   MCP_GRACE от начала попытки, а подключение идёт дальше в фоне — со следующего шага они появятся */
+export const MCP_GRACE = 2500;
+const NOT_YET = Symbol('ещё подключается');
+function toolsSoon(u, name) {
+  const r = ensureTools(u, name), p = pool.get(u.id + '/' + name), left = p?.ref ? p.t0 + MCP_GRACE - Date.now() : 0;
+  if (!p?.ref) return r;
+  return Promise.race([r, new Promise(ok => setTimeout(ok, Math.max(0, left), NOT_YET).unref())]);
+}
+/* подключиться заранее (при старте сервера) ко всем включённым серверам «всегда», чьих инструментов ещё не знаем,
+   чтобы первое сообщение после перезапуска их не ждало */
+export function warmExt(u) {
+  for (const [name, s] of Object.entries(X(u).mcp)) if (s.on && !s.lazy && !s.tools) ensureTools(u, name);
 }
 
 /* имя функции для модели: сервер__инструмент (OpenAI: [A-Za-z0-9_-], до 64 символов) */
@@ -148,9 +204,10 @@ export function fnName(srv, tool) {
   return n.length <= 64 ? n : n.slice(0, 55) + '_' + crypto.createHash('sha1').update(srv + '/' + tool).digest('hex').slice(0, 8);
 }
 
-export async function mcpCall(u, { srv, tool }, args, signal) {
-  const p = client(u, srv);
-  try { return await p.c.call(tool, args, signal, 300000); }
+export async function mcpCall(u, { srv, tool }, args, signal, ctx = {}) {
+  const p = client(u, srv), s = X(u).mcp[srv], P = PRESETS[s.preset];
+  if (P?.fill) { args = { ...args }; P.fill(args, s.tools?.find(t => t.name === tool)?.inputSchema?.properties || {}, ctx); }
+  try { return await p.c.call(tool, args, signal, P?.ms || 300000); }
   catch (e) { if (signal?.aborted) throw e; return 'Ошибка MCP-сервера «' + srv + '»: ' + e.message; }
 }
 
@@ -158,8 +215,8 @@ const maskUrl = s => { try { const x = new URL(s); return x.origin + x.pathname 
 export function mcpPublic(u) {
   return Object.entries(X(u).mcp).map(([name, s]) => ({
     name, type: s.type, url: s.type === 'http' ? maskUrl(s.url) : '', command: s.command, headers: Object.keys(s.headers || {}), env: Object.keys(s.env || {}),
-    on: s.on, lazy: s.lazy, desc: s.desc, err: s.err, server: s.info?.name || '', known: !!s.tools,
-    tools: (s.tools || []).map(t => ({ name: t.name, desc: short(t.description, 160), on: !s.off.includes(t.name), size: tokens(toOpenAI(t, fnName(name, t.name))) })),
+    on: s.on, lazy: s.lazy, desc: s.desc, err: s.err, server: s.info?.name || '', known: !!s.tools, preset: !!s.preset,
+    tools: (s.tools || []).map(t => ({ name: t.name, desc: short(t.description, 160), on: !s.off.includes(t.name), size: tokens(toOpenAI(t, fnName(name, t.name), PRESETS[s.preset]?.hide)) })),
   }));
 }
 
@@ -362,11 +419,13 @@ export const BUILTIN = new Set();
 
 /* для очередного шага агента: инструменты расширений и строки для системной подсказки */
 export async function agentExt(chat, off = {}) {
-  const u = chat.u, act = chat.doc.v.act || [], defs = [], route = new Map(), lazy = [], down = [];
+  const u = chat.u, act = chat.doc.v.act || [], defs = [], route = new Map(), lazy = [], down = [], slow = [];
+  let hints = '';
   const srvs = Object.entries(X(u).mcp).filter(([, s]) => s.on);
   await Promise.all(srvs.map(async ([name, s]) => {
     if (s.lazy && !act.includes(name)) return;
-    if (!await ensureTools(u, name)) down.push(name);
+    const r = await toolsSoon(u, name);
+    if (r === NOT_YET) slow.push(name); else if (!r) down.push(name);
   }));
   for (const [name, s] of srvs) {
     if (s.lazy && !act.includes(name)) {
@@ -374,19 +433,22 @@ export async function agentExt(chat, off = {}) {
       if (!s.tools || n) lazy.push(name + (s.desc || s.info?.name ? ' — ' + short(s.desc || s.info.name, 80) : '') + (n ? ' (' + n + ')' : ''));
       continue;
     }
+    const P = PRESETS[s.preset], fns = [];
     for (const t of s.tools || []) {
       if (s.off.includes(t.name)) continue;
-      const f = fnName(name, t.name); defs.push(toOpenAI(t, f)); route.set(f, { srv: name, tool: t.name });
+      const f = fnName(name, t.name); defs.push(toOpenAI(t, f, P?.hide)); route.set(f, { srv: name, tool: t.name }); fns.push(f);
     }
+    if (P?.prompt && fns.length) hints += P.prompt(fns);
   }
   const skills = (await skillList(u)).filter(k => k.on);
   if (skills.length) defs.push(SKILL_TOOL);
   if (lazy.length) defs.push(CONNECT_TOOL);
   for (const t of MANAGE_TOOLS) if (off[t.function.name] !== false) defs.push(t);
   /* навыки — только имена: описания и текст модель берёт через skill, когда нужно */
-  const prompt = (skills.length ? '\nНавыки (готовые инструкции; если задача может подойти — загрузи навык через skill): ' + skills.map(k => k.name).join(', ') + '.' : '')
+  const prompt = hints + (skills.length ? '\nНавыки (готовые инструкции; если задача может подойти — загрузи навык через skill): ' + skills.map(k => k.name).join(', ') + '.' : '')
     + (lazy.length ? '\nMCP-серверы по запросу (их инструменты подключает mcp_connect): ' + lazy.join('; ') + '.' : '')
-    + (down.length ? '\nMCP-серверы сейчас не отвечают: ' + down.join(', ') + '.' : '');
+    + (down.length ? '\nMCP-серверы сейчас не отвечают: ' + down.join(', ') + '.' : '')
+    + (slow.length ? '\nMCP-серверы ещё подключаются (их инструменты появятся позже): ' + slow.join(', ') + '.' : '');
   return { defs, route, prompt };
 }
 

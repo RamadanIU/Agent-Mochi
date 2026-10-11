@@ -9,16 +9,15 @@ import { CFG } from './config.js';
 import { Doc, ensureDir, rid, writeJSONSync, readJSON } from './store.js';
 import { runCmd, fileCmd, agentInfo } from './runner-client.js';
 import { userDir, pullFile, storeFile, sz } from './files.js';
-import { webTools, webCall } from './mcp.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
-import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens } from './ext.js';
+import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens, setPresetSeed } from './ext.js';
 
 export const DEF_SYS = 'Тебя зовут Personal Computer — ты ламповый пиксельный компьютер-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
 /* прежние подсказки по умолчанию: кто их не менял (сохранил как было), получает новую */
 export const OLD_SYS = new Set(['Тебя зовут Мочи — ты милый пиксельный зверёк-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. В поле action кратко и по-человечески пиши, что делаешь. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.']);
 /* что умеет показывать веб-чат — модель должна знать, чтобы рисовать таблицы и схемы, а не ASCII-картинки */
 const FMT = 'Оформление: чат показывает Markdown — заголовки, списки, таблицы, цитаты и врезки (> [!NOTE], > [!TIP], > [!WARNING]), `код` и блоки кода с языком, формулы LaTeX ($…$, $$…$$) и схемы в блоке ```mermaid (flowchart, sequenceDiagram, stateDiagram, pie, mindmap, timeline). Пользуйся этим, только когда правда помогает: сравнение — таблицей, процесс или связи — схемой, вычисления — формулой. Короткий ответ оставляй простым текстом.';
-export const DEF_SETTINGS = { base: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', sys: DEF_SYS, search: true, vis: true, stepLimit: true, maxSteps: CFG.maxSteps };
+export const DEF_SETTINGS = { base: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', sys: DEF_SYS, vis: true, stepLimit: true, maxSteps: CFG.maxSteps };
 /* лимит шагов подряд (настройки → Модель): число от 1 до MAX_STEPS */
 export const MAX_STEPS = 10000;
 
@@ -70,17 +69,24 @@ export const TG_TOOLS = [
 
 /* встроенные инструменты, которые пользователь может выключить (Настройки → Инструменты) */
 const GROUPS = { run_command: 'Сервер', send_file: 'Сервер', read_file: 'Файлы', view_image: 'Файлы', edit_file: 'Файлы', write_file: 'Файлы', mcp_manage: 'Расширения', skills_manage: 'Расширения' };
-const groupOf = n => GROUPS[n] || (n.startsWith('telegram_') ? 'Telegram' : 'Интернет');
+const groupOf = n => GROUPS[n] || (n.startsWith('telegram_') ? 'Telegram' : 'Другое');
 const builtins = () => [RUN_TOOL, READ_TOOL, VIEW_TOOL, EDIT_TOOL, WRITE_TOOL, SEND_TOOL, ...TG_TOOLS];
 /* встроенные включает и выключает только пользователь: агенту об этом нужно знать, чтобы не пытаться обойти */
 for (const t of [...builtins(), ...MANAGE_TOOLS]) BUILTIN.add(t.function.name);
 const isOn = (S, n) => (S.tools || {})[n] !== false;
 
+/* поиск в интернете раньше был встроенным (выключался в настройках модели и среди встроенных инструментов),
+   теперь это предустановленный MCP-сервер: при его появлении переносим прежний выбор пользователя */
+setPresetSeed((u, name, P) => {
+  const v = getChat(u).set.v, t = v.tools || {};
+  return name === 'search' ? { on: v.search !== false, off: (P.legacy || []).filter(n => t[n] === false) } : {};
+});
+
 /* что видит пользователь в настройках: все инструменты, их состояние и примерный «вес» в каждом запросе */
 export async function toolCatalog(chat) {
-  const S = chat.settings(), web = S.search ? await webTools() : [];
+  const S = chat.settings();
   const row = t => ({ name: t.function.name, group: groupOf(t.function.name), desc: t.function.description.split(/(?<=[.!?])\s/)[0].slice(0, 200), on: isOn(S, t.function.name), size: tokens(t) });
-  return { builtin: [...builtins(), ...web, ...MANAGE_TOOLS].map(row), search: S.search !== false, mcp: mcpPublic(chat.u), skills: await skillList(chat.u) };
+  return { builtin: [...builtins(), ...MANAGE_TOOLS].map(row), mcp: mcpPublic(chat.u), skills: await skillList(chat.u) };
 }
 export function setTools(chat, m) {
   const t = chat.set.v.tools ||= {};
@@ -128,8 +134,8 @@ function labelFor(n, a) {
   else if (n === 'send_file') s = 'Отправляю файл: ' + (a.name || String(a.path || '').split('/').pop());
   else if (n === 'view_image') s = 'Смотрю картинку: ' + String(a.path || '').split('/').pop();
   else if (FILE_TOOLS.has(n)) s = { read_file: 'Читаю файл', edit_file: 'Правлю файл', write_file: 'Пишу файл' }[n] + ': ' + String(a.path || '').replace(/\/+$/, '').split('/').pop();
-  else if (n === 'web_search') { const q = Array.isArray(a.search_queries) ? a.search_queries[0] : a.objective; s = 'Ищу в интернете' + (q ? ': ' + q : ''); }
-  else if (n === 'web_fetch') { let h = ''; try { h = new URL([].concat(a.urls || [])[0]).hostname.replace(/^www\./, ''); } catch {} s = 'Читаю страницу' + (h ? ': ' + h : ''); }
+  else if (/(^|__)web_search$/.test(n)) { const q = Array.isArray(a.search_queries) ? a.search_queries[0] : a.objective; s = 'Ищу в интернете' + (q ? ': ' + q : ''); }
+  else if (/(^|__)web_fetch$/.test(n)) { let h = ''; try { h = new URL([].concat(a.urls || [])[0]).hostname.replace(/^www\./, ''); } catch {} s = 'Читаю страницу' + (h ? ': ' + h : ''); }
   else if (n === 'telegram_connect') s = 'Подключаю Telegram';
   else if (n === 'telegram_send') s = 'Пишу в Telegram';
   else if (n.startsWith('telegram_')) s = 'Настраиваю Telegram';
@@ -365,7 +371,7 @@ export class Chat extends EventEmitter {
   }
 
   /* подсказка собирается только из того, что сейчас включено: выключенный инструмент не занимает память */
-  async system(names, extra = '', webOn = false, offB = []) {
+  async system(names, extra = '', offB = []) {
     const S = this.settings(), has = n => names.has(n), dir = userDir(this.u), now = new Date();
     const run = has('run_command'), I = run ? await agentInfo() : null;
     const tgOn = TG_TOOLS.some(t => has(t.function.name));
@@ -385,7 +391,6 @@ export class Chat extends EventEmitter {
       + (run ? ' Долгие процессы (серверы, длинные загрузки, сборки дольше часа) запускай в фоне: nohup команда > файл.log 2>&1 & — и проверяй позже. Команды, ждущие ввода, не работают (stdin пустой): используй флаги -y и т. п.' : '')
       + (FT.length ? ` Файлы ${FT.join(', ')}${run ? ' — не через cat, sed, echo > или heredoc в run_command; run_command — для поиска (grep -rn, find), запуска, сборки и git' : ''}.` : '')
       + (has('send_file') ? ' Чтобы отдать файл пользователю, создай его (лучше в outbox/) и вызови send_file; не выводи содержимое файлов текстом вместо этого. Имена с пробелами бери в кавычки.' : '')
-      + (webOn ? '\nУ тебя есть поиск в интернете (web_search, web_fetch): используй его для новостей, свежих данных и всего, что могло измениться; на простые вопросы отвечай сразу. Источники называй по имени сайта.' : '')
       + (tgOn ? '\n' + (hooks.tg?.statusLine(this.u) || 'Telegram не подключён.') + ' Если пользователь хочет управлять тобой из Telegram или получать уведомления: попроси создать бота у @BotFather (команда /newbot) и прислать токен, затем вызови telegram_connect и дай пользователю ссылку из ответа.' : '')
       + (offB.length ? '\nВыключено пользователем: ' + offB.join(', ') + '. Включить их может только он сам в настройках — ты не можешь.' : '')
       + extra
@@ -426,12 +431,11 @@ export class Chat extends EventEmitter {
     /* лимит — шагов подряд без сообщений пользователя */
     if (S.stepLimit !== false && run.steps - (run.base || 0) >= S.maxSteps) throw new Error('Personal Computer сделал ' + S.maxSteps + ' шагов подряд и остановился, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить. Лимит шагов меняется в настройках → Модель.');
     run.steps++;
-    const web0 = S.search ? await until(webTools(), sig) : [], web = web0.filter(on); chk();
-    const offB = [...builtins(), ...web0, ...MANAGE_TOOLS].filter(t => !on(t)).map(t => t.function.name);
+    const offB = [...builtins(), ...MANAGE_TOOLS].filter(t => !on(t)).map(t => t.function.name);
     const X = await until(agentExt(this, S.tools), sig); chk();
-    const { tools, said } = withAction([...builtins().filter(on), ...web, ...X.defs]), names = new Set(tools.map(t => t.function.name));
-    const ctx = { web, X, names };
-    const sys = await until(this.system(names, X.prompt, web.length > 0, offB), sig); chk();
+    const { tools, said } = withAction([...builtins().filter(on), ...X.defs]), names = new Set(tools.map(t => t.function.name));
+    const ctx = { X, names };
+    const sys = await until(this.system(names, X.prompt, offB), sig); chk();
     const { text, calls } = await until(this.callModel(sys, tools, sig), sig); chk();
     H.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}) });
     this.partial = '';
@@ -474,7 +478,7 @@ export class Chat extends EventEmitter {
     return null;
   }
 
-  async tool(nm, a, sig, { web, X, imgs }) {
+  async tool(nm, a, sig, { X, imgs }) {
     if (nm === 'run_command') {
       if (!a.command) return 'Ошибка: нет параметра command';
       const r = await runCmd({ cmd: String(a.command), cwd: this.doc.v.cwd || userDir(this.u), timeout: a.timeout }, sig);
@@ -505,8 +509,7 @@ export class Chat extends EventEmitter {
       if (!hooks.tg) return 'Ошибка: Telegram недоступен на этом сервере';
       return await hooks.tg.tool(this, nm, a);
     }
-    if (web.some(t => t.function.name === nm)) return await webCall(nm, a, { signal: sig, session: this.doc.v.sess, model: this.settings().model });
-    if (X.route.has(nm)) return await mcpCall(this.u, X.route.get(nm), a, sig);
+    if (X.route.has(nm)) return await mcpCall(this.u, X.route.get(nm), a, sig, { session: this.doc.v.sess, model: this.settings().model });
     if (EXT_TOOLS.has(nm)) return await extTool(this, nm, a);
     return 'Ошибка: неизвестный инструмент ' + nm;
   }
