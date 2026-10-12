@@ -132,3 +132,11 @@ export function dropFiles(u) {
   for (const fid of Object.keys(d.v.f)) fsp.unlink(blobPath(u, fid)).catch(() => {});
   d.v.f = {}; d.save();
 }
+
+/* файлы одного чата (его удалили насовсем) */
+export function dropFids(u, fids) {
+  const d = index(u);
+  let n = 0;
+  for (const fid of fids) if (d.v.f[fid]) { delete d.v.f[fid]; fsp.unlink(blobPath(u, fid)).catch(() => {}); n++; }
+  if (n) d.save();
+}

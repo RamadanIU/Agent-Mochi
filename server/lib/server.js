@@ -15,7 +15,7 @@ import * as A from './auth.js';
 import { getChat, resumeAll, DEF_SETTINGS, MAX_STEPS, toolCatalog, setTools } from './agent.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
 import * as X from './ext.js';
-import { putInbox, storeCopy, getFile, dropFiles, userDir, safeName } from './files.js';
+import { putInbox, storeCopy, getFile, userDir, safeName } from './files.js';
 import * as TG from './telegram.js';
 import { TERM_PREFIX, proxyHttp, proxyUpgrade } from './term.js';
 import * as U from './update.js';
@@ -97,6 +97,7 @@ function sameOrigin(req) {
   } catch { return false; }
 }
 const userOf = req => A.sessionUser(cookies(req)[COOKIE]);
+const convId = c => typeof c === 'string' && /^[0-9a-f]{12}$/.test(c) ? c : undefined;
 
 /* ---------- страница: подключаем client.js, CSP с хешами встроенных скриптов ---------- */
 let page = null;
@@ -135,14 +136,18 @@ function sendBuf(req, res, c, h) {
 }
 
 /* ---------- поток событий чата (SSE) ---------- */
-function stream(req, res, u) {
-  const chat = getChat(u);
+/* ?c= — какой чат показывать (нет такого — последний открытый); события других чатов сюда не идут, кроме хода работы (run) */
+function stream(req, res, u, url) {
+  const chat = getChat(u), want = url.searchParams.get('c'), I = chat.idx.v;
+  const c = chat.has(want) ? want : chat.has(I.cur) ? I.cur : chat.cid;
+  if (I.cur !== c) { I.cur = c; chat.idx.save(); }
   res.writeHead(200, { ...SEC, 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store, no-transform', 'x-accel-buffering': 'no', connection: 'keep-alive' });
   const send = (ev, d) => res.write(`event: ${ev}\ndata: ${JSON.stringify(d)}\n\n`);
-  send('snap', { ...chat.snapshot(), user: A.publicUser(u), build: U.buildId() });
+  send('snap', { ...chat.snapshot(c), user: A.publicUser(u), build: U.buildId() });
   const on = {
-    log: e => send('log', e), delta: d => send('delta', { d }), run: r => send('run', r), queue: q => send('queue', { queue: q }),
-    reset: () => send('snap', chat.snapshot()),
+    log: (e, id) => id === c && send('log', e), delta: (d, id) => id === c && send('delta', { d }), run: r => send('run', r),
+    queue: (q, id) => id === c && send('queue', { queue: q }), reset: id => id === c && send('snap', chat.snapshot(c)),
+    chats: () => send('chats', {}), gone: id => id === c && send('gone', { c }),
   };
   for (const k in on) chat.on(k, on[k]);
   chat.clients.add(res);
@@ -412,7 +417,7 @@ async function api(req, res, url) {
       await A.setPassword(u, b.password);
       return json(res, 200, { ok: true }, { 'set-cookie': setCookie(A.newSession(u, req.headers['user-agent']), A.SESSION_MAX_AGE) });
     }
-    case '/api/stream': return stream(req, res, u);
+    case '/api/stream': return stream(req, res, u, url);
     case '/api/sys': if (M === 'GET') return json(res, 200, sysStats()); break;
     case '/api/settings':
       if (M === 'GET') return json(res, 200, pubSettings(chat));
@@ -426,7 +431,7 @@ async function api(req, res, url) {
         .filter(f => f.path.startsWith(userDir(u) + '/inbox/'));
       const parts = (Array.isArray(b.parts) ? b.parts : []).slice(0, 10).filter(x => x && (x.type === 'image_url' || x.type === 'file'));
       let r;
-      try { r = chat.submit({ text: b.text, files, parts, origin: 'web' }); } catch (e) { throw new HttpErr(e.status || 400, e.message); }
+      try { r = chat.submit({ text: b.text, files, parts, origin: 'web', c: convId(b.c) }); } catch (e) { throw new HttpErr(e.status || 400, e.message, e.busy ? { busy: true } : undefined); }
       return json(res, 200, { ok: true, ...r });
     }
     /* отвечаем, когда задача уже остановлена: страница сразу показывает итог, даже если поток событий отстал */
@@ -441,8 +446,14 @@ async function api(req, res, url) {
       if (!q) throw new HttpErr(404, 'Personal Computer уже прочёл это сообщение');
       return json(res, 200, { ok: true, text: q.text, files: q.files });
     }
-    case '/api/chat/retry': if (M === 'POST') { try { chat.retry('web'); } catch (e) { throw new HttpErr(e.status || 400, e.message); } return json(res, 200, { ok: true }); } break;
-    case '/api/chat/clear': if (M === 'POST') { chat.clear(); dropFiles(u); return json(res, 200, { ok: true }); } break;
+    case '/api/chat/retry': if (M === 'POST') { try { chat.retry('web', convId((await jbody(req)).c)); } catch (e) { throw new HttpErr(e.status || 400, e.message, e.busy ? { busy: true } : undefined); } return json(res, 200, { ok: true }); } break;
+    /* прежняя «Очистить чат»: теперь — новый чат, а прошлый остаётся в истории */
+    case '/api/chat/clear': if (M === 'POST') return json(res, 200, { ok: true, c: await chat.fresh() }); break;
+    /* история чатов: список (с поиском), новый чат */
+    case '/api/chats':
+      if (M === 'GET') return json(res, 200, { list: chat.listConvs(url.searchParams.get('q')), cur: chat.idx.v.cur, ...chat.runState() });
+      if (M === 'POST') return json(res, 200, { c: chat.newConv() });
+      break;
     case '/api/upload': {
       if (M !== 'POST') break;
       const n = +req.headers['content-length'];
@@ -516,6 +527,13 @@ async function api(req, res, url) {
       if (M === 'GET') return json(res, 200, { user: A.publicUser(u), sessions: A.sessionCount(u.id), work: userDir(u), invites: u.admin ? A.inviteCount() : undefined, users: u.admin ? A.listUsers().map(A.publicUser) : undefined });
       break;
   }
+  /* один чат: переименовать, удалить (вернуть можно минуту), вернуть */
+  const cm = p.match(/^\/api\/chats\/([0-9a-f]{12})(\/restore)?$/);
+  if (cm) {
+    if (cm[2] && M === 'POST') { if (!chat.restore(cm[1])) throw new HttpErr(404, 'Чат уже не вернуть'); return json(res, 200, { ok: true }); }
+    if (!cm[2] && M === 'PATCH') { try { chat.rename(cm[1], (await jbody(req)).title); } catch (e) { throw new HttpErr(e.status || 400, e.message); } return json(res, 200, { ok: true }); }
+    if (!cm[2] && M === 'DELETE') { if (!await chat.remove(cm[1])) throw new HttpErr(404, 'Такого чата нет'); return json(res, 200, { ok: true, c: chat.cid }); }
+  }
   const mm = p.match(/^\/api\/mcp\/([a-z0-9_-]{1,24})$/);
   if (mm) {
     if (M === 'POST') {
@@ -571,7 +589,7 @@ async function handle(req, res) {
     const code = e.status || 500;
     if (code === 500) console.error('http:', req.method, p, e);
     if (res.headersSent) return res.destroy();
-    json(res, code, { error: code === 500 ? 'внутренняя ошибка сервера' : e.message, ...(e.field ? { field: e.field } : {}), ...(e.upstream ? { upstream: e.upstream } : {}), ...(e.fcode ? { code: e.fcode } : {}) });
+    json(res, code, { error: code === 500 ? 'внутренняя ошибка сервера' : e.message, ...(e.field ? { field: e.field } : {}), ...(e.upstream ? { upstream: e.upstream } : {}), ...(e.fcode ? { code: e.fcode } : {}), ...(e.busy ? { busy: true } : {}) });
   }
 }
 

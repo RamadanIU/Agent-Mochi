@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fakeModel, startMochi, registered } from './helpers.js';
+import { fakeModel, startMochi, registered, chatFile } from './helpers.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let m, model, mcpHttp, mcpSrv, c;
@@ -191,7 +191,10 @@ test('HTTP MCP подключает сам агент: ключ сохраняе
   const r = cat.mcp.find(x => x.name === 'remote');
   assert.deepEqual(r.headers, ['Authorization']); assert.equal(r.lazy, false);
   assert.doesNotMatch(JSON.stringify(cat), /secret-token/);
-  const log = JSON.parse(fs.readFileSync(path.join(m.env.MOCHI_DATA, 'users', fs.readdirSync(path.join(m.env.MOCHI_DATA, 'users'))[0], 'chat.json'), 'utf8'));
+  /* чат пишется на диск с задержкой (250 мс) */
+  const f = chatFile(m.env.MOCHI_DATA, fs.readdirSync(path.join(m.env.MOCHI_DATA, 'users'))[0]);
+  for (let i = 0; i < 40 && !fs.existsSync(f); i++) await new Promise(r => setTimeout(r, 50));
+  const log = JSON.parse(fs.readFileSync(f, 'utf8'));
   assert.doesNotMatch(JSON.stringify(log), /secret-token-123456/);
 });
 

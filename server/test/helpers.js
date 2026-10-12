@@ -14,11 +14,18 @@ const freePort = () => new Promise(ok => { const s = net.createServer().listen(0
 
 /* модель: каждый запрос отдаёт следующий ответ из сценария (функция от тела запроса) */
 export async function fakeModel(script) {
-  const calls = [];
+  const calls = [], titles = [];
   const srv = http.createServer(async (req, res) => {
     let b = ''; for await (const c of req) b += c;
     if (req.url.endsWith('/models')) { res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ data: [{ id: 'fake-1' }, { id: 'fake-2' }] })); }
-    const body = JSON.parse(b || '{}'); calls.push({ body, auth: req.headers.authorization });
+    const body = JSON.parse(b || '{}');
+    /* название чата — отдельный короткий запрос без потока и инструментов: в calls сценария не попадает */
+    if (body.stream === false && !body.tools) {
+      titles.push(body);
+      res.writeHead(200, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: titles.title ?? '«Тестовый чат».' } }] }));
+    }
+    calls.push({ body, auth: req.headers.authorization });
     const step = typeof script === 'function' ? await script(body, calls.length - 1) : script[calls.length - 1] || { text: 'конец' };
     if (step.status) { res.writeHead(step.status); return res.end('{"error":"x"}'); }
     if (step.delay) await sleep(step.delay);
@@ -30,7 +37,7 @@ export async function fakeModel(script) {
   });
   const port = await freePort();
   await new Promise(ok => srv.listen(port, '127.0.0.1', ok));
-  return { url: `http://127.0.0.1:${port}/v1`, calls, close: () => srv.close() };
+  return { url: `http://127.0.0.1:${port}/v1`, calls, titles, close: () => srv.close() };
 }
 
 export async function startMochi(extraEnv = {}) {
@@ -45,11 +52,18 @@ export async function startMochi(extraEnv = {}) {
   };
   const m = { dir, port, env, base: `http://127.0.0.1:${port}`, proc: start() };
   m.ready = async () => { for (let i = 0; i < 200; i++) { try { if ((await fetch(m.base + '/api/health')).ok) return; } catch {} await sleep(50); } throw new Error('сервер не стартовал:\n' + m.proc.log); };
-  m.restart = async () => { m.proc.kill('SIGTERM'); await new Promise(r => m.proc.once('exit', r)); m.proc = start(); await m.ready(); };
+  /* уже остановленный (тест сам остановил, чтобы поправить файлы) — просто запускаем */
+  m.restart = async () => { if (m.proc.exitCode === null && m.proc.signalCode === null) { m.proc.kill('SIGTERM'); await new Promise(r => m.proc.once('exit', r)); } m.proc = start(); await m.ready(); };
   m.stop = async () => { m.proc.kill('SIGTERM'); await new Promise(r => m.proc.exitCode !== null ? r() : m.proc.once('exit', r)); fs.rmSync(dir, { recursive: true, force: true }); };
   m.cli = (...a) => new Promise(ok => { const p = spawn(process.execPath, [path.join(here, '..', 'mochi.js'), ...a], { env }); let o = ''; p.stdout.on('data', d => o += d); p.stderr.on('data', d => o += d); p.on('exit', c => ok({ code: c, out: o })); });
   await m.ready();
   return m;
+}
+
+/* файл активного чата пользователя (того, где работает агент) */
+export function chatFile(dataDir, uid) {
+  const ud = path.join(dataDir, 'users', uid);
+  return path.join(ud, 'chats', JSON.parse(fs.readFileSync(path.join(ud, 'chats.json'), 'utf8')).act + '.json');
 }
 
 /* клиент с cookie */

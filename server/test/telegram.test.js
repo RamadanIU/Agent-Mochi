@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fakeModel, startMochi, registered, sleep } from './helpers.js';
+import { fakeModel, startMochi, registered, sleep, chatFile } from './helpers.js';
 
 const TOKEN = '123456789:AAEhBP0av18ZzsZiYQXbKBYWxx2ahfL0lzw';
 let m, model, tg;
@@ -62,8 +62,8 @@ test('подключение Telegram через инструмент агент
   /* токен вычищен из истории чата */
   await sleep(500);
   const me = (await c.json('/api/me', undefined, 'GET')).j.user;
-  const chatFile = fs.readFileSync(path.join(m.env.MOCHI_DATA, 'users', me.id, 'chat.json'), 'utf8');
-  assert.ok(!chatFile.includes(TOKEN), 'токена нет в chat.json');
+  const saved = fs.readFileSync(chatFile(m.env.MOCHI_DATA, me.id), 'utf8');
+  assert.ok(!saved.includes(TOKEN), 'токена нет в файле чата');
   assert.ok(fs.readFileSync(path.join(m.env.MOCHI_DATA, 'users', me.id, 'telegram.json'), 'utf8').includes(TOKEN));
 
   /* чужой человек не может управлять ботом */

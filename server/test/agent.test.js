@@ -108,7 +108,8 @@ test('агент выполняет команду и отдаёт файл; р�
   assert.equal(model.calls.at(-1).auth, 'Bearer sk-test');
   /* ключ не попадает в журнал/поток */
   assert.ok(!JSON.stringify(evs).includes('sk-test'));
-  const st = JSON.parse(fs.readFileSync(path.join(m.env.MOCHI_DATA, 'users', (await c.json('/api/me', undefined, 'GET')).j.user.id, 'chat.json')));
+  const ud = path.join(m.env.MOCHI_DATA, 'users', (await c.json('/api/me', undefined, 'GET')).j.user.id);
+  const st = JSON.parse(fs.readFileSync(path.join(ud, 'chats', JSON.parse(fs.readFileSync(path.join(ud, 'chats.json'))).act + '.json')));
   assert.ok(st.log.some(e => e.kind === 'file'));
   const snapFile = (await c.events(e => e.some(x => x.ev === 'snap'))).find(e => e.ev === 'snap').d.log.find(e => e.kind === 'file');
   assert.equal(snapFile.name, 'hi.txt');
