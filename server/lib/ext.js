@@ -6,7 +6,7 @@
    • предустановленные серверы (поиск в интернете) появляются у каждого сами, а дальше — обычные: их выключают и удаляют.
    Настройки MCP (адреса, заголовки и переменные окружения с ключами) лежат в приватных данных сервера и в браузер не уходят.
    Навыки — папки в рабочей папке пользователя (<папка>/skills/<имя>/SKILL.md), их видит и агент. Сервер читает их
-   с проверкой пути (readWork), а пишет только через исполнитель — от имени mochi-agent, без доступа к данным сервера. */
+   с проверкой пути (readWork), а пишет только через исполнитель — от имени personalcomputer-agent, без доступа к данным сервера. */
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -92,7 +92,7 @@ function kv(x, header, old = {}) {
   const out = {};
   for (const [k, v] of Object.entries(o)) {
     if (Object.keys(out).length >= 30) throw bad('Слишком много ' + (header ? 'заголовков' : 'переменных'));
-    if (header ? !/^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,100}$/.test(k) : !/^[A-Za-z_][A-Za-z0-9_]{0,100}$/.test(k) || /^MOCHI_/.test(k)) throw bad('Недопустимое имя: ' + k.slice(0, 40));
+    if (header ? !/^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,100}$/.test(k) : !/^[A-Za-z_][A-Za-z0-9_]{0,100}$/.test(k) || /^PERSONALCOMPUTER_/.test(k)) throw bad('Недопустимое имя: ' + k.slice(0, 40));
     let s = String(v ?? '');
     if (s.includes(SECRET_MARK)) {
       if (typeof old?.[k] !== 'string' || old[k].includes(SECRET_MARK)) throw bad('Значение ' + k + ' скрыто в чате (' + SECRET_MARK + '), а сохранённого нет. Чтобы оставить сохранённые ' + (header ? 'заголовки' : 'переменные') + ', не передавай ' + (header ? 'headers' : 'env') + '; новый ключ попроси у пользователя.');

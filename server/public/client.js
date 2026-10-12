@@ -6,12 +6,12 @@
    • вкладка «Терминал» — настоящий терминал сервера (ttyd за авторизацией);
    • в настройках — вкладка «Сервер» (Telegram, приглашения, пароль, выход, обновления, доступ агента — root) и «Инструменты» (вкл/выкл, MCP, навыки).
    Используем функции основного скрипта (add, md, think, ask…), а не дублируем их. Работу агента (шаги, «думаю», итог)
-   показывает компьютер в верхней панели — mochiRoom (index.html); в чате остаются только сообщения, файлы и ошибки. */
+   показывает компьютер в верхней панели — personalComputerRoom (index.html); в чате остаются только сообщения, файлы и ошибки. */
 (() => {
 const de = document.documentElement;
 de.classList.add('srv');
 /* экран загрузки (#boot в index.html): страница на месте — дальше шаги «сервер → вход → модель → чат → агент» двигаем отсюда */
-const bt = (k, ...a) => { try { window.mochiBoot && mochiBoot[k](...a); } catch (e) {} };
+const bt = (k, ...a) => { try { window.personalComputerBoot && personalComputerBoot[k](...a); } catch (e) {} };
 bt('go', 'link');
 
 /* ---------- стили серверного режима ---------- */
@@ -117,7 +117,7 @@ document.head.append(css);
 
 /* ---------- API ---------- */
 async function api(p, o = {}) {
-  const h = { ...(o.json !== undefined ? { 'content-type': 'application/json' } : {}), ...(o.method && o.method !== 'GET' ? { 'x-mochi': '1' } : {}), ...o.headers };
+  const h = { ...(o.json !== undefined ? { 'content-type': 'application/json' } : {}), ...(o.method && o.method !== 'GET' ? { 'x-personalcomputer': '1' } : {}), ...o.headers };
   const r = await fetch(p, { method: o.method || 'GET', headers: h, body: o.json !== undefined ? JSON.stringify(o.json) : o.body, credentials: 'same-origin', cache: 'no-store' });
   let j = null; try { j = await r.json(); } catch (e) {}
   if (!r.ok) throw Object.assign(new Error((j && j.error) || 'HTTP ' + r.status), { status: r.status, j });
@@ -127,7 +127,7 @@ const post = (p, json = {}) => api(p, { method: 'POST', json });
 
 let me = null, es = null, running = false, view = null, busyElse = null, srvSet = null, bubble = null, hideT = 0, connected = false, replaying = false, olderNow = false;
 /* событие журнала → компьютер в шапке (при перерисовке истории — только в его журнал, без реакций; старую историю «Показать раньше» не трогаем) */
-const room = (k, e) => { if (olderNow) return; try { window.mochiRoom && mochiRoom[k](e, replaying); } catch (x) { console.error(x); } };
+const room = (k, e) => { if (olderNow) return; try { window.personalComputerRoom && personalComputerRoom[k](e, replaying); } catch (x) { console.error(x); } };
 const isImgN = n => /\.(png|jpe?g|gif|webp)$/i.test(n || '');
 const READY = 'готово · сервер';
 
@@ -254,7 +254,7 @@ function render(e) {
     case 'assistant': {
       const el = bubble || add('a', ''); bubble = null;
       aText(el, e.text || ''); stamp(el, e); pin(); room('answer', e);
-      if (!replaying) { window.mochiSpeak && mochiSpeak(e.text); window.sfx && sfx('recv'); }
+      if (!replaying) { window.personalComputerSpeak && personalComputerSpeak(e.text); window.sfx && sfx('recv'); }
       break;
     }
     case 'tool': {
@@ -272,13 +272,13 @@ function render(e) {
 /* на время перерисовки истории — без звуков, счётчиков, озвучки и реакций компьютера. И без прокрутки вниз после каждого
    сообщения: она заставляет браузер заново раскладывать всю ленту. Вниз — один раз в конце (keep — оставить, где есть) */
 function quietly(fn, keep) {
-  replaying = true; window.mochiReplay = true; const sfxOn = cfg.sfx, u0 = unread, pin0 = pin; cfg.sfx = false; pin = () => {};
+  replaying = true; window.personalComputerReplay = true; const sfxOn = cfg.sfx, u0 = unread, pin0 = pin; cfg.sfx = false; pin = () => {};
   /* и без анимации появления: перерисованное (.np) не «выпрыгивает» заново при каждом переподключении */
   const box = $('#msgs'); box.classList.add('rp');
   try { fn(); } finally {
     box.querySelectorAll(':scope>:not(.empty)').forEach(n => n.classList.add('np')); box.classList.remove('rp');
     pin = pin0; replaying = false; unread = u0; badge(); if (!keep) pin(true);
-    setTimeout(() => { cfg.sfx = sfxOn; window.mochiReplay = false; }, 0);
+    setTimeout(() => { cfg.sfx = sfxOn; window.personalComputerReplay = false; }, 0);
   }
 }
 
@@ -348,7 +348,7 @@ function onSnap(s) {
     moreUI();
   });
   setRun(s, true);
-  try { window.mochiRoom && mochiRoom.snap({ ...s, running }); } catch (x) { console.error(x); }
+  try { window.personalComputerRoom && personalComputerRoom.snap({ ...s, running }); } catch (x) { console.error(x); }
   onQueue(s.queue);
   if (!connected) {
     connected = true; setSt(READY, 'on');
@@ -367,9 +367,9 @@ function onDelta(d) {
   think(false);
   if (!bubble) { bubble = add('a', ''); bubble._raw = ''; }
   bubble._raw += d; bubble._b.innerHTML = md(bubble._raw); pin();
-  try { window.mochiRoom && mochiRoom.delta(bubble._raw); } catch (x) {}
+  try { window.personalComputerRoom && personalComputerRoom.delta(bubble._raw); } catch (x) {}
 }
-/* snap — состояние пришло с полной перерисовкой: компьютер в шапке обновит mochiRoom.snap, без реакций «началась задача» */
+/* snap — состояние пришло с полной перерисовкой: компьютер в шапке обновит personalComputerRoom.snap, без реакций «началась задача» */
 function setRun(r, snap) {
   /* агент один: работает в этом чате — обычный ход работы; в другом — плашка над полем ввода */
   const was = running; running = !!r.running && (!r.rc || r.rc === view);
@@ -377,7 +377,7 @@ function setRun(r, snap) {
   busyUI(); hist.run(r);
   ctl = running ? { abort: stopNow } : null;
   sendUI(running);
-  if (!snap) try { window.mochiRoom && mochiRoom.run({ ...r, running }); } catch (x) { console.error(x); }
+  if (!snap) try { window.personalComputerRoom && personalComputerRoom.run({ ...r, running }); } catch (x) { console.error(x); }
   if (running && !bubble) think(true);
   if (!running) { think(false); if (was) setSt(READY, 'on'); }
 }
@@ -405,7 +405,7 @@ $('#chips').before(qbox);
 const held = new Map(); /* id сообщения в очереди → вложения (File) */
 function onQueue(q) {
   q = Array.isArray(q) ? q : [];
-  try { window.mochiRoom && mochiRoom.queue(q); } catch (x) {}
+  try { window.personalComputerRoom && personalComputerRoom.queue(q); } catch (x) {}
   for (const id of [...held.keys()]) if (!q.some(x => x.id === id)) held.delete(id);
   qbox.hidden = !q.length; qbox.innerHTML = '';
   if (!q.length) return;
@@ -559,8 +559,8 @@ $('#c-forget').onclick = async () => {
 $('#c-save').onclick = async () => {
   const st = readSteps(); if (!st) return;
   cfg.tts = $('#c-tts').checked; cfg.sfx = $('#c-sfx').checked; cfg.room = $('#c-room').checked; cfg.vlang = $('#c-vlang').value;
-  try { window.mochiRoom && mochiRoom.sndUI(); } catch (x) {}
-  if (!cfg.tts && window.mochiStop) mochiStop();
+  try { window.personalComputerRoom && personalComputerRoom.sndUI(); } catch (x) {}
+  if (!cfg.tts && window.personalComputerStop) personalComputerStop();
   const body = { base: $('#c-base').value.trim(), model: $('#c-model').value.trim(), sys: $('#c-sys').value.trim(), vis: $('#c-vis').checked, ...st };
   const k = $('#c-key').value.trim();
   if (k) body.key = k; else if (clearKey) body.clearKey = true;
@@ -685,7 +685,7 @@ $('#s-outall').onclick = () => logout(true);
 /* ---------- обновления ----------
    Сервер сам смотрит на GitHub, что нового. Если вышла новая версия, администратору при входе
    показывается окошко с Personal Computer: что изменилось и «Позже» / «Обновить». Обновляет root-служба на сервере
-   (server/bin/mochi-update): окошко показывает её шаги, переживает перезапуск сервера и перезагружает страницу.
+   (server/bin/personalcomputer-update): окошко показывает её шаги, переживает перезапуск сервера и перезагружает страницу.
    Остальные открытые страницы перезагружаются сами, когда видят новую сборку (build в snap). */
 css.textContent += `
 #upd{max-width:460px}
@@ -729,7 +729,7 @@ function upDraw(t) {
   if (!upd.open) return;
   requestAnimationFrame(upDraw);
   if (t - upT < 33) return; upT = t;
-  try { window.mochiRoom && mochiRoom.mirror(upc.getContext('2d'), upc.width, upc.height); } catch (e) {}
+  try { window.personalComputerRoom && personalComputerRoom.mirror(upc.getContext('2d'), upc.width, upc.height); } catch (e) {}
 }
 
 const UPH = {
@@ -745,11 +745,11 @@ const dday = s => { const d = s ? new Date(s) : null; return d && !isNaN(d) ? d.
 const ago = t => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'только что' : m < 60 ? m + ' мин назад' : m < 1440 ? Math.round(m / 60) + ' ч назад' : dday(t); };
 const ver = (c, d) => (c && c.commit ? c.commit : 'неизвестно') + ((d || c && c.date) ? ' от ' + dday(d || c.date) : '');
 /* доля готовности — по шагам установщика (он печатает их по порядку) */
-const UPCT = [[/что нового/, 4], [/Устанавливаю (Мочи|Personal Computer)/, 8], [/системные пакеты/, 12], [/Пакеты на месте/, 26], [/Node\.js/, 38], [/ttyd/, 46], [/Caddy/, 52],
-  [/код (Мочи|Personal Computer)/, 58], [/^Код:/, 68], [/Запускаю службы/, 76], [/Сервер (Мочи|Personal Computer) работает/, 88], [/сертификат/, 92], [/HTTPS/, 96]];
+const UPCT = [[/что нового/, 4], [/Устанавливаю Personal Computer/, 8], [/системные пакеты/, 12], [/Пакеты на месте/, 26], [/Node\.js/, 38], [/ttyd/, 46], [/Caddy/, 52],
+  [/код Personal Computer/, 58], [/^Код:/, 68], [/Запускаю службы/, 76], [/Сервер Personal Computer работает/, 88], [/сертификат/, 92], [/HTTPS/, 96]];
 const pct = steps => steps.reduce((p, s) => Math.max(p, ...UPCT.filter(([re]) => re.test(s.t)).map(x => x[1])), 3);
 /* «Позже» — не напоминать об этой версии сутки */
-const LATER = 'mochi-upd-later';
+const LATER = 'personalcomputer-upd-later';
 const snoozed = c => { try { const v = JSON.parse(localStorage.getItem(LATER) || 'null'); return !!v && v.c === c && Date.now() < v.t; } catch (e) { return false; } };
 const snooze = c => { try { localStorage.setItem(LATER, JSON.stringify({ c, t: Date.now() + 864e5 })); } catch (e) {} };
 
@@ -778,7 +778,7 @@ function uOffer(i) {
   }
   const can = i.admin && i.ready && i.available !== false;
   if (!i.admin) unote(m, 'Обновить Personal Computer может администратор сервера.');
-  else if (!i.ready) unote(m, 'Чтобы обновлять прямо отсюда, один раз выполни на сервере «sudo mochi update» — эта команда поставит службу обновления. Дальше хватит кнопки.');
+  else if (!i.ready) unote(m, 'Чтобы обновлять прямо отсюда, один раз выполни на сервере «sudo personalcomputer update» — эта команда поставит службу обновления. Дальше хватит кнопки.');
   else if (can) unote(m, 'Сервер перезапустится примерно на минуту. Переписка, настройки и файлы сохранятся' + (i.busy ? ', а начатые задачи продолжатся сами.' : '.'));
   uSay(i.available === false ? upick(UPH.fresh) : i.available ? upick(UPH.offer) : upick(UPH.unknown), i.available === false ? 'happy' : 'wow', 2500);
   uBtns([can ? 'Позже' : 'Закрыть', () => { if (can && i.latest) snooze(i.latest.commit); upd.close(); }], can ? ['Обновить', uGo] : null);
@@ -796,13 +796,13 @@ function uRun(st, down) {
   const steps = st.steps || [], last = steps.filter(s => s.k === 'run' || s.k === 'ok').at(-1);
   const up = st.state === 'queued' ? 3 : pct(steps);
   m.querySelector('.ubar i').style.width = up + '%';
-  try { window.mochiRoom && mochiRoom.update(up); } catch (x) {} /* экран компьютера в шапке: «ОБНОВЛЕНИЕ n%» */
+  try { window.personalComputerRoom && personalComputerRoom.update(up); } catch (x) {} /* экран компьютера в шапке: «ОБНОВЛЕНИЕ n%» */
   const ul = m.querySelector('.ust'); ul.innerHTML = '';
   /* «🐾 делаю…» мигает, только пока это последний шаг; пройденные — точкой */
   steps.slice(-6).forEach((s, k, a) => ul.append(el('li', s.k === 'run' && (k < a.length - 1 || st.state !== 'running') ? 'past' : s.k, s.t)));
   m.querySelector('.note')?.remove();
   const stuck = st.state === 'queued' && Date.now() - st.since > 60e3;
-  if (stuck) unote(m, 'Служба обновления на сервере пока не отвечает. Проверь её: «systemctl status mochi-update.path» (на Alpine — «rc-service mochi-updater status»). Обновить можно и командой «sudo mochi update».');
+  if (stuck) unote(m, 'Служба обновления на сервере пока не отвечает. Проверь её: «systemctl status personalcomputer-update.path» (на Alpine — «rc-service personalcomputer-updater status»). Обновить можно и командой «sudo personalcomputer update».');
   uSay(down ? 'Сервер перезапускается… сейчас вернусь!' : st.state === 'queued' ? 'Передаю просьбу серверу…' : last ? last.t : 'Обновляюсь…', 'work');
   uBtns(stuck ? ['Отменить', async () => { try { updState(await api('api/update', { method: 'DELETE' })); clearTimeout(uPoll); uMode = ''; upd.close(); } catch (e) {} }] : ['Скрыть', () => upd.close()], ['Обновляю…', null]);
 }
@@ -813,7 +813,7 @@ function uTick() {
     try { i = await api('api/update'); uLastOk = Date.now(); }
     catch (e) { if (e.status === 401) { uMode = ''; upd.close(); return check(); } }
     if (!i) {
-      if (Date.now() - uLastOk > 10 * 60e3) return uFail({ error: 'Сервер не отвечает уже 10 минут. Загляни на сервер: «mochi status» и «mochi logs».', steps: uLast ? uLast.steps : [] });
+      if (Date.now() - uLastOk > 10 * 60e3) return uFail({ error: 'Сервер не отвечает уже 10 минут. Загляни на сервер: «personalcomputer status» и «personalcomputer logs».', steps: uLast ? uLast.steps : [] });
       if (uMode === 'run' && upd.open) uRun(uLast || { state: 'running', steps: [] }, true);
       return uTick();
     }
@@ -897,7 +897,7 @@ function updState(i) {
   $('#s-upd').textContent = lines.join('\n'); $('#s-upd').style.whiteSpace = 'pre-line';
   $('#s-updgo').hidden = !(i.admin && i.ready && (busy || i.available || (i.available === null && i.latest)));
   $('#s-updgo span').textContent = busy ? 'Показать ход' : 'Обновить';
-  $('#s-updn').textContent = !i.admin ? 'Обновляет администратор сервера.' : !i.ready ? 'Чтобы обновлять из браузера, один раз выполни на сервере «sudo mochi update» — она поставит службу обновления.' : 'Personal Computer проверяет GitHub раз в 6 часов и сам предложит обновиться. Откуда берётся код: ' + (i.repo || '?') + (i.ref && i.ref !== 'HEAD' ? ' (ветка ' + i.ref + ')' : '') + '.';
+  $('#s-updn').textContent = !i.admin ? 'Обновляет администратор сервера.' : !i.ready ? 'Чтобы обновлять из браузера, один раз выполни на сервере «sudo personalcomputer update» — она поставит службу обновления.' : 'Personal Computer проверяет GitHub раз в 6 часов и сам предложит обновиться. Откуда берётся код: ' + (i.repo || '?') + (i.ref && i.ref !== 'HEAD' ? ' (ветка ' + i.ref + ')' : '') + '.';
   foldMeta(fUpd, busy ? 'обновляется…' : i.available ? 'есть новая' : i.available === false ? 'последняя' : i.error ? 'не проверить' : i.current && i.current.commit || '', !busy && !i.available && !!i.error);
   fUpd.querySelector(':scope>summary>.fm').classList.toggle('new', !!(busy || i.available));
 }
@@ -913,7 +913,7 @@ $('#s-updc').onclick = async () => {
 $('#s-updgo').onclick = () => updI && updOpen(updI);
 
 /* ---------- настройки → Сервер → «Доступ агента» ----------
-   Обычный пользователь mochi-agent или полный root (sudo без пароля). Переключает root-служба mochi-access:
+   Обычный пользователь personalcomputer-agent или полный root (sudo без пароля). Переключает root-служба personalcomputer-access:
    сервер кладёт запрос, служба правит sudoers и изоляцию, перезапускает исполнитель и терминал.
    Включить — только администратор и только с паролем; выключить — одной кнопкой. */
 const fAcc = fold('acc', 'Доступ агента');
@@ -939,7 +939,7 @@ function accState(i) {
     if (i.mode === 'off') line('Права дал не Personal Computer: sudo для ' + i.user + ' настроен на сервере вручную.');
   } else {
     line('Обычный пользователь ' + i.user + ': без root, только свои папки и то, что разрешено всем.');
-    if (i.mode === 'on') line('Root включён, но sudo у агента сейчас не работает. Включи ещё раз или выполни на сервере: sudo mochi root on', 'bad');
+    if (i.mode === 'on') line('Root включён, но sudo у агента сейчас не работает. Включи ещё раз или выполни на сервере: sudo personalcomputer root on', 'bad');
   }
   if (!busy && st.state === 'failed') line('Не получилось: ' + (st.error || 'ошибка'), 'bad');
   if (!busy && st.note) line('! ' + st.note);
@@ -948,8 +948,8 @@ function accState(i) {
   b.hidden = !can || busy; b.firstChild.textContent = i.root ? 'Забрать root' : 'Дать полный root';
   $('#s-acccn').hidden = !(i.admin && st.state === 'queued' && Date.now() - st.since > 30e3);
   $('#s-accn').textContent = !i.admin ? 'Доступ агента меняет администратор сервера.'
-    : !i.ready ? 'Переключатель заработает после «sudo mochi update» на сервере. Сразу — командой там же: sudo mochi root ' + (i.root ? 'off' : 'on') + '.'
-    : st.state === 'queued' && Date.now() - st.since > 30e3 ? 'Служба на сервере пока не взяла запрос. Проверь её: «systemctl status mochi-access.path» (на Alpine — «rc-service mochi-updater status») или переключи командой: sudo mochi root ' + (st.want || 'on') + '.'
+    : !i.ready ? 'Переключатель заработает после «sudo personalcomputer update» на сервере. Сразу — командой там же: sudo personalcomputer root ' + (i.root ? 'off' : 'on') + '.'
+    : st.state === 'queued' && Date.now() - st.since > 30e3 ? 'Служба на сервере пока не взяла запрос. Проверь её: «systemctl status personalcomputer-access.path» (на Alpine — «rc-service personalcomputer-updater status») или переключи командой: sudo personalcomputer root ' + (st.want || 'on') + '.'
     : i.root ? 'Терминал: sudo -i — root-оболочка. Забрать root можно в любой момент; то, что агент уже поменял в системе, останется как есть.'
     : 'Полный доступ — как у администратора сервера: sudo без пароля, системные пакеты, службы, файлы в /etc. Включается с паролем от Personal Computer.';
   foldMeta(fAcc, busy ? 'переключается…' : i.root ? 'root' : 'без root', !busy && st.state === 'failed');
@@ -994,7 +994,7 @@ async function accSet(on) {
     catch (e) { await ask('Полный доступ', 'Не получилось: ' + e.message, null, 'OK'); }
     finally { b.disabled = false; }
   } else {
-    if (!await askML('Забрать root', 'Агент снова станет обычным пользователем ' + (accI ? accI.user : 'mochi-agent') + '.\n\nИсполнитель команд и терминал перезапустятся. То, что агент уже поменял в системе с root, останется как есть.', null, 'Забрать')) return;
+    if (!await askML('Забрать root', 'Агент снова станет обычным пользователем ' + (accI ? accI.user : 'personalcomputer-agent') + '.\n\nИсполнитель команд и терминал перезапустятся. То, что агент уже поменял в системе с root, останется как есть.', null, 'Забрать')) return;
     b.disabled = true;
     try { accState(await post('api/access', { root: false })); accWait = -Date.now(); accTick(); }
     catch (e) { await ask('Забрать root', 'Не получилось: ' + e.message, null, 'OK'); }
@@ -1239,9 +1239,9 @@ function ttyLook() {
   let d; try { d = tty.contentDocument; } catch (e) { return; }
   const t = xterm();
   if (!d || !t || !t.options) { if (tty) lookT = setTimeout(ttyLook, 150); return; } /* xterm ещё не создан */
-  let st = d.getElementById('mochi-look');
+  let st = d.getElementById('personalcomputer-look');
   if (!st) {
-    st = d.createElement('style'); st.id = 'mochi-look';
+    st = d.createElement('style'); st.id = 'personalcomputer-look';
     st.textContent = fontCss() + `
 html,body{background:transparent!important}
 #terminal-container{background:transparent!important}
@@ -1275,7 +1275,7 @@ function tx(s) {
 }
 document.querySelector('nav [data-v=term]').addEventListener('click', () => { ttyFrame(); setTimeout(() => { fit(); const t = xterm(); t && t.focus && t.focus(); }, 80); });
 /* проводник: «Открыть в терминале» — перейти в папку (терминал мог ещё не загрузиться — ждём xterm) */
-window.mochiTermCd = dir => {
+window.personalComputerTermCd = dir => {
   navTo('term'); ttyFrame();
   const cmd = "cd '" + String(dir).replace(/'/g, "'\\''") + "'\r";
   let n = 0;
@@ -1619,7 +1619,7 @@ async function hello() {
   started();
 }
 addEventListener('online', () => { if (helloT) hello(); });
-if (window.mochiBoot) mochiBoot.onRetry = () => { if (helloT) hello(); else if (me && !connected) { if (es) { es.close(); es = null; } connect(); } };
+if (window.personalComputerBoot) personalComputerBoot.onRetry = () => { if (helloT) hello(); else if (me && !connected) { if (es) { es.close(); es = null; } connect(); } };
 setSt('подключаюсь к серверу…', 'on');
 hello();
 })();

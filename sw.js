@@ -1,6 +1,6 @@
 /* Personal Computer: офлайн-кэш страницы — «сначала сеть» (обновления приходят сразу), из кэша — только если сервер
    не ответил. /api/, /term/ и /srv/ не кэшируются вовсе. */
-const V = 'mochi-v5';
+const V = 'personalcomputer-v5';
 const CORE = ['./', './index.html', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-192.png', './icons/maskable-512.png'];
 
@@ -8,8 +8,9 @@ self.addEventListener('install', e => {
   e.waitUntil(caches.open(V).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
+  /* старые версии кэша, в том числе прежние «mochi-…» */
   e.waitUntil(caches.keys()
-    .then(ks => Promise.all(ks.filter(k => k.startsWith('mochi-') && k !== V).map(k => caches.delete(k))))
+    .then(ks => Promise.all(ks.filter(k => /^(personalcomputer|mochi)-/.test(k) && k !== V).map(k => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 

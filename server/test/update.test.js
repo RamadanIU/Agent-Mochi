@@ -1,5 +1,5 @@
 /* Обновления: проверка GitHub (API, ETag, запасная лента коммитов), запрос «Обновить» от администратора
-   и настоящий server/bin/mochi-update с поддельным установщиком */
+   и настоящий server/bin/personalcomputer-update с поддельным установщиком */
 import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -8,10 +8,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { startMochi, registered, client, sleep } from './helpers.js';
+import { startPersonalComputer, registered, client, sleep } from './helpers.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const SCRIPT = path.join(here, '..', 'bin', 'mochi-update');
+const SCRIPT = path.join(here, '..', 'bin', 'personalcomputer-update');
 const A = 'a'.repeat(40), B = 'b'.repeat(40), C = 'c'.repeat(40), D = 'd'.repeat(40);
 const COMMITS = [
   { sha: B, parents: [{ sha: A }, { sha: C }], commit: { message: 'Merge pull request #12 from me/upd\n\nОбновление прямо из настроек', committer: { date: '2026-10-07T20:00:00Z' } } },
@@ -33,14 +33,14 @@ async function fakeGitHub() {
   const s = { mode: 'ok', calls: [], v: 1 };
   const srv = http.createServer((req, res) => {
     s.calls.push({ url: req.url, inm: req.headers['if-none-match'] || null });
-    if (req.url.startsWith('/repos/me/mochi/commits')) {
+    if (req.url.startsWith('/repos/me/personalcomputer/commits')) {
       if (s.mode === 'limit') { res.writeHead(403, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(Math.floor(Date.now() / 1000) + 600) }); return res.end('{"message":"API rate limit exceeded"}'); }
       if (s.mode === 'gone') { res.writeHead(404); return res.end('{"message":"Not Found"}'); }
       const etag = '"v' + s.v + '"';
       if (req.headers['if-none-match'] === etag) { res.writeHead(304, { etag }); return res.end(); }
       res.writeHead(200, { 'content-type': 'application/json', etag }); return res.end(JSON.stringify(COMMITS));
     }
-    if (req.url === '/me/mochi/commits.atom') { res.writeHead(200, { 'content-type': 'application/atom+xml', etag: '"f1"' }); return res.end(FEED); }
+    if (req.url === '/me/personalcomputer/commits.atom') { res.writeHead(200, { 'content-type': 'application/atom+xml', etag: '"f1"' }); return res.end(FEED); }
     res.writeHead(404); res.end();
   });
   await new Promise(ok => srv.listen(0, '127.0.0.1', ok));
@@ -48,19 +48,19 @@ async function fakeGitHub() {
   s.close = () => srv.close();
   return s;
 }
-/* «root-служба» в миниатюре: настоящий mochi-update с поддельным установщиком */
+/* «root-служба» в миниатюре: настоящий personalcomputer-update с поддельным установщиком */
 function runUpdater(installer, mode = 'service') {
   const inst = path.join(st, 'fake-install.sh');
   fs.writeFileSync(inst, '#!/usr/bin/env bash\n' + installer, { mode: 0o755 });
-  return spawnSync('bash', [SCRIPT, mode], { env: { ...process.env, MOCHI_STATE: st, MOCHI_ETC: path.join(st, 'etc'), MOCHI_INSTALL_SH: inst }, encoding: 'utf8' });
+  return spawnSync('bash', [SCRIPT, mode], { env: { ...process.env, PERSONALCOMPUTER_STATE: st, PERSONALCOMPUTER_ETC: path.join(st, 'etc'), PERSONALCOMPUTER_INSTALL_SH: inst }, encoding: 'utf8' });
 }
 
 before(async () => {
   gh = await fakeGitHub();
-  st = fs.mkdtempSync(path.join(os.tmpdir(), 'mochi-upd-'));
+  st = fs.mkdtempSync(path.join(os.tmpdir(), 'personalcomputer-upd-'));
   fs.mkdirSync(path.join(st, 'update'));
-  fs.writeFileSync(path.join(st, 'build.json'), JSON.stringify({ repo: 'me/mochi', ref: 'HEAD', commit: A, installed: '2026-10-05T11:00:00Z' }));
-  m = await startMochi({ MOCHI_DATA: path.join(st, 'data'), MOCHI_BUILD: path.join(st, 'build.json'), MOCHI_UPDATE_DIR: path.join(st, 'update'), MOCHI_UPDATE_API: gh.url, MOCHI_UPDATE_WEB: gh.url });
+  fs.writeFileSync(path.join(st, 'build.json'), JSON.stringify({ repo: 'me/personalcomputer', ref: 'HEAD', commit: A, installed: '2026-10-05T11:00:00Z' }));
+  m = await startPersonalComputer({ PERSONALCOMPUTER_DATA: path.join(st, 'data'), PERSONALCOMPUTER_BUILD: path.join(st, 'build.json'), PERSONALCOMPUTER_UPDATE_DIR: path.join(st, 'update'), PERSONALCOMPUTER_UPDATE_API: gh.url, PERSONALCOMPUTER_UPDATE_WEB: gh.url });
   admin = await registered(m, 'boss');
 });
 after(async () => { await m?.stop(); gh?.close(); if (st) fs.rmSync(st, { recursive: true, force: true }); });
@@ -92,12 +92,12 @@ test('лимит API GitHub — берём ленту коммитов; репо
   assert.equal(r.j.error, null);
   assert.equal(r.j.available, true);
   assert.deepEqual(r.j.changes.map(c => c.title), ['Обновление прямо из настроек', 'Питомец показывает ход обновления']);
-  assert.ok(gh.calls.some(c => c.url === '/me/mochi/commits.atom'), 'ходили в ленту');
+  assert.ok(gh.calls.some(c => c.url === '/me/personalcomputer/commits.atom'), 'ходили в ленту');
 
   gh.mode = 'gone';
   await sleep(1100);
   const g = await admin.json('/api/update/check', {});
-  assert.match(g.j.error, /на GitHub нет me\/mochi/);
+  assert.match(g.j.error, /на GitHub нет me\/personalcomputer/);
   assert.equal(g.j.available, true, 'прошлый ответ не теряем');
   gh.mode = 'ok';
 });
@@ -118,13 +118,13 @@ test('обновить может только администратор; за�
   assert.ok(!fs.existsSync(path.join(st, 'data', 'update.request')));
 });
 
-test('mochi-update: забирает запрос, пишет шаги и итог; полный журнал — отдельно', async () => {
+test('personalcomputer-update: забирает запрос, пишет шаги и итог; полный журнал — отдельно', async () => {
   await admin.json('/api/update', {});
   const ok = runUpdater(`echo "🐾 Устанавливаю Personal Computer · test"
 echo "шум, который в браузер не попадает"
 echo "✔ Пакеты на месте"
 echo "  Код приглашения: abcd-efgh-ijkl"
-echo "args=$* commit=[\${MOCHI_COMMIT}] updater=\${MOCHI_UPDATER}"
+echo "args=$* commit=[\${PERSONALCOMPUTER_COMMIT}] updater=\${PERSONALCOMPUTER_UPDATER}"
 echo "✔ Сервер Personal Computer работает"`);
   assert.equal(ok.status, 0, ok.stderr);
   assert.ok(!fs.existsSync(path.join(st, 'data', 'update.request')), 'запрос забран');
@@ -148,7 +148,7 @@ echo "✔ Сервер Personal Computer работает"`);
 
   /* вместо установщика скачалось что-то другое (страница ошибки) — не запускаем */
   fs.writeFileSync(path.join(st, 'not-installer.sh'), '<html>404</html>\n');
-  const j2 = spawnSync('bash', [SCRIPT, 'service'], { env: { ...process.env, MOCHI_STATE: st, MOCHI_ETC: path.join(st, 'etc'), MOCHI_INSTALL_SH: path.join(st, 'not-installer.sh') }, encoding: 'utf8' });
+  const j2 = spawnSync('bash', [SCRIPT, 'service'], { env: { ...process.env, PERSONALCOMPUTER_STATE: st, PERSONALCOMPUTER_ETC: path.join(st, 'etc'), PERSONALCOMPUTER_INSTALL_SH: path.join(st, 'not-installer.sh') }, encoding: 'utf8' });
   assert.equal(j2.status, 1);
   assert.match((await admin.json('/api/update', undefined, 'GET')).j.status.error, /не установщик Personal Computer/);
 });
@@ -167,14 +167,14 @@ test('обновление, которое оборвалось (процесс�
 });
 
 test('без службы обновления кнопка объясняет, что сделать', async () => {
-  const m2 = await startMochi({ MOCHI_BUILD: path.join(st, 'build.json'), MOCHI_UPDATE_API: gh.url, MOCHI_UPDATE_WEB: gh.url });
+  const m2 = await startPersonalComputer({ PERSONALCOMPUTER_BUILD: path.join(st, 'build.json'), PERSONALCOMPUTER_UPDATE_API: gh.url, PERSONALCOMPUTER_UPDATE_WEB: gh.url });
   try {
     const c = await registered(m2, 'solo');
     const g = await c.json('/api/update', undefined, 'GET');
     assert.equal(g.j.ready, false);
     const r = await c.json('/api/update', {});
     assert.equal(r.status, 409);
-    assert.match(r.j.error, /sudo mochi update/);
+    assert.match(r.j.error, /sudo personalcomputer update/);
   } finally { await m2.stop(); }
 });
 
@@ -183,7 +183,7 @@ test('сразу после обновления не предлагаем об�
   const X = '9'.repeat(40);
   COMMITS.unshift({ sha: X, parents: [{ sha: B }], commit: { message: 'Свежее исправление', committer: { date: '2026-10-07T21:00:00Z' } } });
   gh.v++;
-  fs.writeFileSync(path.join(st, 'build.json'), JSON.stringify({ repo: 'me/mochi', ref: 'HEAD', commit: X, installed: new Date().toISOString() }));
+  fs.writeFileSync(path.join(st, 'build.json'), JSON.stringify({ repo: 'me/personalcomputer', ref: 'HEAD', commit: X, installed: new Date().toISOString() }));
   await m.restart();
   const now = (await admin.json('/api/update', undefined, 'GET')).j;
   assert.equal(now.current.commit, '9999999');

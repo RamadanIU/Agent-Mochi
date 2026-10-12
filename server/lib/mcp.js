@@ -1,6 +1,6 @@
 /* MCP-клиент: Streamable HTTP и stdio — для всех MCP-серверов пользователя, в том числе предустановленного
    поиска в интернете (Parallel Search, см. PRESETS в ext.js).
-   stdio-сервер запускает исполнитель от имени mochi-agent — у процесса нет доступа к данным сервера. */
+   stdio-сервер запускает исполнитель от имени personalcomputer-agent — у процесса нет доступа к данным сервера. */
 import { spawnProc } from './runner-client.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
 
@@ -113,7 +113,7 @@ export class McpClient {
     return this.pending ??= (async () => {
       const signal = AbortSignal.timeout(ms);
       try {
-        const r = await this.t.rpc('initialize', { protocolVersion: PROTO, capabilities: {}, clientInfo: { name: 'mochi-server', version: '1' } }, signal);
+        const r = await this.t.rpc('initialize', { protocolVersion: PROTO, capabilities: {}, clientInfo: { name: 'personalcomputer-server', version: '1' } }, signal);
         this.info = { name: r?.serverInfo?.title || r?.serverInfo?.name || '', version: r?.serverInfo?.version || '', instructions: typeof r?.instructions === 'string' ? r.instructions.slice(0, 2000) : '' };
         await this.t.rpc('notifications/initialized', null, signal, true).catch(() => {});
         const all = []; let cursor;

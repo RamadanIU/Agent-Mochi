@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
 import path from 'node:path';
-import { fakeModel, startMochi, registered } from './helpers.js';
+import { fakeModel, startPersonalComputer, registered } from './helpers.js';
 import { startRunner } from '../lib/runner.js';
 
 let m, model;
@@ -31,7 +31,7 @@ before(async () => {
     const n = msgs.slice(u + 1).filter(x => x.role === 'tool').length;
     return n < STEPS.length ? { tools: [STEPS[n]] } : { text: 'готово' };
   });
-  m = await startMochi();
+  m = await startPersonalComputer();
 });
 after(async () => { await m?.stop(); model?.close(); });
 
@@ -57,7 +57,7 @@ test('read_file / edit_file / write_file через агента: защита �
   assert.match(out[8], /^Ошибка: похоже, вместо кода стоит заглушка/);
   /* та же правка повторно — модель настаивает, значит это не сокращение */
   assert.match(out[9], /^Изменён src\/app\.js/);
-  const dir = path.join(m.env.MOCHI_WORK, 'filer');
+  const dir = path.join(m.env.PERSONALCOMPUTER_WORK, 'filer');
   assert.equal(fs.readFileSync(path.join(dir, 'exist.txt'), 'utf8'), 'новое\n');
   assert.equal(fs.readFileSync(path.join(dir, 'src/app.js'), 'utf8'), 'const a = 2;\n// ... остальное без изменений ...\n');
   /* шаги на экране: понятные подписи, путь в подсказке, ошибки помечены */
@@ -87,7 +87,7 @@ test('выключенные пользователем файловые инс�
 });
 
 test('исполнитель: файловые операции по unix-сокету', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mochi-runner-')), sock = path.join(dir, 'r.sock');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'personalcomputer-runner-')), sock = path.join(dir, 'r.sock');
   const srv = startRunner(sock);
   await new Promise(ok => srv.once('listening', ok));
   const c = net.createConnection(sock);

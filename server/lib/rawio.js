@@ -1,4 +1,4 @@
-/* Потоки «заголовок + байты» между сервером, исполнителем и root-помощником (sudo node mochi.js fsget/fsput):
+/* Потоки «заголовок + байты» между сервером, исполнителем и root-помощником (sudo node personalcomputer.js fsget/fsput):
    первая строка — JSON, дальше — сырые байты файла. */
 import { Readable } from 'node:stream';
 

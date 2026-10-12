@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-/* mochi serve   — веб-сервер и агент (пользователь mochi)
-   mochi runner  — исполнитель команд агента (пользователь mochi-agent)
-   mochi fileop  — файловая операция агента от root (через sudo, при полном доступе)
-   mochi fsop | fsget | fsput — то же для проводника: операция, чтение байтов, загрузка файла
-   mochi invite [дней] | users | passwd <имя> | admin <имя> [off] | deluser <имя> | status — управление (root) */
+/* personalcomputer serve   — веб-сервер и агент (пользователь personalcomputer)
+   personalcomputer runner  — исполнитель команд агента (пользователь personalcomputer-agent)
+   personalcomputer fileop  — файловая операция агента от root (через sudo, при полном доступе)
+   personalcomputer fsop | fsget | fsput — то же для проводника: операция, чтение байтов, загрузка файла
+   personalcomputer invite [дней] | users | passwd <имя> | admin <имя> [off] | deluser <имя> | status — управление (root) */
 import net from 'node:net';
 import crypto from 'node:crypto';
 import { CFG } from './lib/config.js';
@@ -18,7 +18,7 @@ function adminCall(a) {
     c.on('connect', () => c.write(JSON.stringify(a) + '\n'));
     c.on('data', d => buf += d);
     c.on('end', () => { try { ok(JSON.parse(buf)); } catch { no(new Error('пустой ответ')); } });
-    c.on('error', e => no(new Error(e.code === 'EACCES' ? 'нет доступа: запусти через sudo' : e.code === 'ENOENT' || e.code === 'ECONNREFUSED' ? 'сервер Personal Computer не запущен (sudo mochi restart)' : e.message)));
+    c.on('error', e => no(new Error(e.code === 'EACCES' ? 'нет доступа: запусти через sudo' : e.code === 'ENOENT' || e.code === 'ECONNREFUSED' ? 'сервер Personal Computer не запущен (sudo personalcomputer restart)' : e.message)));
   });
 }
 
@@ -35,12 +35,12 @@ switch (cmd) {
   }
   case 'users': {
     const r = out(await adminCall(['users']));
-    if (!r.users.length) console.log('Пользователей пока нет. Создай приглашение: sudo mochi invite');
+    if (!r.users.length) console.log('Пользователей пока нет. Создай приглашение: sudo personalcomputer invite');
     for (const u of r.users) console.log(`${u.name.padEnd(20)} ${u.admin ? 'админ ' : '      '} сессий: ${u.sessions}  ${u.running ? 'работает' : ''} ${u.telegram ? 'telegram' : ''}`);
     break;
   }
   case 'passwd': {
-    if (!args[0]) { console.error('Использование: mochi passwd <имя>'); process.exit(2); }
+    if (!args[0]) { console.error('Использование: personalcomputer passwd <имя>'); process.exit(2); }
     const pw = crypto.randomBytes(12).toString('base64url');
     out(await adminCall(['passwd', args[0], pw]));
     console.log(`Новый пароль для ${args[0]}: ${pw}\nВсе сессии пользователя завершены. Смени пароль после входа (настройки → Сервер).`);
@@ -49,7 +49,7 @@ switch (cmd) {
   case 'admin': out(await adminCall(['admin', args[0], args[1] || 'on'])); console.log('Готово'); break;
   case 'deluser': { const r = out(await adminCall(['deluser', args[0]])); console.log('Удалён.', r.note || ''); break; }
   case 'status': { const r = out(await adminCall(['status'])); console.log(JSON.stringify(r, null, 2)); break; }
-  /* файловая операция агента от root: исполнитель зовёт «sudo -n -- node mochi.js fileop», когда у mochi-agent
+  /* файловая операция агента от root: исполнитель зовёт «sudo -n -- node personalcomputer.js fileop», когда у personalcomputer-agent
      не хватило прав, а полный доступ включён. Запрос JSON — на stdin, ответ JSON — на stdout */
   case 'fileop': {
     let s = '';

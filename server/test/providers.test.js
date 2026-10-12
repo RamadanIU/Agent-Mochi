@@ -1,7 +1,7 @@
 import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { startMochi, registered, fakeModel } from './helpers.js';
+import { startPersonalComputer, registered, fakeModel } from './helpers.js';
 
 /* шлюз модели, как JustWoker за Cloudflare: /models отвечает, а запросы к модели режет правило WAF — и Node.js, и curl */
 const WAF = '<!DOCTYPE html>\n<!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]-->\n<head>\n<title>Attention Required! | Cloudflare</title>\n</head><body>'
@@ -19,7 +19,7 @@ before(async () => {
   });
   await new Promise(ok => gw.listen(0, '127.0.0.1', ok));
   base = 'http://127.0.0.1:' + gw.address().port;
-  m = await startMochi();
+  m = await startPersonalComputer();
 });
 after(async () => { await m?.stop(); gw?.close(); });
 
@@ -145,7 +145,7 @@ test('настройки до сохранения провайдеров: те�
   const c = await registered(m, 'legacy');
   const me = (await c.json('/api/account', undefined, 'GET')).j.user;
   const fs = await import('node:fs'), path = await import('node:path');
-  const dir = path.join(m.env.MOCHI_DATA, 'users', me.id);
+  const dir = path.join(m.env.PERSONALCOMPUTER_DATA, 'users', me.id);
   fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ base: 'https://old.example/v1', key: 'sk-old', model: 'old-1' }));
   await m.restart();
   const s = (await c.json('/api/settings', undefined, 'GET')).j;

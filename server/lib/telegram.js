@@ -101,7 +101,7 @@ class Bot {
     if (cmd === 'stop') { if (chat.running) { chat.stop(); return this.send('⏹ Останавливаю…'); } return this.send('Я и так ничего не делаю ^_^'); }
     if (cmd === 'now') return this.send(chat.hurry() ? '⚡ Бросаю текущий шаг и читаю твои сообщения' : chat.running ? 'Новых сообщений нет — продолжаю работу' : 'Я и так ничего не делаю ^_^');
     if (cmd === 'new') { await chat.fresh(); return this.send('🆕 Новый чат. Прошлый остался в истории.'); }
-    if (cmd === 'web') return this.send(CFG.publicUrl ? CFG.publicUrl + '/' : 'Адрес веб-чата не задан (MOCHI_PUBLIC_URL).');
+    if (cmd === 'web') return this.send(CFG.publicUrl ? CFG.publicUrl + '/' : 'Адрес веб-чата не задан (PERSONALCOMPUTER_PUBLIC_URL).');
     if (cmd === 'notify') {
       const mode = (txt.split(/\s+/)[1] || '').toLowerCase();
       if (!['away', 'always', 'off'].includes(mode)) return this.send('Сейчас: ' + (v.notify || 'away') + '\n/notify away — когда веб-чат закрыт\n/notify always — всегда\n/notify off — никогда');

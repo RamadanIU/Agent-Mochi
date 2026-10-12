@@ -1,14 +1,14 @@
 {
-  "name": "mochi-server",
+  "name": "personalcomputer-server",
   "version": "1.0.0",
   "private": true,
-  "description": "Облачный агент Мочи: чат, фоновая работа на сервере, терминал ttyd и Telegram",
+  "description": "Облачный агент Personal Computer: чат, фоновая работа на сервере, терминал ttyd и Telegram",
   "type": "module",
   "engines": { "node": ">=20" },
-  "bin": { "mochi": "mochi.js" },
+  "bin": { "personalcomputer": "personalcomputer.js" },
   "scripts": {
-    "start": "node mochi.js serve",
-    "dev": "MOCHI_DEV=1 MOCHI_DATA=./.dev/data MOCHI_WORK=./.dev/work node mochi.js serve",
+    "start": "node personalcomputer.js serve",
+    "dev": "PERSONALCOMPUTER_DEV=1 PERSONALCOMPUTER_DATA=./.dev/data PERSONALCOMPUTER_WORK=./.dev/work node personalcomputer.js serve",
     "test": "node --test test/*.test.js"
   }
 }

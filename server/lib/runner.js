@@ -1,5 +1,5 @@
-/* Исполнитель команд агента. Работает отдельной службой от имени mochi-agent (без доступа к данным сервера)
-   и слушает unix-сокет, доступный только группе mochi. Протокол — JSON-строки:
+/* Исполнитель команд агента. Работает отдельной службой от имени personalcomputer-agent (без доступа к данным сервера)
+   и слушает unix-сокет, доступный только группе personalcomputer. Протокол — JSON-строки:
      → {id, op:'exec', cmd, cwd, timeout}   ← {id, op:'done', out, code, cwd, timedOut, killed}
      → {id, op:'kill'}
      → {id, op:'info'}                      ← {id, op:'info', ...}
@@ -28,9 +28,9 @@ import { readHead, bodyOf, lines } from './rawio.js';
 import { mirror } from './mirror.js';
 
 const SHELL = ['/bin/bash', '/usr/bin/bash'].find(p => fs.existsSync(p)) || '/bin/sh';
-const SCRIPT = `trap 'pwd >"$MOCHI_CWDF" 2>/dev/null' EXIT
+const SCRIPT = `trap 'pwd >"$PERSONALCOMPUTER_CWDF" 2>/dev/null' EXIT
 exec 2>&1
-eval "$MOCHI_CMD"`;
+eval "$PERSONALCOMPUTER_CMD"`;
 const KEEP_HEAD = 4000, KEEP_TAIL = 12000, MEM = 2 * 2 ** 20;
 
 /* убираем цвета и «перерисовки» прогресс-баров — модели нужен чистый текст */
@@ -44,7 +44,7 @@ export function cleanOut(s) {
 
 function agentEnv(home) {
   const e = { ...process.env };
-  for (const k of Object.keys(e)) if (/^MOCHI_|^NOTIFY_SOCKET$|^INVOCATION_ID$|^JOURNAL_STREAM$/.test(k)) delete e[k];
+  for (const k of Object.keys(e)) if (/^PERSONALCOMPUTER_|^NOTIFY_SOCKET$|^INVOCATION_ID$|^JOURNAL_STREAM$/.test(k)) delete e[k];
   const nodeBin = path.dirname(process.execPath);
   return {
     ...e,
@@ -61,8 +61,8 @@ export function execCommand({ cmd, cwd, timeout }, done) {
   const home = os.homedir();
   let dir = cwd && fs.existsSync(cwd) ? cwd : home;
   const sec = Math.min(Math.max(+timeout || 120, 1), 3600);
-  const cwdf = path.join(os.tmpdir(), '.mochi-cwd-' + crypto.randomBytes(6).toString('hex'));
-  const env = { ...agentEnv(home), MOCHI_CMD: String(cmd), MOCHI_CWDF: cwdf };
+  const cwdf = path.join(os.tmpdir(), '.personalcomputer-cwd-' + crypto.randomBytes(6).toString('hex'));
+  const env = { ...agentEnv(home), PERSONALCOMPUTER_CMD: String(cmd), PERSONALCOMPUTER_CWDF: cwdf };
   let head = '', tail = '', total = 0, timedOut = false, killed = false, finished = false, killT;
   const t0 = Date.now();
   let ch;
@@ -114,11 +114,11 @@ export function spawnProcess({ cmd, cwd, env }, onLine, onExit) {
   const home = os.homedir();
   const dir = cwd && fs.existsSync(cwd) ? cwd : home;
   const extra = {};
-  for (const [k, v] of Object.entries(env && typeof env === 'object' ? env : {})) if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(k) && !/^MOCHI_/.test(k)) extra[k] = String(v);
+  for (const [k, v] of Object.entries(env && typeof env === 'object' ? env : {})) if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(k) && !/^PERSONALCOMPUTER_/.test(k)) extra[k] = String(v);
   let ch, out = '', err = '', finished = false, killT;
   const dec = new StringDecoder('utf8');
   try {
-    ch = spawn(SHELL, ['-c', 'eval "$MOCHI_CMD"'], { cwd: dir, env: { ...agentEnv(home), ...extra, MOCHI_CMD: String(cmd) }, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    ch = spawn(SHELL, ['-c', 'eval "$PERSONALCOMPUTER_CMD"'], { cwd: dir, env: { ...agentEnv(home), ...extra, PERSONALCOMPUTER_CMD: String(cmd) }, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
   } catch (e) {
     setImmediate(() => onExit(-1, 'Ошибка запуска: ' + e.message));
     return { write() {}, kill() {} };
@@ -164,16 +164,16 @@ export function sysInfo() {
 }
 
 /* ---------- файловые инструменты при полном доступе ----------
-   Сначала — от имени mochi-agent (файлы в рабочих папках остаются его). Не хватило прав, а у агента root
-   (sudo без пароля) — тот же fileOp ещё раз от root: sudo node mochi.js fileop, запрос JSON на stdin, ответ на stdout.
-   Так правка /etc/nginx/… через edit_file работает так же, как через «sudo tee». В разработке — только с MOCHI_AGENT_SUDO=1 */
-const MOCHI_JS = fileURLToPath(new URL('../mochi.js', import.meta.url));
+   Сначала — от имени personalcomputer-agent (файлы в рабочих папках остаются его). Не хватило прав, а у агента root
+   (sudo без пароля) — тот же fileOp ещё раз от root: sudo node personalcomputer.js fileop, запрос JSON на stdin, ответ на stdout.
+   Так правка /etc/nginx/… через edit_file работает так же, как через «sudo tee». В разработке — только с PERSONALCOMPUTER_AGENT_SUDO=1 */
+const PERSONALCOMPUTER_JS = fileURLToPath(new URL('../personalcomputer.js', import.meta.url));
 const DENIED = new Set(['EACCES', 'EPERM']);
 const rootFiles = () => (CFG.agentSudo || !CFG.dev) && process.getuid?.() !== 0 && sysInfo().sudo;
 
-/* sudo node mochi.js <cmd>: запрос — на stdin; ответ — JSON на stdout (fsget — заголовок и байты, см. agentFsOpen) */
+/* sudo node personalcomputer.js <cmd>: запрос — на stdin; ответ — JSON на stdout (fsget — заголовок и байты, см. agentFsOpen) */
 function spawnRoot(cmd) {
-  return spawn(CFG.sudo, ['-n', '--', process.execPath, MOCHI_JS, cmd], { cwd: os.homedir(), stdio: ['pipe', 'pipe', 'pipe'] });
+  return spawn(CFG.sudo, ['-n', '--', process.execPath, PERSONALCOMPUTER_JS, cmd], { cwd: os.homedir(), stdio: ['pipe', 'pipe', 'pipe'] });
 }
 function rootJson(cmd, q, body) {
   return new Promise((ok, no) => {
@@ -204,7 +204,7 @@ export async function agentFileOp(q) {
   let r2;
   try { r2 = await fileOpAsRoot({ ...q, path: resolvePath(q.path, q.cwd) }); }
   catch (e) { return { ...r, err: r.err + ` (повторить от root не вышло: ${e.message})` }; }
-  if (r2.text && q.fop !== 'read') r2.text += '\n[сделано от root: прав mochi-agent не хватило]';
+  if (r2.text && q.fop !== 'read') r2.text += '\n[сделано от root: прав personalcomputer-agent не хватило]';
   return { ...r2, root: true };
 }
 

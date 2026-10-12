@@ -1,7 +1,7 @@
 /* Файлы: рабочая папка агента ⇄ пользователь.
    Рабочая папка принадлежит агенту, поэтому всё, что там лежит, считаем недоверенным:
    • читаем только обычные файлы, а настоящий путь открытого дескриптора (/proc/self/fd) обязан быть
-     внутри MOCHI_WORK — симлинк на данные сервера (/var/lib/mochi/data) не пройдёт;
+     внутри PERSONALCOMPUTER_WORK — симлинк на данные сервера (/var/lib/personalcomputer/data) не пройдёт;
    • пишем только новые файлы (O_EXCL|O_NOFOLLOW), чтобы агент не подсунул симлинк для перезаписи. */
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -27,7 +27,7 @@ const work = () => workReal ??= (() => { try { return fs.realpathSync(CFG.work);
 export function userDir(u) {
   const d = path.join(CFG.work, u.name);
   for (const x of [d, path.join(d, 'inbox'), path.join(d, 'outbox')]) {
-    /* группа mochi наследуется от setgid-папки агента; права — rwx для владельца и группы */
+    /* группа personalcomputer наследуется от setgid-папки агента; права — rwx для владельца и группы */
     try { fs.mkdirSync(x, { mode: 0o2770 }); try { fs.chmodSync(x, 0o2770); } catch { fs.chmodSync(x, 0o770); } }
     catch (e) { if (e.code !== 'EEXIST') throw e; }
   }

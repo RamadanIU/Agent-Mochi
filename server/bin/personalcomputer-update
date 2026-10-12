@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
 # Обновление Personal Computer до свежей версии с GitHub. Работает только от root:
-#   mochi-update service — запускает служба mochi-update (systemd .path), когда в браузере нажали «Обновить»:
+#   personalcomputer-update service — запускает служба personalcomputer-update (systemd .path), когда в браузере нажали «Обновить»:
 #                          сервер сам обновиться не может (у него нет прав), он лишь кладёт файл-запрос
 #                          в свои данные; что и откуда ставить, решает только этот скрипт;
-#   mochi-update watch   — то же для OpenRC: раз в 3 секунды смотрит, нет ли запроса (заодно — запроса
-#                          на смену доступа агента: его выполняет mochi-access);
-#   mochi-update cli     — «sudo mochi update» в терминале (ход виден на экране). Из исполнителя или терминала
+#   personalcomputer-update watch   — то же для OpenRC: раз в 3 секунды смотрит, нет ли запроса (заодно — запроса
+#                          на смену доступа агента: его выполняет personalcomputer-access);
+#   personalcomputer-update cli     — «sudo personalcomputer update» в терминале (ход виден на экране). Из исполнителя или терминала
 #                          Personal Computer (агент с root) — через запрос root-службе: установщик перезапускает их службы
-#                          и оборвал бы сам себя.
-# Берёт install.sh из того же репозитория и ветки, что при установке (/etc/mochi/install.conf),
+#                          и оборвал бы сам себя;
+#   personalcomputer-update legacy-cleanup — после переезда со старого имени (mochi) убрать то, что оставил
+#                          установщик на время: ссылки /opt/mochi и /var/lib/mochi, прежнюю службу обновления OpenRC.
+# Берёт install.sh из того же репозитория и ветки, что при установке (/etc/personalcomputer/install.conf),
 # ровно того коммита, который сейчас последний, и запускает его с --update.
-# Ход работы — в /var/lib/mochi/update: status.json и steps.log читает сервер (группа mochi),
+# Ход работы — в /var/lib/personalcomputer/update: status.json и steps.log читает сервер (группа personalcomputer),
 # полный журнал install.log — только root (там может оказаться код приглашения).
 set -uo pipefail
 umask 022
 
-ETC=${MOCHI_ETC:-/etc/mochi}
-STATE=${MOCHI_STATE:-/var/lib/mochi}
+ETC=${PERSONALCOMPUTER_ETC:-/etc/personalcomputer}
+STATE=${PERSONALCOMPUTER_STATE:-/var/lib/personalcomputer}
 DIR=$STATE/update
 REQ=$STATE/data/update.request
 AREQ=$STATE/data/access.request
@@ -26,14 +28,40 @@ REF=HEAD
 MODE=${1:-cli}
 ROOT=0; [ "$(id -u)" -eq 0 ] && ROOT=1
 
-case "$MODE" in service|watch|cli) ;; *) echo "Использование: mochi-update service|watch|cli" >&2; exit 2 ;; esac
-[ "$ROOT" = 1 ] || [ -n "${MOCHI_STATE:-}" ] || { echo "Нужны права root: sudo mochi update" >&2; exit 1; }
+case "$MODE" in service|watch|cli|legacy-cleanup) ;; *) echo "Использование: personalcomputer-update service|watch|cli" >&2; exit 2 ;; esac
+[ "$ROOT" = 1 ] || [ -n "${PERSONALCOMPUTER_STATE:-}" ] || { echo "Нужны права root: sudo personalcomputer update" >&2; exit 1; }
+
+# До переименования проект назывался mochi. Установщик переносит всё на новые имена, но оставляет ссылки
+# со старых путей: прежняя служба обновления (если обновление запустила она) дописывает туда ход работы.
+# Когда она закончила (замок обновления свободен), ссылки и саму прежнюю службу OpenRC убираем
+OLD=mochi
+legacy_left() { [ "$ROOT" = 1 ] && { [ -L "/opt/$OLD" ] || [ -L "/var/lib/$OLD" ] || [ -e "/etc/init.d/$OLD-updater" ]; }; }
+legacy_cleanup() {
+  legacy_left || return 0
+  if [ -e "/etc/init.d/$OLD-updater" ]; then
+    rc-update del "$OLD-updater" default >/dev/null 2>&1
+    rc-service "$OLD-updater" stop >/dev/null 2>&1
+    rm -f "/etc/init.d/$OLD-updater"
+  fi
+  local p
+  for p in "/opt/$OLD" "/var/lib/$OLD"; do [ -L "$p" ] && rm -f "$p"; done
+  return 0
+}
+if [ "$MODE" = legacy-cleanup ]; then
+  legacy_left || exit 0
+  if [ -d "$DIR" ]; then
+    exec 9>"$DIR/.lock"
+    if command -v flock >/dev/null 2>&1 && ! flock -n 9; then exit 0; fi  # обновление ещё идёт — уберём в другой раз
+  fi
+  legacy_cleanup; exit 0
+fi
 
 if [ "$MODE" = watch ]; then
   # OpenRC: .path-юнитов нет — проверяем запрос сами (один stat раз в 3 секунды)
   while :; do
+    legacy_left && "${BASH_SOURCE[0]}" legacy-cleanup
     [ -e "$REQ" ] && "${BASH_SOURCE[0]}" service
-    [ -e "$AREQ" ] && "$(dirname "${BASH_SOURCE[0]}")/mochi-access" service
+    [ -e "$AREQ" ] && "$(dirname "${BASH_SOURCE[0]}")/personalcomputer-access" service
     sleep 3
   done
 fi
@@ -43,20 +71,20 @@ fi
 [[ "$REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || REPO=RamadanIU/Agent-Mochi
 [[ "$REF" =~ ^[A-Za-z0-9._/-]+$ ]] || REF=HEAD
 
-if [ ! -d "$DIR" ]; then mkdir -p "$DIR"; chmod 0750 "$DIR"; [ "$ROOT" = 1 ] && chown root:mochi "$DIR" 2>/dev/null; fi
+if [ ! -d "$DIR" ]; then mkdir -p "$DIR"; chmod 0750 "$DIR"; [ "$ROOT" = 1 ] && chown root:personalcomputer "$DIR" 2>/dev/null; fi
 STEPS=$DIR/steps.log
 FULL=$DIR/install.log
 BY=web; [ "$MODE" = cli ] && BY=cli
 
-if [ "$MODE" = cli ] && grep -qE 'mochi-(runner|term)' "${MOCHI_CGROUP:-/proc/self/cgroup}" 2>/dev/null; then
+if [ "$MODE" = cli ] && grep -qE 'personalcomputer-(runner|term)' "${PERSONALCOMPUTER_CGROUP:-/proc/self/cgroup}" 2>/dev/null; then
   mkdir -p "$(dirname "$REQ")" && printf '{"by":"agent","t":%s000}\n' "$(date +%s)" > "$REQ" || { echo "Не получилось передать запрос: $REQ" >&2; exit 1; }
-  chmod 0600 "$REQ"; [ "$ROOT" = 1 ] && chown mochi:mochi "$REQ" 2>/dev/null
+  chmod 0600 "$REQ"; [ "$ROOT" = 1 ] && chown personalcomputer:personalcomputer "$REQ" 2>/dev/null
   echo "🐾 Запрос передан службе обновления: Personal Computer обновится сам, ход виден в настройках → Сервер → «Обновления»."
   echo "   Исполнитель команд и терминал при этом перезапустятся — эта команда оборвётся, это нормально."
   exit 0
 fi
 
-# одно обновление за раз (тот же замок берёт mochi-access: доступ агента не переключается посреди обновления)
+# одно обновление за раз (тот же замок берёт personalcomputer-access: доступ агента не переключается посреди обновления)
 exec 9>"$DIR/.lock"
 if command -v flock >/dev/null 2>&1 && ! flock -n 9; then
   if [ "$MODE" = cli ]; then
@@ -68,6 +96,7 @@ if command -v flock >/dev/null 2>&1 && ! flock -n 9; then
   fi
 fi
 
+legacy_cleanup  # замок наш — прежнее обновление (если было) уже закончилось
 T0=$(date +%s)
 commit_of() { [ -r "$1" ] && sed -n 's/.*"commit": *"\([0-9a-f]\{7,40\}\)".*/\1/p' "$1"; }
 FROM=$(commit_of "$APPDIR/build.json")
@@ -75,7 +104,7 @@ FROM=$(commit_of "$APPDIR/build.json")
 status() {
   local tmp="$DIR/.status.$$"
   printf '{"state":"%s","by":"%s","pid":%s,"started":%s,"from":"%s"%s}\n' "$1" "$BY" "$$" "$T0" "$FROM" "${2:-}" > "$tmp"
-  chmod 0640 "$tmp"; [ "$ROOT" = 1 ] && chown root:mochi "$tmp" 2>/dev/null
+  chmod 0640 "$tmp"; [ "$ROOT" = 1 ] && chown root:personalcomputer "$tmp" 2>/dev/null
   mv -f "$tmp" "$DIR/status.json"
 }
 step() { printf '%s\n' "$1" >> "$STEPS"; printf '%s\n' "$1" >> "$FULL"; [ "$MODE" = cli ] && printf '%s\n' "$1"; return 0; }
@@ -86,18 +115,18 @@ finish() { # finish КОД
 }
 
 : > "$STEPS"; : > "$FULL"
-chmod 0640 "$STEPS"; chmod 0600 "$FULL"; [ "$ROOT" = 1 ] && chown root:mochi "$STEPS" 2>/dev/null
+chmod 0640 "$STEPS"; chmod 0600 "$FULL"; [ "$ROOT" = 1 ] && chown root:personalcomputer "$STEPS" 2>/dev/null
 status running
 # запрос выполняем сейчас — убираем его (уже после статуса: страница не увидит «ни запроса, ни обновления»)
 rm -f "$REQ"
-TMP=$(mktemp -d "${TMPDIR:-/tmp}/mochi-update.XXXXXX")
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/personalcomputer-update.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 trap 'step "✘ Обновление прервано"; finish 143' TERM INT HUP
 
 step "🐾 Смотрю, что нового на GitHub…"
-if [ -n "${MOCHI_INSTALL_SH:-}" ]; then
+if [ -n "${PERSONALCOMPUTER_INSTALL_SH:-}" ]; then
   # свой установщик (проверка локальных правок, тесты)
-  cp "$MOCHI_INSTALL_SH" "$TMP/install.sh" || { step "✘ Нет файла $MOCHI_INSTALL_SH"; finish 1; }
+  cp "$PERSONALCOMPUTER_INSTALL_SH" "$TMP/install.sh" || { step "✘ Нет файла $PERSONALCOMPUTER_INSTALL_SH"; finish 1; }
   SHA=""
 else
   # точный последний коммит: install.sh и код возьмём из него (raw.githubusercontent по имени ветки кэширует минуты)
@@ -114,7 +143,7 @@ first=""; IFS= read -r first < "$TMP/install.sh" || true
 [ "$first" = '#!/usr/bin/env bash' ] || { step "✘ Скачался не установщик Personal Computer — обновление отменено"; finish 1; }
 
 # установщик печатает шаги строками «🐾 …», «✔ …», «! …», «✘ …» — их и показываем в браузере
-MOCHI_UPDATER=1 MOCHI_COMMIT="$SHA" bash "$TMP/install.sh" --update </dev/null 2>&1 | while IFS= read -r l || [ -n "$l" ]; do
+PERSONALCOMPUTER_UPDATER=1 PERSONALCOMPUTER_COMMIT="$SHA" bash "$TMP/install.sh" --update </dev/null 2>&1 | while IFS= read -r l || [ -n "$l" ]; do
   printf '%s\n' "$l" >> "$FULL"
   case "$l" in '🐾'*|'✔'*|'!'*|'✘'*) printf '%s\n' "$l" >> "$STEPS" ;; esac
   [ "$MODE" = cli ] && printf '%s\n' "$l"

@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
 import path from 'node:path';
-import { startMochi, registered, client } from './helpers.js';
+import { startPersonalComputer, registered, client } from './helpers.js';
 import { startRunner } from '../lib/runner.js';
 import { fsOp } from '../lib/fsx.js';
 
@@ -13,7 +13,7 @@ let m, c, home;
 const enc = encodeURIComponent;
 
 before(async () => {
-  m = await startMochi();
+  m = await startPersonalComputer();
   c = await registered(m, 'explorer');
   home = (await c.json('/api/fs/info', undefined, 'GET')).j.home;
 });
@@ -21,7 +21,7 @@ after(async () => { await m?.stop(); });
 
 test('список папки, новая папка и файл, переименование, сведения', async () => {
   const info = (await c.json('/api/fs/info', undefined, 'GET')).j;
-  assert.equal(info.home, path.join(m.env.MOCHI_WORK, 'explorer'));
+  assert.equal(info.home, path.join(m.env.PERSONALCOMPUTER_WORK, 'explorer'));
   assert.ok(info.maxUpload > 0);
   let r = await c.json('/api/fs/op', { fop: 'mkdir', path: home, name: 'Фото' });
   assert.equal(r.status, 200); assert.equal(r.j.path, path.join(home, 'Фото'));
@@ -62,12 +62,12 @@ test('копирование, перенос, удаление; системны
   r = await c.json('/api/fs/op', { fop: 'move', paths: [path.join(home, 'src')], dest: path.join(home, 'src/lib') });
   assert.match(r.j.errors[0].err, /внутрь неё самой/);
   /* настоящие /etc и / в тесте не трогаем: защита срабатывает по пути, ещё до проверки, есть ли он */
-  const top = '/zz-mochi-test-нет-такой';
-  r = await c.json('/api/fs/op', { fop: 'delete', paths: [top, m.env.MOCHI_WORK, path.join(home, 'src/lib')] });
+  const top = '/zz-personalcomputer-test-нет-такой';
+  r = await c.json('/api/fs/op', { fop: 'delete', paths: [top, m.env.PERSONALCOMPUTER_WORK, path.join(home, 'src/lib')] });
   assert.equal(r.j.errors.length, 2);
   for (const e of r.j.errors) assert.match(e.err, /трогать нельзя/);
   assert.equal(r.j.done.length, 1);
-  assert.ok(!fs.existsSync(path.join(home, 'src/lib')) && fs.existsSync(m.env.MOCHI_WORK));
+  assert.ok(!fs.existsSync(path.join(home, 'src/lib')) && fs.existsSync(m.env.PERSONALCOMPUTER_WORK));
   r = await c.json('/api/fs/op', { fop: 'rename', path: top, name: 'etc2' });
   assert.match(r.j.error, /трогать нельзя/);
   assert.equal((await c.json('/api/fs/op', { fop: 'format', path: home })).status, 400);
@@ -150,13 +150,13 @@ test('загрузка: без перезаписи, с заменой, обры
   assert.equal(fs.readFileSync(path.join(home, 'видео.bin'), 'utf8'), 'замена');
   r = await up('../evil', Buffer.from('x'));
   assert.equal(r.status, 400); await r.text();
-  /* CSRF: без заголовка X-Mochi загрузить нельзя */
-  r = await c('/api/fs/upload?dir=' + enc(home) + '&name=x', { method: 'PUT', body: 'x', headers: { 'x-mochi': '' } });
+  /* CSRF: без заголовка X-PersonalComputer загрузить нельзя */
+  r = await c('/api/fs/upload?dir=' + enc(home) + '&name=x', { method: 'PUT', body: 'x', headers: { 'x-personalcomputer': '' } });
   assert.equal(r.status, 403); await r.text();
   /* обрыв посреди загрузки: недописанного файла не остаётся */
   await new Promise(ok => {
     const s = net.createConnection(m.port, '127.0.0.1', () => {
-      s.write(`PUT /api/fs/upload?dir=${enc(home)}&name=half.bin HTTP/1.1\r\nHost: 127.0.0.1:${m.port}\r\nx-mochi: 1\r\ncookie: ${c.cookie()}\r\ncontent-length: 100000\r\n\r\n`);
+      s.write(`PUT /api/fs/upload?dir=${enc(home)}&name=half.bin HTTP/1.1\r\nHost: 127.0.0.1:${m.port}\r\nx-personalcomputer: 1\r\ncookie: ${c.cookie()}\r\ncontent-length: 100000\r\n\r\n`);
       s.write(Buffer.alloc(5000, 1));
       setTimeout(() => { s.destroy(); ok(); }, 200);
     });
@@ -229,7 +229,7 @@ test('архивы: что внутри zip и tar.gz, распаковка ря
 });
 
 test('исполнитель: JSON-операции и сырые потоки get/put на отдельных соединениях', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mochi-fsr-')), sock = path.join(dir, 'r.sock');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'personalcomputer-fsr-')), sock = path.join(dir, 'r.sock');
   const srv = startRunner(sock);
   await new Promise(r => setTimeout(r, 100));
   fs.writeFileSync(path.join(dir, 'f.bin'), Buffer.from('0123456789'));

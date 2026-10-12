@@ -1,7 +1,7 @@
 /* Команды агента — на экране терминала: видно, как Personal Computer печатает команду
    и что та выводит. Сами команды по-прежнему выполняет исполнитель (свой bash на каждую команду),
    а сюда приходит только их «картинка»: пишем прямо в tty первой панели tmux (его и pid оболочки
-   запоминает bin/mochi-pane). Ввод пользователя не трогаем: после команды отправляем в панель M-1 C-l —
+   запоминает bin/personalcomputer-pane). Ввод пользователя не трогаем: после команды отправляем в панель M-1 C-l —
    это штатное «перерисовать текущую строку» readline, и приглашение с недонабранным текстом возвращается.
    Если в панели сейчас работает программа пользователя (vim, top, долгая команда), экран не портим. */
 import { execFile } from 'node:child_process';
@@ -29,7 +29,7 @@ function redraw(p) {
 
 function pane() {
   try {
-    const [tty, pid, id, sock] = fs.readFileSync(path.join(os.homedir(), '.local/state/mochi/term'), 'utf8').split('\n');
+    const [tty, pid, id, sock] = fs.readFileSync(path.join(os.homedir(), '.local/state/personalcomputer/term'), 'utf8').split('\n');
     if (!/^\/dev\/pts\/\d+$/.test(tty) || !/^\d+$/.test(pid)) return null;
     const st = fs.statSync(tty);
     if (!st.isCharacterDevice() || st.uid !== process.getuid?.()) return null;

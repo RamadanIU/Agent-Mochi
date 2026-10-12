@@ -1,5 +1,5 @@
 /* Проводник: файловая система сервера глазами агента.
-   Работает внутри исполнителя (от имени mochi-agent), как run_command и файловые инструменты, — прав ровно столько же.
+   Работает внутри исполнителя (от имени personalcomputer-agent), как run_command и файловые инструменты, — прав ровно столько же.
    При полном доступе (root через sudo) то, на что прав не хватило, исполнитель повторяет от root (runner.js).
    • fsOp(q)        — список папки, сведения, поиск, размер папки, новая папка/файл, переименование, копирование,
                       перенос, удаление, права, сохранение текста из редактора, архивы (что внутри, распаковать, сжать).
@@ -24,7 +24,7 @@ const LIST_MAX = 10000, FIND_MAX = 500, FIND_SCAN = 300000, FIND_MS = 8000, DU_M
 const VIRT = new Set(['/proc', '/sys', '/dev', '/run']);
 
 const fail = (msg, code) => Object.assign(new Error(msg), { soft: true, code });
-const who = () => { try { return os.userInfo().username; } catch { return 'mochi-agent'; } };
+const who = () => { try { return os.userInfo().username; } catch { return 'personalcomputer-agent'; } };
 
 export function errText(e, p) {
   p = e.path || p || '';

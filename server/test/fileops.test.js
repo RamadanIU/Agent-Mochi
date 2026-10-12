@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileOp } from '../lib/fileops.js';
 
 let dir;
-before(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mochi-fileops-')); });
+before(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'personalcomputer-fileops-')); });
 after(() => fs.rmSync(dir, { recursive: true, force: true }));
 
 const P = n => path.join(dir, n);

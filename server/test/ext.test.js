@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fakeModel, startMochi, registered, chatFile } from './helpers.js';
+import { fakeModel, startPersonalComputer, registered, chatFile } from './helpers.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let m, model, mcpHttp, mcpSrv, c;
@@ -59,7 +59,7 @@ before(async () => {
   });
   await new Promise(ok => srv.listen(0, '127.0.0.1', ok));
   mcpHttp = 'http://127.0.0.1:' + srv.address().port + '/mcp';
-  m = await startMochi();
+  m = await startPersonalComputer();
   c = await registered(m, 'ext');
   await c.json('/api/settings', { base: model.url, key: 'k', model: 'fake-1', search: false }, 'PUT');
 });
@@ -91,7 +91,7 @@ test('выключенный инструмент не уходит в моде�
   assert.match(sys(req), /Выключено пользователем: run_command, telegram_connect[^\n]*только он сам/);
   assert.doesNotMatch(sys(req), /BotFather/);
   assert.match(out, /сейчас нет/);
-  assert.ok(!fs.readdirSync(path.join(m.env.MOCHI_WORK, 'ext')).includes('should-not-run'));
+  assert.ok(!fs.readdirSync(path.join(m.env.PERSONALCOMPUTER_WORK, 'ext')).includes('should-not-run'));
   const cat2 = (await c.json('/api/tools', undefined, 'GET')).j;
   assert.equal(cat2.builtin.find(t => t.name === 'run_command').on, false);
   /* агент не может включить встроенный инструмент сам */
@@ -106,8 +106,8 @@ test('навык: в подсказке только имя, описание и
   assert.equal(bad.status, 400);
   const r = await c.json('/api/skills', { name: 'greet', description: 'Как здороваться с гостями', instructions: 'СЕКРЕТНЫЙ-ТЕКСТ-ИНСТРУКЦИИ: всегда говори «привет».' });
   assert.equal(r.status, 200, JSON.stringify(r.j));
-  assert.ok(fs.existsSync(path.join(m.env.MOCHI_WORK, 'ext', 'skills', 'greet', 'SKILL.md')));
-  fs.writeFileSync(path.join(m.env.MOCHI_WORK, 'ext', 'skills', 'greet', 'helper.sh'), 'echo hi');
+  assert.ok(fs.existsSync(path.join(m.env.PERSONALCOMPUTER_WORK, 'ext', 'skills', 'greet', 'SKILL.md')));
+  fs.writeFileSync(path.join(m.env.PERSONALCOMPUTER_WORK, 'ext', 'skills', 'greet', 'helper.sh'), 'echo hi');
   const out = await ask('навык: поздоровайся');
   const req = model.calls[model.calls.length - 2].body;
   assert.ok(names(req).includes('skill'));
@@ -131,7 +131,7 @@ test('агент сам создаёт навык; навыки можно уд�
   const sk = (await c.json('/api/skills', undefined, 'GET')).j.skills;
   assert.ok(sk.some(k => k.name === 'notes' && k.desc === 'Как вести заметки' && k.on));
   assert.equal((await c('/api/skills/notes', { method: 'DELETE' })).status, 200);
-  assert.ok(!fs.existsSync(path.join(m.env.MOCHI_WORK, 'ext', 'skills', 'notes')));
+  assert.ok(!fs.existsSync(path.join(m.env.PERSONALCOMPUTER_WORK, 'ext', 'skills', 'notes')));
   /* из формы: кириллица в имени — транслитом; занятое имя не перезаписывается молча */
   const ru = await c.json('/api/skills', { name: 'Отчёт за неделю', description: 'Еженедельный отчёт', instructions: 'По шаблону.', create: true });
   assert.equal(ru.status, 200, JSON.stringify(ru.j));
@@ -192,7 +192,7 @@ test('HTTP MCP подключает сам агент: ключ сохраняе
   assert.deepEqual(r.headers, ['Authorization']); assert.equal(r.lazy, false);
   assert.doesNotMatch(JSON.stringify(cat), /secret-token/);
   /* чат пишется на диск с задержкой (250 мс) */
-  const f = chatFile(m.env.MOCHI_DATA, fs.readdirSync(path.join(m.env.MOCHI_DATA, 'users'))[0]);
+  const f = chatFile(m.env.PERSONALCOMPUTER_DATA, fs.readdirSync(path.join(m.env.PERSONALCOMPUTER_DATA, 'users'))[0]);
   for (let i = 0; i < 40 && !fs.existsSync(f); i++) await new Promise(r => setTimeout(r, 50));
   const log = JSON.parse(fs.readFileSync(f, 'utf8'));
   assert.doesNotMatch(JSON.stringify(log), /secret-token-123456/);

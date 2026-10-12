@@ -3,7 +3,7 @@
    • Что нового: последние коммиты этой ветки на GitHub. Проверяем через 15 с после старта, потом раз в 6 часов
      и по кнопке. С ETag повторная проверка не тратит лимит GitHub (60 запросов в час без ключа).
    • Обновить: сам сервер не может — у него нет прав root. Он кладёт файл-запрос в свои данные, а root-служба
-     mochi-update (systemd .path или OpenRC) запускает установщик с --update и пишет ход работы в CFG.updateDir.
+     personalcomputer-update (systemd .path или OpenRC) запускает установщик с --update и пишет ход работы в CFG.updateDir.
      Что и откуда ставить, служба берёт только из своих настроек: из запроса — ничего. */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -39,7 +39,7 @@ function title(msg, merge) {
 
 /* GET с ETag: если с прошлого раза ничего не изменилось, GitHub отвечает 304 и не засчитывает запрос в лимит */
 async function get(url, accept) {
-  const h = { accept, 'user-agent': 'mochi-server' };
+  const h = { accept, 'user-agent': 'personalcomputer-server' };
   if (cache.etag && cache.url === url && cache.list.length) h['if-none-match'] = cache.etag;
   try { return await fetch(url, { headers: h, signal: AbortSignal.timeout(15000) }); }
   catch (e) { throw Object.assign(new Error('нет связи с GitHub (' + (e.cause?.code || e.name || e.message) + ')'), { fallback: true }); }
@@ -170,7 +170,7 @@ class UpdErr extends Error { constructor(status, msg) { super(msg); this.status 
 
 /* «Обновить» в браузере: кладём запрос — его заберёт root-служба */
 export function requestUpdate(u) {
-  if (!updaterReady()) throw new UpdErr(409, 'Обновлять из браузера пока нельзя: на сервере нет службы обновления. Один раз выполни там «sudo mochi update» — дальше можно будет отсюда.');
+  if (!updaterReady()) throw new UpdErr(409, 'Обновлять из браузера пока нельзя: на сервере нет службы обновления. Один раз выполни там «sudo personalcomputer update» — дальше можно будет отсюда.');
   const st = updateStatus();
   if (st.state === 'running') throw new UpdErr(409, 'Обновление уже идёт');
   if (st.state === 'queued' && Date.now() - st.since < 120e3) return st;

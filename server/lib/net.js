@@ -72,7 +72,7 @@ export function curlFetch(url, { method = 'GET', headers = {}, body, signal } = 
     if (signal?.aborted) return no(signal.reason);
     let tmp = null;
     if (body != null) {
-      tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mochi-curl-'));
+      tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'personalcomputer-curl-'));
       fs.writeFileSync(path.join(tmp, 'body'), typeof body === 'string' || body instanceof Uint8Array ? body : String(body), { mode: 0o600 });
     }
     const conf = ['url = ' + q(url), 'request = ' + q(method), ...[...new Headers(headers)].map(([k, v]) => 'header = ' + q(k + ': ' + v)), 'header = "Expect:"'];
