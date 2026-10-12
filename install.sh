@@ -344,8 +344,11 @@ if [ "$TLS" = on ]; then
   PUBLIC_URL="https://$DOMAIN"
   if command -v ss >/dev/null 2>&1; then
     busy=$(ss -Hltnp 2>/dev/null | awk '$4 ~ /:(80|443)$/' || true)
+    # порты держит наш же Caddy — в том числе прежний mochi-caddy (до переименования): его остановит переезд ниже
     ours=0
-    if [ "$INIT" = systemd ]; then systemctl is-active -q personalcomputer-caddy 2>/dev/null && ours=1; else rc-service personalcomputer-caddy status >/dev/null 2>&1 && ours=1; fi
+    for c in personalcomputer-caddy "$OLD-caddy"; do
+      if [ "$INIT" = systemd ]; then systemctl is-active -q "$c" 2>/dev/null && ours=1; else rc-service "$c" status >/dev/null 2>&1 && ours=1; fi
+    done
     if [ -n "$busy" ] && [ "$ours" = 0 ]; then
       warn "Порты 80/443 уже заняты:"; printf '%s\n' "$busy" >&2
       die "Освободи их или поставь с --no-tls --public-url https://твой-домен и проксируй на 127.0.0.1:$PORT (с поддержкой WebSocket)"
