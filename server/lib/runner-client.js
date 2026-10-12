@@ -1,5 +1,5 @@
-/* Клиент исполнителя: сервер → unix-сокет службы mochi-runner.
-   В режиме разработки (MOCHI_RUNNER_SOCK=inline) команды выполняются прямо в процессе сервера. */
+/* Клиент исполнителя: сервер → unix-сокет службы personalcomputer-runner.
+   В режиме разработки (PERSONALCOMPUTER_RUNNER_SOCK=inline) команды выполняются прямо в процессе сервера. */
 import net from 'node:net';
 import { CFG } from './config.js';
 import { execCommand, spawnProcess, sysInfo, agentFileOp, agentFsOp, agentFsOpen, agentFsPut } from './runner.js';
@@ -36,7 +36,7 @@ function connect() {
 async function call(msg, signal) {
   let c;
   try { c = await connect(); }
-  catch (e) { throw new Error('исполнитель команд недоступен (служба mochi-runner не запущена?): ' + (e.code || e.message)); }
+  catch (e) { throw new Error('исполнитель команд недоступен (служба personalcomputer-runner не запущена?): ' + (e.code || e.message)); }
   const id = ++seq;
   return new Promise(ok => {
     wait.set(id, m => { signal?.removeEventListener('abort', ab); ok(m); });
@@ -55,7 +55,7 @@ export async function runCmd(opts, signal) {
     });
   }
   const m = await call({ op: 'exec', ...opts }, signal);
-  if (m.op === 'lost') return { out: '[связь с исполнителем оборвалась: служба mochi-runner перезапускалась]', code: -1, cwd: opts.cwd, lost: true };
+  if (m.op === 'lost') return { out: '[связь с исполнителем оборвалась: служба personalcomputer-runner перезапускалась]', code: -1, cwd: opts.cwd, lost: true };
   return m;
 }
 
@@ -64,7 +64,7 @@ export async function fileCmd(opts, signal) {
   if (CFG.runnerSock === 'inline') return agentFileOp(opts);
   let m;
   try { m = await call({ ...opts, op: 'file' }, signal); } catch (e) { return { err: e.message }; }
-  if (m.op === 'lost') return { err: 'связь с исполнителем оборвалась (служба mochi-runner перезапускалась) — повтори' };
+  if (m.op === 'lost') return { err: 'связь с исполнителем оборвалась (служба personalcomputer-runner перезапускалась) — повтори' };
   return m;
 }
 
@@ -73,7 +73,7 @@ export async function fsCmd(q, signal) {
   if (CFG.runnerSock === 'inline') return agentFsOp({ ...q, signal });
   let m;
   try { m = await call({ ...q, op: 'fs' }, signal); } catch (e) { return { err: e.message }; }
-  if (m.op === 'lost') return { err: 'связь с исполнителем оборвалась (служба mochi-runner перезапускалась) — повтори' };
+  if (m.op === 'lost') return { err: 'связь с исполнителем оборвалась (служба personalcomputer-runner перезапускалась) — повтори' };
   delete m.id; delete m.op;
   return m;
 }
@@ -83,7 +83,7 @@ function rawSock(q) {
   return new Promise((ok, no) => {
     const c = net.createConnection(CFG.runnerSock);
     c.once('connect', () => { c.off('error', no); c.on('error', () => {}); c.write(JSON.stringify(q) + '\n'); ok(c); });
-    c.once('error', e => no(new Error('исполнитель команд недоступен (служба mochi-runner не запущена?): ' + (e.code || e.message))));
+    c.once('error', e => no(new Error('исполнитель команд недоступен (служба personalcomputer-runner не запущена?): ' + (e.code || e.message))));
   });
 }
 
@@ -126,7 +126,7 @@ export function spawnProc(opts, onLine, onExit) {
   const end = (code, err) => { if (dead) return; dead = true; subs.delete(id); onExit(code, err); };
   subs.set(id, m => { if (m.op === 'line') onLine(m.line); else if (m.op === 'exit') end(m.code, m.err); });
   const ready = connect().then(cc => { c = cc; c.write(JSON.stringify({ ...opts, op: 'spawn', id }) + '\n'); },
-    e => end(null, 'исполнитель команд недоступен (служба mochi-runner не запущена?): ' + (e.code || e.message)));
+    e => end(null, 'исполнитель команд недоступен (служба personalcomputer-runner не запущена?): ' + (e.code || e.message)));
   const send = m => ready.then(() => { if (c && !dead) c.write(JSON.stringify({ ...m, id }) + '\n'); });
   return { write: data => send({ op: 'write', data }), kill: () => send({ op: 'kill' }) };
 }
@@ -137,5 +137,5 @@ export async function agentInfo(fresh = false) {
   if (info && !fresh) return info;
   if (CFG.runnerSock === 'inline') return info = sysInfo();
   try { const m = await call({ op: 'info' }); if (m.op === 'info') return info = m; } catch {}
-  return { os: 'Linux', kernel: '', arch: process.arch, user: 'mochi-agent', pm: '', sudo: false, tools: [] };
+  return { os: 'Linux', kernel: '', arch: process.arch, user: 'personalcomputer-agent', pm: '', sudo: false, tools: [] };
 }

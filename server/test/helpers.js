@@ -1,4 +1,4 @@
-/* Тестовое окружение: фальшивая модель (OpenAI-совместимая), фальшивый Telegram и сервер Мочи в отдельном процессе */
+/* Тестовое окружение: фальшивая модель (OpenAI-совместимая), фальшивый Telegram и сервер Personal Computer в отдельном процессе */
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -40,13 +40,13 @@ export async function fakeModel(script) {
   return { url: `http://127.0.0.1:${port}/v1`, calls, titles, close: () => srv.close() };
 }
 
-export async function startMochi(extraEnv = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mochi-test-'));
+export async function startPersonalComputer(extraEnv = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'personalcomputer-test-'));
   const port = await freePort();
-  const env = { ...process.env, MOCHI_DEV: '1', MOCHI_PORT: String(port), MOCHI_DATA: path.join(dir, 'data'), MOCHI_WORK: path.join(dir, 'work'), MOCHI_SEARCH_MCP: '', HOME: path.join(dir, 'work'), ...extraEnv };
-  fs.mkdirSync(env.MOCHI_WORK, { recursive: true });
+  const env = { ...process.env, PERSONALCOMPUTER_DEV: '1', PERSONALCOMPUTER_PORT: String(port), PERSONALCOMPUTER_DATA: path.join(dir, 'data'), PERSONALCOMPUTER_WORK: path.join(dir, 'work'), PERSONALCOMPUTER_SEARCH_MCP: '', HOME: path.join(dir, 'work'), ...extraEnv };
+  fs.mkdirSync(env.PERSONALCOMPUTER_WORK, { recursive: true });
   const start = () => {
-    const p = spawn(process.execPath, [path.join(here, '..', 'mochi.js'), 'serve'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const p = spawn(process.execPath, [path.join(here, '..', 'personalcomputer.js'), 'serve'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
     p.log = ''; p.stdout.on('data', d => p.log += d); p.stderr.on('data', d => p.log += d);
     return p;
   };
@@ -55,7 +55,7 @@ export async function startMochi(extraEnv = {}) {
   /* уже остановленный (тест сам остановил, чтобы поправить файлы) — просто запускаем */
   m.restart = async () => { if (m.proc.exitCode === null && m.proc.signalCode === null) { m.proc.kill('SIGTERM'); await new Promise(r => m.proc.once('exit', r)); } m.proc = start(); await m.ready(); };
   m.stop = async () => { m.proc.kill('SIGTERM'); await new Promise(r => m.proc.exitCode !== null ? r() : m.proc.once('exit', r)); fs.rmSync(dir, { recursive: true, force: true }); };
-  m.cli = (...a) => new Promise(ok => { const p = spawn(process.execPath, [path.join(here, '..', 'mochi.js'), ...a], { env }); let o = ''; p.stdout.on('data', d => o += d); p.stderr.on('data', d => o += d); p.on('exit', c => ok({ code: c, out: o })); });
+  m.cli = (...a) => new Promise(ok => { const p = spawn(process.execPath, [path.join(here, '..', 'personalcomputer.js'), ...a], { env }); let o = ''; p.stdout.on('data', d => o += d); p.stderr.on('data', d => o += d); p.on('exit', c => ok({ code: c, out: o })); });
   await m.ready();
   return m;
 }
@@ -70,7 +70,7 @@ export function chatFile(dataDir, uid) {
 export function client(base) {
   let cookie = '';
   const c = async (p, opt = {}) => {
-    const h = { ...(opt.body && typeof opt.body === 'string' ? { 'content-type': 'application/json' } : {}), ...(opt.method && opt.method !== 'GET' ? { 'x-mochi': '1' } : {}), ...(cookie ? { cookie } : {}), ...opt.headers };
+    const h = { ...(opt.body && typeof opt.body === 'string' ? { 'content-type': 'application/json' } : {}), ...(opt.method && opt.method !== 'GET' ? { 'x-personalcomputer': '1' } : {}), ...(cookie ? { cookie } : {}), ...opt.headers };
     const r = await fetch(base + p, { ...opt, headers: h, redirect: 'manual' });
     const sc = r.headers.get('set-cookie'); if (sc) cookie = sc.split(';')[0];
     return r;

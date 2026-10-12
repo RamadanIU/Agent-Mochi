@@ -24,7 +24,9 @@ import { fsCmd, fsGet, fsUpload, agentInfo } from './runner-client.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const VERSION = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8')).version;
-const COOKIE = CFG.secureCookie ? '__Host-mochi' : 'mochi';
+const COOKIE = CFG.secureCookie ? '__Host-personalcomputer' : 'personalcomputer';
+/* вход, сделанный до переименования (cookie «mochi»), действует, пока не истечёт сессия: заново входить не нужно */
+const OLD_COOKIE = CFG.secureCookie ? '__Host-mochi' : 'mochi';
 
 /* ---------- показатели сервера для верхней панели ----------
    Процессор — доля занятого времени между двумя опросами (первый раз — по средней загрузке), память — по MemAvailable,
@@ -65,7 +67,7 @@ function cookies(req) {
   for (const p of String(req.headers.cookie || '').split(';')) { const i = p.indexOf('='); if (i > 0) o[p.slice(0, i).trim()] = decodeURIComponent(p.slice(i + 1).trim()); }
   return o;
 }
-const setCookie = (tok, age) => `${COOKIE}=${tok}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${age}${CFG.secureCookie ? '; Secure' : ''}`;
+const setCookie = (tok, age, name = COOKIE) => `${name}=${tok}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${age}${CFG.secureCookie ? '; Secure' : ''}`;
 async function body(req, limit = 2 ** 20) {
   const n = +req.headers['content-length'] || 0;
   if (n > limit) throw new HttpErr(413, 'слишком большой запрос');
@@ -96,7 +98,8 @@ function sameOrigin(req) {
     return u.host === req.headers.host;
   } catch { return false; }
 }
-const userOf = req => A.sessionUser(cookies(req)[COOKIE]);
+const sid = req => { const c = cookies(req); return c[COOKIE] || c[OLD_COOKIE]; };
+const userOf = req => A.sessionUser(sid(req));
 const convId = c => typeof c === 'string' && /^[0-9a-f]{12}$/.test(c) ? c : undefined;
 
 /* ---------- страница: подключаем client.js, CSP с хешами встроенных скриптов ---------- */
@@ -259,7 +262,7 @@ const updInfo = u => ({ ...U.summary(), status: U.updateStatus(), version: VERSI
 const accInfo = async u => ({ ...await AC.accessInfo(u), users: A.listUsers().length, busy: A.listUsers().filter(x => getChat(x).running).length });
 
 /* ---------- проводник: файловая система сервера от имени агента (см. fsx.js) ----------
-   Всё идёт через исполнитель (mochi-agent): у проводника ровно те же права, что у агента и терминала,
+   Всё идёт через исполнитель (personalcomputer-agent): у проводника ровно те же права, что у агента и терминала,
    а данные сервера Personal Computer ему недоступны. Отдача байтов — с диапазонами (перемотка видео) и ETag. */
 const FS_CODE = { ENOENT: 404, EACCES: 403, EPERM: 403, EEXIST: 409, ENOTEMPTY: 409, ENOSPC: 507, EDQUOT: 507 };
 const fsErr = r => new HttpErr(FS_CODE[r.code] || 400, r.err, { fcode: r.code || null });
@@ -310,7 +313,7 @@ async function fsRaw(req, res, u, url) {
   const part = !!want && size > 0;
   h['content-length'] = size ? head.end - head.start + 1 : 0;
   if (part) h['content-range'] = `bytes ${head.start}-${head.end}/${size}`;
-  if (head.root) h['x-mochi-root'] = '1';
+  if (head.root) h['x-personalcomputer-root'] = '1';
   res.writeHead(part ? 206 : 200, h);
   if (req.method === 'HEAD') { stream.destroy(); return res.end(); }
   res.on('close', () => stream.destroy());
@@ -324,7 +327,7 @@ async function fsApi(req, res, u, url) {
     case '/api/fs/info': {
       if (M !== 'GET') break;
       const i = await agentInfo();
-      return json(res, 200, { home: userDir(u), work: CFG.work, agent: i.user || 'mochi-agent', root: !!i.sudo, accessCtl: CFG.accessCtl, admin: !!u.admin, maxUpload: CFG.maxUpload });
+      return json(res, 200, { home: userDir(u), work: CFG.work, agent: i.user || 'personalcomputer-agent', root: !!i.sudo, accessCtl: CFG.accessCtl, admin: !!u.admin, maxUpload: CFG.maxUpload });
     }
     case '/api/fs/list': case '/api/fs/stat': case '/api/fs/search': case '/api/fs/du': case '/api/fs/archive': {
       if (M !== 'GET') break;
@@ -373,7 +376,7 @@ async function fsApi(req, res, u, url) {
 async function api(req, res, url) {
   const p = url.pathname, M = req.method;
   if (M !== 'GET' && M !== 'HEAD') {
-    if (req.headers['x-mochi'] !== '1' || !sameOrigin(req)) throw new HttpErr(403, 'запрос отклонён (CSRF)');
+    if (req.headers['x-personalcomputer'] !== '1' || !sameOrigin(req)) throw new HttpErr(403, 'запрос отклонён (CSRF)');
   }
   if (p === '/api/health') return json(res, 200, { ok: true, version: VERSION });
   const ip = clientIp(req);
@@ -408,8 +411,8 @@ async function api(req, res, url) {
   switch (p) {
     case '/api/logout':
       if (M !== 'POST') break;
-      if (url.searchParams.get('all') === '1') A.dropSessions(u.id); else A.endSession(cookies(req)[COOKIE]);
-      return json(res, 200, { ok: true }, { 'set-cookie': setCookie('', 0) });
+      if (url.searchParams.get('all') === '1') A.dropSessions(u.id); else A.endSession(sid(req));
+      return json(res, 200, { ok: true }, { 'set-cookie': [setCookie('', 0), setCookie('', 0, OLD_COOKIE)] });
     case '/api/password': {
       if (M !== 'POST') break;
       const b = await jbody(req);
@@ -465,7 +468,7 @@ async function api(req, res, url) {
     case '/api/telegram':
       if (M === 'GET') return json(res, 200, TG.tgState(u));
       if (M === 'POST') { const b = await jbody(req); const r = await TG.connect(u, b.token).catch(e => { throw new HttpErr(400, e.message); }); return json(res, 200, { ...TG.tgState(u), link: r.link }); }
-      if (M === 'DELETE' && req.headers['x-mochi'] === '1') { TG.disconnect(u); return json(res, 200, TG.tgState(u)); }
+      if (M === 'DELETE' && req.headers['x-personalcomputer'] === '1') { TG.disconnect(u); return json(res, 200, TG.tgState(u)); }
       break;
     case '/api/telegram/link': if (M === 'POST') { try { return json(res, 200, { link: TG.newLink(u) }); } catch (e) { throw new HttpErr(400, e.message); } } break;
     case '/api/telegram/notify': if (M === 'POST') { const b = await jbody(req); try { TG.setNotify(u, b.mode); } catch (e) { throw new HttpErr(400, e.message); } return json(res, 200, TG.tgState(u)); } break;
@@ -603,7 +606,7 @@ function upgrade(req, socket, head) {
   proxyUpgrade(req, socket, head, u);
 }
 
-/* ---------- админ-сокет для команды `mochi` на сервере (доступ: только root и mochi) ---------- */
+/* ---------- админ-сокет для команды `personalcomputer` на сервере (доступ: только root и personalcomputer) ---------- */
 export const ADMIN_SOCK = () => path.join(CFG.data, 'admin.sock');
 async function admin(cmd) {
   const [op, ...a] = cmd;
@@ -661,7 +664,7 @@ export function startServer() {
   srv.on('upgrade', upgrade);
   srv.keepAliveTimeout = 65000;
   const adm = adminServer();
-  srv.listen(CFG.port, CFG.host, () => console.log(`mochi ${VERSION}: http://${CFG.host}:${CFG.port}  данные: ${CFG.data}  работа: ${CFG.work}${CFG.publicUrl ? '  адрес: ' + CFG.publicUrl : ''}`));
+  srv.listen(CFG.port, CFG.host, () => console.log(`personalcomputer ${VERSION}: http://${CFG.host}:${CFG.port}  данные: ${CFG.data}  работа: ${CFG.work}${CFG.publicUrl ? '  адрес: ' + CFG.publicUrl : ''}`));
   const bye = () => { flushAll(); try { fs.unlinkSync(ADMIN_SOCK()); } catch {} process.exit(0); };
   process.on('SIGTERM', bye); process.on('SIGINT', bye);
   return { srv, adm };

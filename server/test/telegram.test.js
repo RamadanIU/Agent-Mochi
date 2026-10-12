@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fakeModel, startMochi, registered, sleep, chatFile } from './helpers.js';
+import { fakeModel, startPersonalComputer, registered, sleep, chatFile } from './helpers.js';
 
 const TOKEN = '123456789:AAEhBP0av18ZzsZiYQXbKBYWxx2ahfL0lzw';
 let m, model, tg;
@@ -17,7 +17,7 @@ async function fakeTelegram() {
     const reply = r => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(r)); };
     if (!mm || mm[1] !== TOKEN) return reply({ ok: false, error_code: 401, description: 'Unauthorized' });
     const method = mm[2], p = b && req.headers['content-type']?.includes('json') ? JSON.parse(b) : {};
-    if (method === 'getMe') return reply({ ok: true, result: { id: 1, is_bot: true, username: 'mochi_test_bot', first_name: 'Mochi' } });
+    if (method === 'getMe') return reply({ ok: true, result: { id: 1, is_bot: true, username: 'personalcomputer_test_bot', first_name: 'PersonalComputer' } });
     if (method === 'getUpdates') {
       const t0 = Date.now();
       while (!st.updates.some(u => u.update_id >= (p.offset || 0)) && Date.now() - t0 < 800) await sleep(50);
@@ -45,10 +45,10 @@ before(async () => {
     if (last.role === 'user' && u.content.startsWith('[во время работы] ')) return { text: 'по ходу: ' + u.content.slice(18), tools: [{ name: 'run_command', args: { action: 'Финиш', command: 'echo финиш' } }] };
     if (last.role === 'user' && /токен/.test(u.content)) return { tools: [{ name: 'telegram_connect', args: { token: u.content.match(/\d+:[\w-]+/)[0] } }] };
     if (last.role === 'tool') return { text: 'Готово: ' + last.content };
-    assert.ok(body.messages[0].content.includes('@mochi_test_bot'), 'в системной подсказке есть состояние Telegram');
+    assert.ok(body.messages[0].content.includes('@personalcomputer_test_bot'), 'в системной подсказке есть состояние Telegram');
     return { text: 'Ответ на: ' + u.content };
   });
-  m = await startMochi({ MOCHI_TG_API: tg.url, MOCHI_PUBLIC_URL: 'https://mochi.example' });
+  m = await startPersonalComputer({ PERSONALCOMPUTER_TG_API: tg.url, PERSONALCOMPUTER_PUBLIC_URL: 'https://personalcomputer.example' });
 });
 after(async () => { await m?.stop(); model?.close(); tg?.close(); });
 
@@ -58,13 +58,13 @@ test('подключение Telegram через инструмент агент
   await c.json('/api/chat', { text: 'подключи бота, вот токен ' + TOKEN });
   let link;
   for (let i = 0; i < 100 && !link; i++) { await sleep(100); link = (await c.json('/api/telegram', undefined, 'GET')).j.link; }
-  assert.match(link, /^https:\/\/t\.me\/mochi_test_bot\?start=[0-9a-f]{20}$/);
+  assert.match(link, /^https:\/\/t\.me\/personalcomputer_test_bot\?start=[0-9a-f]{20}$/);
   /* токен вычищен из истории чата */
   await sleep(500);
   const me = (await c.json('/api/me', undefined, 'GET')).j.user;
-  const saved = fs.readFileSync(chatFile(m.env.MOCHI_DATA, me.id), 'utf8');
+  const saved = fs.readFileSync(chatFile(m.env.PERSONALCOMPUTER_DATA, me.id), 'utf8');
   assert.ok(!saved.includes(TOKEN), 'токена нет в файле чата');
-  assert.ok(fs.readFileSync(path.join(m.env.MOCHI_DATA, 'users', me.id, 'telegram.json'), 'utf8').includes(TOKEN));
+  assert.ok(fs.readFileSync(path.join(m.env.PERSONALCOMPUTER_DATA, 'users', me.id, 'telegram.json'), 'utf8').includes(TOKEN));
 
   /* чужой человек не может управлять ботом */
   tg.push(555, 'rm -rf /');
@@ -87,10 +87,10 @@ test('подключение Telegram через инструмент агент
   tg.push(777, '/status');
   await tg.waitSent(/Свободен/);
   tg.push(777, '/web');
-  await tg.waitSent(/^https:\/\/mochi\.example\/$/);
+  await tg.waitSent(/^https:\/\/personalcomputer\.example\/$/);
 
   /* во время работы: сообщение — дополнение к задаче, ответ модели по ходу дела и итог приходят сюда же */
-  const flag = path.join(m.env.MOCHI_WORK, 'tguser', 'tg.flag'), n0 = tg.sent.length;
+  const flag = path.join(m.env.PERSONALCOMPUTER_WORK, 'tguser', 'tg.flag'), n0 = tg.sent.length;
   tg.push(777, 'долгая задача ' + flag);
   for (let i = 0; i < 100 && !tg.sent.slice(n0).some(x => /Думаю/.test(x.text || '')); i++) await sleep(50);
   tg.push(777, '/now');

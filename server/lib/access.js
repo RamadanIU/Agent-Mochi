@@ -1,6 +1,6 @@
-/* Доступ агента: обычный пользователь mochi-agent или полный root (sudo без пароля).
+/* Доступ агента: обычный пользователь personalcomputer-agent или полный root (sudo без пароля).
    • Есть ли root прямо сейчас — спрашиваем исполнитель (он проверяет «sudo -n true» в своей службе).
-   • Переключает root-служба mochi-access (server/bin/mochi-access): у сервера прав нет, он лишь кладёт
+   • Переключает root-служба personalcomputer-access (server/bin/personalcomputer-access): у сервера прав нет, он лишь кладёт
      файл-запрос в свои данные — одно слово, on или off. Служба правит sudoers и изоляцию исполнителя и терминала,
      перезапускает их и пишет ход и итог в CFG.updateDir/access.json (mode — что сейчас настроено).
    • Включить может только администратор и только с паролем; выключить — без пароля. */
@@ -13,7 +13,7 @@ const STALE = 45 * 60e3;
 const reqFile = () => path.join(CFG.data, 'access.request');
 const str = (v, n = 400) => typeof v === 'string' && v ? v.slice(0, n) : null;
 
-/* служба mochi-access установлена (установщик пишет MOCHI_ACCESS_CTL=1 вместе с ней) */
+/* служба personalcomputer-access установлена (установщик пишет PERSONALCOMPUTER_ACCESS_CTL=1 вместе с ней) */
 export const accessReady = () => CFG.accessCtl && !!CFG.updateDir && fs.existsSync(CFG.updateDir);
 
 export function accessStatus() {
@@ -29,7 +29,7 @@ export function accessStatus() {
       if (out.state === 'running') {
         let gone = false;
         if (Number.isInteger(s.pid) && s.pid > 1) try { process.kill(s.pid, 0); } catch (e) { gone = e.code === 'ESRCH'; }
-        if (gone || Date.now() - out.started > STALE) Object.assign(out, { state: 'failed', error: gone ? 'Переключение прервалось (служба mochi-access остановилась)' : 'Переключение зависло' });
+        if (gone || Date.now() - out.started > STALE) Object.assign(out, { state: 'failed', error: gone ? 'Переключение прервалось (служба personalcomputer-access остановилась)' : 'Переключение зависло' });
       }
       if (out.state === 'failed' && !out.error) out.error = 'Переключить доступ не удалось';
     }
@@ -41,14 +41,14 @@ export function accessStatus() {
 
 export async function accessInfo(u) {
   const I = await agentInfo(true), st = accessStatus();
-  return { root: !!(I.sudo || I.root), user: I.user || 'mochi-agent', mode: st.mode, status: st, ready: accessReady(), admin: !!u.admin };
+  return { root: !!(I.sudo || I.root), user: I.user || 'personalcomputer-agent', mode: st.mode, status: st, ready: accessReady(), admin: !!u.admin };
 }
 
 class AccessErr extends Error { constructor(status, msg) { super(msg); this.status = status; } }
 
 /* on — дать root, off — забрать. Пароль проверяет маршрут (server.js) */
 export function requestAccess(on) {
-  if (!accessReady()) throw new AccessErr(409, 'Переключать доступ отсюда пока нельзя: на сервере нет службы mochi-access. Выполни там «sudo mochi root ' + (on ? 'on' : 'off') + '» — или один раз «sudo mochi update», и дальше хватит этой кнопки.');
+  if (!accessReady()) throw new AccessErr(409, 'Переключать доступ отсюда пока нельзя: на сервере нет службы personalcomputer-access. Выполни там «sudo personalcomputer root ' + (on ? 'on' : 'off') + '» — или один раз «sudo personalcomputer update», и дальше хватит этой кнопки.');
   if (accessStatus().state === 'running') throw new AccessErr(409, 'Доступ уже переключается — подожди пару секунд');
   fs.writeFileSync(reqFile(), (on ? 'on' : 'off') + '\n', { mode: 0o600 });
   return accessStatus();

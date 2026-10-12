@@ -4,7 +4,7 @@
 # │                                                                          │
 # │  curl -fsSL https://raw.githubusercontent.com/RamadanIU/Agent-Mochi/HEAD/install.sh | sudo bash
 # │                                                                          │
-# │  Свой домен:   … | sudo bash -s -- --domain mochi.example.com            │
+# │  Свой домен:   … | sudo bash -s -- --domain personalcomputer.example.com            │
 # │  Без HTTPS (только через SSH-туннель):  … | sudo bash -s -- --no-tls     │
 # │  Помощь:       … | sudo bash -s -- --help                                │
 # └──────────────────────────────────────────────────────────────────────────┘
@@ -14,13 +14,24 @@
 set -Eeuo pipefail
 umask 022  # всё создаваемое — не доступно на запись чужим (окружение может прийти с umask 000)
 
-REPO="${MOCHI_REPO:-RamadanIU/Agent-Mochi}"
-REF="${MOCHI_REF:-HEAD}"  # HEAD = основная ветка репозитория, как бы она ни называлась
-COMMIT="${MOCHI_COMMIT:-}"  # скачать ровно этот коммит (так делает mochi-update); ветка в настройках не меняется
-PREFIX=/opt/mochi
-STATE=/var/lib/mochi
-ETC=/etc/mochi
-CADDY_HOME=/var/lib/mochi-caddy
+REPO="${PERSONALCOMPUTER_REPO:-RamadanIU/Agent-Mochi}"
+REF="${PERSONALCOMPUTER_REF:-HEAD}"  # HEAD = основная ветка репозитория, как бы она ни называлась
+# скачать ровно этот коммит (так делает personalcomputer-update; обновление версий до переименования передаёт MOCHI_COMMIT);
+# ветка в настройках не меняется
+COMMIT="${PERSONALCOMPUTER_COMMIT:-${MOCHI_COMMIT:-}}"
+# установщик запущен службой обновления (её не перезапускаем — это оборвало бы обновление)
+UPDATER="${PERSONALCOMPUTER_UPDATER:-${MOCHI_UPDATER:-}}"
+PREFIX=/opt/personalcomputer
+STATE=/var/lib/personalcomputer
+ETC=/etc/personalcomputer
+CADDY_HOME=/var/lib/personalcomputer-caddy
+# до переименования проект назывался mochi: пользователи mochi, mochi-agent, mochi-caddy, папки /opt/mochi,
+# /var/lib/mochi, /etc/mochi, службы mochi*, команда mochi. Их переносит раздел «переезд» ниже
+OLD=mochi
+OLD_PREFIX=/opt/$OLD
+OLD_STATE=/var/lib/$OLD
+OLD_ETC=/etc/$OLD
+OLD_CADDY_HOME=/var/lib/$OLD-caddy
 PORT=8787
 NODE_MAJOR=22
 TTYD_VER=1.7.7
@@ -47,12 +58,12 @@ cat <<EOF
   --public-url URL   свой обратный прокси (nginx и т. п.) перед 127.0.0.1:${PORT}; вместе с --no-tls
   --port N           внутренний порт сервера (по умолчанию ${PORT})
   --root             полный доступ агента: root через sudo без пароля (то же — --with-sudo).
-                     Потом переключается в настройках Personal Computer или командой «sudo mochi root on|off»
+                     Потом переключается в настройках Personal Computer или командой «sudo personalcomputer root on|off»
   --no-root          забрать у агента root (то же — --no-sudo)
   --no-firewall      не открывать порты 80/443 в ufw/firewalld
   --ref BRANCH       ветка/тег репозитория ${REPO} (по умолчанию ${REF})
   --source DIR       взять код из локальной папки вместо GitHub
-  --update           обновить код и зависимости, настройки оставить (то же — «sudo mochi update» или кнопка в настройках)
+  --update           обновить код и зависимости, настройки оставить (то же — «sudo personalcomputer update» или кнопка в настройках)
   --uninstall        удалить программу (данные пользователей останутся в ${STATE})
   --purge            вместе с --uninstall: удалить и все данные
 По умолчанию без домена используется адрес вида 1-2-3-4.sslip.io с настоящим сертификатом.
@@ -121,7 +132,7 @@ caddy_sha() { case "$1" in
   arm64) echo 6ce061a690312ab38367df3c5d5f89a2e4a263e7300d300d87356211bb81e79b15933e6d6203e03fbf26f15cc0311f264805f336147dbdd24938d84b57a4421c ;;
   armv7) echo 215af42cf952726d962c9753a12c04248781221b66df8b7110726fa7905d7a5c2e50056e0b47ab3c709d3dcfb48fde0f11e184a6950de0a2ddf941d3e503d07b ;; esac; }
 
-TMP=$(mktemp -d /tmp/mochi-install.XXXXXX)
+TMP=$(mktemp -d /tmp/personalcomputer-install.XXXXXX)
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
 
@@ -144,35 +155,68 @@ svc() { # svc start|stop|restart|enable|disable NAME…
     fi
   done
 }
-SERVICES="mochi-runner mochi-term mochi"
+SERVICES="personalcomputer-runner personalcomputer-term personalcomputer"
+
+# ---------- старые имена (mochi) ----------
+LEGACY=0  # на сервере стоит версия до переименования
+if { [ -d "$OLD_ETC" ] && [ ! -L "$OLD_ETC" ]; } || { [ -d "$OLD_STATE" ] && [ ! -L "$OLD_STATE" ]; } || id "$OLD-agent" >/dev/null 2>&1; then LEGACY=1; fi
+# службы версии до переименования: остановить и убрать. keep-updater — службу обновления не трогаем:
+# возможно, это она сейчас запустила установщик (прежнюю службу OpenRC потом уберёт personalcomputer-update legacy-cleanup)
+legacy_units_off() {
+  local s
+  if [ "$INIT" = systemd ]; then
+    for s in "$OLD-caddy" "$OLD" "$OLD-term" "$OLD-runner" "$OLD-update.path" "$OLD-access.path"; do
+      systemctl disable --now -q "$s" >/dev/null 2>&1 || true
+    done
+    [ "${1:-}" = keep-updater ] || systemctl stop "$OLD-update.service" "$OLD-access.service" >/dev/null 2>&1 || true
+    rm -rf "/etc/systemd/system/$OLD-runner.service.d" "/etc/systemd/system/$OLD-term.service.d"
+    rm -f "/etc/systemd/system/$OLD.service" "/etc/systemd/system/$OLD"-*.service "/etc/systemd/system/$OLD"-*.path
+    systemctl daemon-reload
+  else
+    for s in "$OLD-caddy" "$OLD" "$OLD-term" "$OLD-runner" "$OLD-updater"; do
+      [ -e "/etc/init.d/$s" ] || continue
+      rc-update del "$s" default >/dev/null 2>&1 || true
+      [ "$s" = "$OLD-updater" ] && [ "${1:-}" = keep-updater ] && continue
+      rc-service "$s" stop >/dev/null 2>&1 || true; rm -f "/etc/init.d/$s"
+    done
+  fi
+}
 
 # ---------- удаление ----------
 if [ "$MODE" = uninstall ]; then
   say "Удаляю Personal Computer…"
-  if [ "$INIT" = systemd ]; then UPD="mochi-update.path mochi-access.path"; else UPD="mochi-updater"; fi
-  for s in $UPD mochi mochi-term mochi-runner mochi-caddy; do svc stop "$s" >/dev/null 2>&1 || true; svc disable "$s"; done
-  rm -rf /etc/systemd/system/mochi-runner.service.d /etc/systemd/system/mochi-term.service.d
-  rm -f /etc/systemd/system/mochi*.service /etc/systemd/system/mochi*.path /etc/init.d/mochi /etc/init.d/mochi-term /etc/init.d/mochi-runner /etc/init.d/mochi-caddy /etc/init.d/mochi-updater
+  if [ "$INIT" = systemd ]; then UPD="personalcomputer-update.path personalcomputer-access.path"; else UPD="personalcomputer-updater"; fi
+  for s in $UPD personalcomputer personalcomputer-term personalcomputer-runner personalcomputer-caddy; do svc stop "$s" >/dev/null 2>&1 || true; svc disable "$s"; done
+  rm -rf /etc/systemd/system/personalcomputer-runner.service.d /etc/systemd/system/personalcomputer-term.service.d
+  rm -f /etc/systemd/system/personalcomputer*.service /etc/systemd/system/personalcomputer*.path /etc/init.d/personalcomputer /etc/init.d/personalcomputer-term /etc/init.d/personalcomputer-runner /etc/init.d/personalcomputer-caddy /etc/init.d/personalcomputer-updater
   [ "$INIT" = systemd ] && systemctl daemon-reload
-  rm -rf "$PREFIX" /usr/local/bin/mochi /etc/sudoers.d/mochi-agent
+  rm -rf "$PREFIX" /usr/local/bin/personalcomputer /etc/sudoers.d/personalcomputer-agent
+  [ "$(readlink /usr/local/bin/pc 2>/dev/null)" = personalcomputer ] && rm -f /usr/local/bin/pc
+  # версия до переименования (если так и не обновлялась)
+  legacy_units_off
+  rm -rf "$OLD_PREFIX" "/usr/local/bin/$OLD" "/etc/sudoers.d/$OLD-agent"
+  [ -L "$OLD_STATE" ] && rm -f "$OLD_STATE"
   if [ "$PURGE" = 1 ]; then
-    rm -rf "$STATE" "$CADDY_HOME" "$ETC" /var/log/mochi
-    for u in mochi-agent mochi mochi-caddy; do userdel "$u" >/dev/null 2>&1 || deluser "$u" >/dev/null 2>&1 || true; done
-    groupdel mochi >/dev/null 2>&1 || delgroup mochi >/dev/null 2>&1 || true
+    rm -rf "$STATE" "$CADDY_HOME" "$ETC" /var/log/personalcomputer "$OLD_STATE" "$OLD_CADDY_HOME" "$OLD_ETC" "/var/log/$OLD"
+    for u in personalcomputer-agent personalcomputer personalcomputer-caddy "$OLD-agent" "$OLD" "$OLD-caddy"; do userdel "$u" >/dev/null 2>&1 || deluser "$u" >/dev/null 2>&1 || true; done
+    for g in personalcomputer personalcomputer-caddy "$OLD" "$OLD-caddy"; do groupdel "$g" >/dev/null 2>&1 || delgroup "$g" >/dev/null 2>&1 || true; done
     ok "Personal Computer удалён полностью, вместе с данными."
   else
+    [ "$LEGACY" = 1 ] && [ ! -d "$STATE" ] && { STATE=$OLD_STATE; ETC=$OLD_ETC; }
     ok "Personal Computer удалён. Данные остались в $STATE и $ETC (удалить: --uninstall --purge)."
   fi
   exit 0
 fi
 
-# при обновлении — прежние параметры
-if [ "$MODE" = update ] && [ -r "$ETC/install.conf" ]; then
-  # shellcheck disable=SC1091
-  . "$ETC/install.conf"
-elif [ -r "$ETC/install.conf" ]; then
+# при обновлении — прежние параметры (у версии до переименования — в /etc/mochi)
+CONF="$ETC/install.conf"
+[ -r "$CONF" ] || [ "$LEGACY" = 0 ] || CONF="$OLD_ETC/install.conf"
+if [ "$MODE" = update ] && [ -r "$CONF" ]; then
+  # shellcheck disable=SC1090
+  . "$CONF"
+elif [ -r "$CONF" ]; then
   # повторная установка: доступ агента, переключённый в настройках, молча не сбрасываем
-  WITH_SUDO=$(sed -n "s/^WITH_SUDO='\{0,1\}\([01]\)'\{0,1\}$/\1/p" "$ETC/install.conf" | tail -n 1)
+  WITH_SUDO=$(sed -n "s/^WITH_SUDO='\{0,1\}\([01]\)'\{0,1\}$/\1/p" "$CONF" | tail -n 1)
 fi
 # явный --root / --no-root важнее сохранённого
 [ -n "$SUDO_ARG" ] && WITH_SUDO=$SUDO_ARG
@@ -180,7 +224,7 @@ fi
 # попадают в адреса, в build.json и в install.conf — только безопасные символы
 [[ "$REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || die "Неверный репозиторий: $REPO (нужно ВЛАДЕЛЕЦ/ИМЯ)"
 [[ "$REF" =~ ^[A-Za-z0-9._/-]+$ ]] || die "Неверная ветка: $REF"
-[ -z "$COMMIT" ] || [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "Неверный MOCHI_COMMIT: $COMMIT"
+[ -z "$COMMIT" ] || [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "Неверный PERSONALCOMPUTER_COMMIT: $COMMIT"
 
 say "${B}Устанавливаю Personal Computer${N} · $OS_NAME · $(uname -m) · $INIT · пакеты: $PM"
 
@@ -212,6 +256,11 @@ pkgs $BASE || die "Не удалось поставить пакеты: $BASE"
 pkgs $EXTRA 2>/dev/null || warn "Часть дополнительных пакетов не поставилась ($EXTRA) — не страшно"
 ok "Пакеты на месте"
 
+# переезд: программа (Node.js, ttyd, Caddy, код) — сразу на новое место, чтобы не качать её заново.
+# По старому пути — ссылка: службы прежней версии пока работают и не должны этого заметить
+if [ "$LEGACY" = 1 ] && [ -d "$OLD_PREFIX" ] && [ ! -L "$OLD_PREFIX" ] && [ ! -e "$PREFIX" ]; then
+  mv "$OLD_PREFIX" "$PREFIX" && ln -s "$PREFIX" "$OLD_PREFIX"
+fi
 mkdir -p "$PREFIX/bin"
 
 # ---------- Node.js ----------
@@ -265,7 +314,7 @@ if [ "$TLS" = on ]; then
   if command -v ss >/dev/null 2>&1; then
     busy=$(ss -Hltnp 2>/dev/null | awk '$4 ~ /:(80|443)$/' || true)
     ours=0
-    if [ "$INIT" = systemd ]; then systemctl is-active -q mochi-caddy 2>/dev/null && ours=1; else rc-service mochi-caddy status >/dev/null 2>&1 && ours=1; fi
+    if [ "$INIT" = systemd ]; then systemctl is-active -q personalcomputer-caddy 2>/dev/null && ours=1; else rc-service personalcomputer-caddy status >/dev/null 2>&1 && ours=1; fi
     if [ -n "$busy" ] && [ "$ours" = 0 ]; then
       warn "Порты 80/443 уже заняты:"; printf '%s\n' "$busy" >&2
       die "Освободи их или поставь с --no-tls --public-url https://твой-домен и проксируй на 127.0.0.1:$PORT (с поддержкой WebSocket)"
@@ -288,7 +337,7 @@ TRUST=0; [ "$TLS" = on ] || [ -n "$PUBLIC_URL" ] && TRUST=1
 # ---------- код Personal Computer ----------
 say "Ставлю код Personal Computer…"
 here=""; [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ] && here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-if [ -z "$SRC" ] && [ -n "$here" ] && [ -f "$here/server/mochi.js" ] && [ -f "$here/index.html" ]; then SRC="$here"; fi
+if [ -z "$SRC" ] && [ -n "$here" ] && [ -f "$here/server/personalcomputer.js" ] && [ -f "$here/index.html" ]; then SRC="$here"; fi
 BUILD_COMMIT=""  # коммит, из которого ставим: по нему сервер проверяет, есть ли обновление
 if [ -z "$SRC" ]; then
   fetch "https://codeload.github.com/${REPO}/tar.gz/${COMMIT:-$REF}" "$TMP/src.tgz" || die "Не скачался код ${REPO}@${COMMIT:-$REF}"
@@ -302,40 +351,94 @@ elif [ -e "$SRC/.git" ] && command -v git >/dev/null 2>&1; then
   BUILD_COMMIT=$(git -c safe.directory='*' -C "$SRC" rev-parse HEAD 2>/dev/null || true)
 fi
 [[ "$BUILD_COMMIT" =~ ^[0-9a-f]{40}$ ]] || BUILD_COMMIT=""
-[ -f "$SRC/server/mochi.js" ] && [ -f "$SRC/index.html" ] || die "В $SRC нет server/mochi.js — это точно код Personal Computer?"
+[ -f "$SRC/server/personalcomputer.js" ] && [ -f "$SRC/index.html" ] || die "В $SRC нет server/personalcomputer.js — это точно код Personal Computer?"
 rm -rf "$PREFIX/app.new"; mkdir -p "$PREFIX/app.new"
 cp -r "$SRC/index.html" "$SRC/sw.js" "$SRC/manifest.webmanifest" "$SRC/icons" "$SRC/server" "$PREFIX/app.new/"
 rm -rf "$PREFIX/app.new/server/test" "$PREFIX/app.new/server/.dev"
 printf '{"repo":"%s","ref":"%s","commit":"%s","installed":"%s"}\n' "$REPO" "$REF" "$BUILD_COMMIT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$PREFIX/app.new/build.json"
 chmod -R u=rwX,go=rX "$PREFIX/app.new"; chmod 0755 "$PREFIX/app.new/server/bin/"*
-"$NODE" --check "$PREFIX/app.new/server/mochi.js" || die "Код не прошёл проверку синтаксиса"
+"$NODE" --check "$PREFIX/app.new/server/personalcomputer.js" || die "Код не прошёл проверку синтаксиса"
 rm -rf "$PREFIX/app.old"; [ -d "$PREFIX/app" ] && mv "$PREFIX/app" "$PREFIX/app.old"
 mv "$PREFIX/app.new" "$PREFIX/app"
 ok "Код: $(cd "$PREFIX/app/server" && "$NODE" -p 'require("./package.json").version')${BUILD_COMMIT:+ · ${BUILD_COMMIT:0:7}}"
 
+# ---------- переезд со старых имён ----------
+# Пользователей и группы переименовываем (UID и GID прежние — владельцы файлов не меняются), папки переносим
+# как есть: данные, чаты, ключи, сертификаты и рабочие папки агента остаются на месте
+rename_user() { # старое новое домашняя-папка описание
+  id "$1" >/dev/null 2>&1 || return 0
+  id "$2" >/dev/null 2>&1 && return 0
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    # процессы пользователя (фоновые задачи агента, tmux) мешают переименованию
+    pkill -KILL -u "$1" >/dev/null 2>&1 || true
+    usermod -l "$2" -d "$3" -c "$4" "$1" >/dev/null 2>&1 && return 0
+    sleep "$i"
+  done
+  die "Не получилось переименовать пользователя $1 в $2 (usermod) — посмотри, что ещё работает: ps -u $1"
+}
+rename_group() { # старое новое
+  getent group "$1" >/dev/null || return 0
+  getent group "$2" >/dev/null && return 0
+  groupmod -n "$2" "$1" || die "Не получилось переименовать группу $1 в $2 (groupmod)"
+}
+move_dir() { # старая новая [link]
+  { [ -d "$1" ] && [ ! -L "$1" ]; } || return 0
+  if [ -e "$2" ]; then warn "$2 уже есть — $1 оставляю как есть"; return 0; fi
+  mv "$1" "$2"
+  if [ "${3:-}" = link ]; then ln -s "$2" "$1"; fi
+}
+if [ "$LEGACY" = 1 ]; then
+  say "Переезжаю со старого имени mochi: пользователи, папки, службы…"
+  if [ -n "$UPDATER" ]; then legacy_units_off keep-updater; else legacy_units_off; fi
+  for u in "$OLD-agent" "$OLD" "$OLD-caddy"; do pkill -TERM -u "$u" >/dev/null 2>&1 || true; done
+  sleep 1
+  rename_group "$OLD" personalcomputer
+  rename_group "$OLD-caddy" personalcomputer-caddy
+  rename_user "$OLD-agent" personalcomputer-agent "$STATE/agent" "Personal Computer agent"
+  rename_user "$OLD" personalcomputer "$STATE" "Personal Computer server"
+  rename_user "$OLD-caddy" personalcomputer-caddy "$CADDY_HOME" "Personal Computer HTTPS"
+  # по старому пути — ссылка: прежняя служба обновления (если установщик запустила она) пишет туда ход работы.
+  # Ссылки убирает personalcomputer-update legacy-cleanup, когда она закончит
+  move_dir "$OLD_STATE" "$STATE" link
+  move_dir "$OLD_CADDY_HOME" "$CADDY_HOME"
+  move_dir "$OLD_ETC" "$ETC"
+  move_dir "/var/log/$OLD" /var/log/personalcomputer
+  rm -f "$ETC/$OLD.env"  # personalcomputer.env пишется ниже заново
+  move_dir "$STATE/agent/.local/state/$OLD" "$STATE/agent/.local/state/personalcomputer"
+  [ -f "$STATE/agent/.profile" ] && sed -i "s#$OLD_PREFIX/#$PREFIX/#g" "$STATE/agent/.profile"
+  # расписания cron агента (Debian/Ubuntu, Fedora/RHEL, Alpine)
+  for d in /var/spool/cron/crontabs /var/spool/cron /etc/crontabs; do
+    [ -f "$d/$OLD-agent" ] && [ ! -e "$d/personalcomputer-agent" ] && mv "$d/$OLD-agent" "$d/personalcomputer-agent"
+  done
+  # правило sudo и drop-in'ы пишет заново personalcomputer-access (ниже) — по сохранённому выбору
+  rm -f "/etc/sudoers.d/$OLD-agent" "/usr/local/bin/$OLD"
+  ok "Переезд готов: всё называется personalcomputer, данные на месте"
+fi
+
 # ---------- пользователи ----------
 NOLOGIN=$(command -v nologin || echo /bin/false)
-getent group mochi >/dev/null || groupadd --system mochi
-id mochi >/dev/null 2>&1 || useradd --system --gid mochi --home-dir "$STATE" --no-create-home --shell "$NOLOGIN" --comment "Mochi server" mochi
-id mochi-agent >/dev/null 2>&1 || useradd --system --gid mochi --home-dir "$STATE/agent" --no-create-home --shell /bin/bash --comment "Mochi agent" mochi-agent
+getent group personalcomputer >/dev/null || groupadd --system personalcomputer
+id personalcomputer >/dev/null 2>&1 || useradd --system --gid personalcomputer --home-dir "$STATE" --no-create-home --shell "$NOLOGIN" --comment "Personal Computer server" personalcomputer
+id personalcomputer-agent >/dev/null 2>&1 || useradd --system --gid personalcomputer --home-dir "$STATE/agent" --no-create-home --shell /bin/bash --comment "Personal Computer agent" personalcomputer-agent
 if [ "$TLS" = on ]; then
-  getent group mochi-caddy >/dev/null || groupadd --system mochi-caddy
-  id mochi-caddy >/dev/null 2>&1 || useradd --system --gid mochi-caddy --home-dir "$CADDY_HOME" --no-create-home --shell "$NOLOGIN" --comment "Mochi HTTPS" mochi-caddy
+  getent group personalcomputer-caddy >/dev/null || groupadd --system personalcomputer-caddy
+  id personalcomputer-caddy >/dev/null 2>&1 || useradd --system --gid personalcomputer-caddy --home-dir "$CADDY_HOME" --no-create-home --shell "$NOLOGIN" --comment "Personal Computer HTTPS" personalcomputer-caddy
 fi
 # агент может разблокироваться и после «usermod -L»: пароль у системных пользователей не задан
-passwd -l mochi-agent >/dev/null 2>&1 || true
+passwd -l personalcomputer-agent >/dev/null 2>&1 || true
 
 # папки: права выставляем и при повторной установке
 mkd() { mkdir -p "$3"; chown "$2" "$3"; chmod "$1" "$3"; }
-mkd 0750 root:mochi "$STATE"
-mkd 0700 mochi:mochi "$STATE/data"
-mkd 2770 mochi-agent:mochi "$STATE/agent"
-mkd 0755 root:root "$ETC"  # секретов здесь нет; Caddyfile читает mochi-caddy
-mkd 0755 root:root /var/log/mochi
-mkd 0750 root:mochi "$STATE/update"  # ход обновления (пишет root, читает сервер)
+mkd 0750 root:personalcomputer "$STATE"
+mkd 0700 personalcomputer:personalcomputer "$STATE/data"
+mkd 2770 personalcomputer-agent:personalcomputer "$STATE/agent"
+mkd 0755 root:root "$ETC"  # секретов здесь нет; Caddyfile читает personalcomputer-caddy
+mkd 0755 root:root /var/log/personalcomputer
+mkd 0750 root:personalcomputer "$STATE/update"  # ход обновления (пишет root, читает сервер)
 A="$STATE/agent"
-mkd 0750 mochi-agent:mochi "$A/.local"
-mkd 0750 mochi-agent:mochi "$A/.local/bin"
+mkd 0750 personalcomputer-agent:personalcomputer "$A/.local"
+mkd 0750 personalcomputer-agent:personalcomputer "$A/.local/bin"
 # оформление tmux — в $APP/bin/tmux.conf (цвета следуют теме); розовый ~/.tmux.conf
 # от прежних версий установщика убираем, только если его не меняли
 OLD_TMUX='# Мочи: терминал в браузере
@@ -352,32 +455,32 @@ export PATH="\$HOME/.local/bin:$(dirname "$NODE"):\$PATH"
 export NPM_CONFIG_PREFIX="\$HOME/.local"
 [ -n "\$BASH_VERSION" ] && [ -f "\$HOME/.bashrc" ] && . "\$HOME/.bashrc"
 EOF
-chown mochi-agent:mochi "$A/.profile"; }
+chown personalcomputer-agent:personalcomputer "$A/.profile"; }
 chmod 0640 "$A/.profile" 2>/dev/null || true
-[ -f "$A/.bashrc" ] || { printf '%s\n' 'PS1="\[\e[35m\]pc\[\e[0m\]:\[\e[32m\]\w\[\e[0m\]\$ "' 'alias ll="ls -la"' > "$A/.bashrc"; chown mochi-agent:mochi "$A/.bashrc"; }
+[ -f "$A/.bashrc" ] || { printf '%s\n' 'PS1="\[\e[35m\]pc\[\e[0m\]:\[\e[32m\]\w\[\e[0m\]\$ "' 'alias ll="ls -la"' > "$A/.bashrc"; chown personalcomputer-agent:personalcomputer "$A/.bashrc"; }
 chmod 0640 "$A/.bashrc" 2>/dev/null || true
-[ -f "$A/README.txt" ] || { printf '%s\n' "Это рабочая папка агента Personal Computer." "Папки пользователей: <имя>/inbox (файлы от пользователя), <имя>/outbox (результаты)." > "$A/README.txt"; chown mochi-agent:mochi "$A/README.txt"; }
+[ -f "$A/README.txt" ] || { printf '%s\n' "Это рабочая папка агента Personal Computer." "Папки пользователей: <имя>/inbox (файлы от пользователя), <имя>/outbox (результаты)." > "$A/README.txt"; chown personalcomputer-agent:personalcomputer "$A/README.txt"; }
 chmod 0640 "$A/README.txt" 2>/dev/null || true
 
 # ---------- настройки ----------
-cat > "$ETC/mochi.env" <<EOF
-# Настройки Personal Computer (после правки: sudo mochi restart). Секретов здесь нет.
-MOCHI_HOST=127.0.0.1
-MOCHI_PORT=$PORT
-MOCHI_DATA=$STATE/data
-MOCHI_WORK=$STATE/agent
-MOCHI_WEB=$PREFIX/app
-MOCHI_PUBLIC_URL=$PUBLIC_URL
-MOCHI_SECURE_COOKIE=$SECURE
-MOCHI_TRUST_PROXY=$TRUST
-MOCHI_AGENT_SUDO=$WITH_SUDO
-MOCHI_RUNNER_SOCK=/run/mochi-runner/runner.sock
-MOCHI_TTYD_SOCK=/run/mochi-term/ttyd.sock
-MOCHI_TTYD_BIN=$PREFIX/bin/ttyd
-MOCHI_UPDATE_DIR=$STATE/update
-MOCHI_ACCESS_CTL=1
+cat > "$ETC/personalcomputer.env" <<EOF
+# Настройки Personal Computer (после правки: sudo personalcomputer restart). Секретов здесь нет.
+PERSONALCOMPUTER_HOST=127.0.0.1
+PERSONALCOMPUTER_PORT=$PORT
+PERSONALCOMPUTER_DATA=$STATE/data
+PERSONALCOMPUTER_WORK=$STATE/agent
+PERSONALCOMPUTER_WEB=$PREFIX/app
+PERSONALCOMPUTER_PUBLIC_URL=$PUBLIC_URL
+PERSONALCOMPUTER_SECURE_COOKIE=$SECURE
+PERSONALCOMPUTER_TRUST_PROXY=$TRUST
+PERSONALCOMPUTER_AGENT_SUDO=$WITH_SUDO
+PERSONALCOMPUTER_RUNNER_SOCK=/run/personalcomputer-runner/runner.sock
+PERSONALCOMPUTER_TTYD_SOCK=/run/personalcomputer-term/ttyd.sock
+PERSONALCOMPUTER_TTYD_BIN=$PREFIX/bin/ttyd
+PERSONALCOMPUTER_UPDATE_DIR=$STATE/update
+PERSONALCOMPUTER_ACCESS_CTL=1
 EOF
-chmod 0640 "$ETC/mochi.env"; chown root:mochi "$ETC/mochi.env"
+chmod 0640 "$ETC/personalcomputer.env"; chown root:personalcomputer "$ETC/personalcomputer.env"
 cat > "$ETC/install.conf" <<EOF
 DOMAIN='$DOMAIN'
 EMAIL='$EMAIL'
@@ -393,12 +496,12 @@ chmod 0600 "$ETC/install.conf"
 
 # ---------- доступ агента ----------
 # root через sudo без пароля: правило sudoers и drop-in, снимающий изоляцию исполнителя и терминала
-# (сами службы ниже всегда изолированы). Это делает mochi-access — тот же, что переключает доступ из настроек
+# (сами службы ниже всегда изолированы). Это делает personalcomputer-access — тот же, что переключает доступ из настроек
 if [ "$WITH_SUDO" = 1 ]; then ROOTW=on; else ROOTW=off; fi
-"$PREFIX/app/server/bin/mochi-access" apply "$ROOTW" --no-restart || warn "Доступ агента не переключился (подробности выше). Повторить: sudo mochi root $ROOTW"
+"$PREFIX/app/server/bin/personalcomputer-access" apply "$ROOTW" --no-restart || warn "Доступ агента не переключился (подробности выше). Повторить: sudo personalcomputer root $ROOTW"
 
 if [ "$TLS" = on ]; then
-  mkd 0700 mochi-caddy:mochi-caddy "$CADDY_HOME"
+  mkd 0700 personalcomputer-caddy:personalcomputer-caddy "$CADDY_HOME"
   {
     echo "{"
     echo "	admin off"
@@ -418,7 +521,7 @@ if [ "$TLS" = on ]; then
   if ! HOME="$TMP" XDG_DATA_HOME="$TMP" XDG_CONFIG_HOME="$TMP" "$PREFIX/bin/caddy" validate --config "$ETC/Caddyfile" --adapter caddyfile >"$TMP/caddy.log" 2>&1; then
     tail -n 5 "$TMP/caddy.log" >&2; die "Caddyfile не прошёл проверку"
   fi
-  SERVICES="$SERVICES mochi-caddy"
+  SERVICES="$SERVICES personalcomputer-caddy"
 fi
 
 # ---------- службы ----------
@@ -443,7 +546,7 @@ SystemCallArchitectures=native
 CapabilityBoundingSet=
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK"
   # агент — обычный пользователь без доступа к данным сервера и домашним папкам людей.
-  # Полный доступ (root) снимает это drop-in'ом mochi-*.service.d/mochi-root.conf (его пишет mochi-access)
+  # Полный доступ (root) снимает это drop-in'ом personalcomputer-*.service.d/personalcomputer-root.conf (его пишет personalcomputer-access)
   HARD_AGENT="NoNewPrivileges=yes
 ProtectSystem=full
 ProtectHome=yes
@@ -454,20 +557,20 @@ ProtectKernelModules=yes
 ProtectControlGroups=yes
 RestrictSUIDSGID=yes"
 
-  cat > /etc/systemd/system/mochi-runner.service <<EOF
+  cat > /etc/systemd/system/personalcomputer-runner.service <<EOF
 [Unit]
 Description=Personal Computer — исполнитель команд агента
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=mochi-agent
-Group=mochi
-EnvironmentFile=$ETC/mochi.env
+User=personalcomputer-agent
+Group=personalcomputer
+EnvironmentFile=$ETC/personalcomputer.env
 Environment=HOME=$STATE/agent
 WorkingDirectory=$STATE/agent
-ExecStart=$NODE $APP/mochi.js runner
-RuntimeDirectory=mochi-runner
+ExecStart=$NODE $APP/personalcomputer.js runner
+RuntimeDirectory=personalcomputer-runner
 RuntimeDirectoryMode=0750
 UMask=0007
 Restart=always
@@ -478,19 +581,19 @@ $HARD_AGENT
 [Install]
 WantedBy=multi-user.target
 EOF
-  cat > /etc/systemd/system/mochi-term.service <<EOF
+  cat > /etc/systemd/system/personalcomputer-term.service <<EOF
 [Unit]
 Description=Personal Computer — терминал (ttyd на unix-сокете)
 After=network-online.target
 
 [Service]
-User=mochi-agent
-Group=mochi
-EnvironmentFile=$ETC/mochi.env
+User=personalcomputer-agent
+Group=personalcomputer
+EnvironmentFile=$ETC/personalcomputer.env
 Environment=HOME=$STATE/agent SHELL=/bin/bash
 WorkingDirectory=$STATE/agent
-ExecStart=$APP/bin/mochi-ttyd
-RuntimeDirectory=mochi-term
+ExecStart=$APP/bin/personalcomputer-ttyd
+RuntimeDirectory=personalcomputer-term
 RuntimeDirectoryMode=0750
 UMask=0007
 Restart=always
@@ -500,18 +603,18 @@ $HARD_AGENT
 [Install]
 WantedBy=multi-user.target
 EOF
-  cat > /etc/systemd/system/mochi.service <<EOF
+  cat > /etc/systemd/system/personalcomputer.service <<EOF
 [Unit]
 Description=Personal Computer — облачный агент (веб, API, Telegram)
-After=network-online.target mochi-runner.service mochi-term.service
-Wants=network-online.target mochi-runner.service mochi-term.service
+After=network-online.target personalcomputer-runner.service personalcomputer-term.service
+Wants=network-online.target personalcomputer-runner.service personalcomputer-term.service
 
 [Service]
-User=mochi
-Group=mochi
-EnvironmentFile=$ETC/mochi.env
+User=personalcomputer
+Group=personalcomputer
+EnvironmentFile=$ETC/personalcomputer.env
 WorkingDirectory=$STATE/data
-ExecStart=$NODE $APP/mochi.js serve
+ExecStart=$NODE $APP/personalcomputer.js serve
 UMask=0007
 Restart=always
 RestartSec=2
@@ -522,15 +625,15 @@ $HARD_SERVER
 WantedBy=multi-user.target
 EOF
   if [ "$TLS" = on ]; then
-    cat > /etc/systemd/system/mochi-caddy.service <<EOF
+    cat > /etc/systemd/system/personalcomputer-caddy.service <<EOF
 [Unit]
 Description=Personal Computer — HTTPS (Caddy)
-After=network-online.target mochi.service
+After=network-online.target personalcomputer.service
 Wants=network-online.target
 
 [Service]
-User=mochi-caddy
-Group=mochi-caddy
+User=personalcomputer-caddy
+Group=personalcomputer-caddy
 Environment=HOME=$CADDY_HOME XDG_DATA_HOME=$CADDY_HOME XDG_CONFIG_HOME=$CADDY_HOME
 ExecStart=$PREFIX/bin/caddy run --config $ETC/Caddyfile --adapter caddyfile
 Restart=always
@@ -554,49 +657,49 @@ LockPersonality=yes
 WantedBy=multi-user.target
 EOF
   else
-    systemctl disable --now mochi-caddy >/dev/null 2>&1 || true; rm -f /etc/systemd/system/mochi-caddy.service
+    systemctl disable --now personalcomputer-caddy >/dev/null 2>&1 || true; rm -f /etc/systemd/system/personalcomputer-caddy.service
   fi
   # кнопка «Обновить» в браузере: сервер (без прав) кладёт файл-запрос, systemd замечает его
-  # и запускает обновление от root. Что и откуда ставить, решает только mochi-update (из install.conf)
-  cat > /etc/systemd/system/mochi-update.service <<EOF
+  # и запускает обновление от root. Что и откуда ставить, решает только personalcomputer-update (из install.conf)
+  cat > /etc/systemd/system/personalcomputer-update.service <<EOF
 [Unit]
 Description=Personal Computer — обновление (по кнопке в настройках)
 
 [Service]
 Type=oneshot
 Environment=HOME=/root
-ExecStart=$APP/bin/mochi-update service
+ExecStart=$APP/bin/personalcomputer-update service
 TimeoutStartSec=30min
 EOF
-  cat > /etc/systemd/system/mochi-update.path <<EOF
+  cat > /etc/systemd/system/personalcomputer-update.path <<EOF
 [Unit]
 Description=Personal Computer — ждёт запрос на обновление из настроек
 
 [Path]
 PathExists=$STATE/data/update.request
-Unit=mochi-update.service
+Unit=personalcomputer-update.service
 
 [Install]
 WantedBy=multi-user.target
 EOF
   # переключатель «Доступ агента» в настройках: так же — файл-запрос сервера и root-служба
-  cat > /etc/systemd/system/mochi-access.service <<EOF
+  cat > /etc/systemd/system/personalcomputer-access.service <<EOF
 [Unit]
 Description=Personal Computer — доступ агента (root вкл/выкл из настроек)
 
 [Service]
 Type=oneshot
 Environment=HOME=/root
-ExecStart=$APP/bin/mochi-access service
+ExecStart=$APP/bin/personalcomputer-access service
 TimeoutStartSec=40min
 EOF
-  cat > /etc/systemd/system/mochi-access.path <<EOF
+  cat > /etc/systemd/system/personalcomputer-access.path <<EOF
 [Unit]
 Description=Personal Computer — ждёт запрос на смену доступа агента из настроек
 
 [Path]
 PathExists=$STATE/data/access.request
-Unit=mochi-access.service
+Unit=personalcomputer-access.service
 
 [Install]
 WantedBy=multi-user.target
@@ -611,11 +714,11 @@ else
 description="$d"
 supervisor=supervise-daemon
 command="/bin/sh"
-command_args="-c 'umask 007; set -a; . $ETC/mochi.env; $envs; set +a; exec $cmd'"
+command_args="-c 'umask 007; set -a; . $ETC/personalcomputer.env; $envs; set +a; exec $cmd'"
 command_user="$ug"
 directory="$wd"
-output_log="/var/log/mochi/$n.log"
-error_log="/var/log/mochi/$n.log"
+output_log="/var/log/personalcomputer/$n.log"
+error_log="/var/log/personalcomputer/$n.log"
 respawn_delay=2
 respawn_max=0
 depend() {
@@ -625,27 +728,27 @@ depend() {
 }
 start_pre() {
 	${rt:+checkpath -d -m 0750 -o $ug /run/$rt}
-	checkpath -f -m 0640 -o $ug /var/log/mochi/$n.log
+	checkpath -f -m 0640 -o $ug /var/log/personalcomputer/$n.log
 }
 EOF
     chmod 0755 "/etc/init.d/$n"
   }
-  orc mochi-runner mochi-agent:mochi "Personal Computer — исполнитель команд" mochi-runner "$STATE/agent" "HOME=$STATE/agent" "$NODE $APP/mochi.js runner"
-  orc mochi-term mochi-agent:mochi "Personal Computer — терминал" mochi-term "$STATE/agent" "HOME=$STATE/agent SHELL=/bin/bash" "$APP/bin/mochi-ttyd"
-  orc mochi mochi:mochi "Personal Computer — облачный агент" "" "$STATE/data" "HOME=$STATE" "$NODE $APP/mochi.js serve" "after mochi-runner mochi-term"
+  orc personalcomputer-runner personalcomputer-agent:personalcomputer "Personal Computer — исполнитель команд" personalcomputer-runner "$STATE/agent" "HOME=$STATE/agent" "$NODE $APP/personalcomputer.js runner"
+  orc personalcomputer-term personalcomputer-agent:personalcomputer "Personal Computer — терминал" personalcomputer-term "$STATE/agent" "HOME=$STATE/agent SHELL=/bin/bash" "$APP/bin/personalcomputer-ttyd"
+  orc personalcomputer personalcomputer:personalcomputer "Personal Computer — облачный агент" "" "$STATE/data" "HOME=$STATE" "$NODE $APP/personalcomputer.js serve" "after personalcomputer-runner personalcomputer-term"
   if [ "$TLS" = on ]; then
     command -v setcap >/dev/null 2>&1 || pkgs libcap-setcap >/dev/null 2>&1 || pkgs libcap >/dev/null 2>&1 || true
     setcap cap_net_bind_service=+ep "$PREFIX/bin/caddy" || die "Не удалось разрешить Caddy порты 80/443 (нужен setcap)"
-    orc mochi-caddy mochi-caddy:mochi-caddy "Personal Computer — HTTPS" "" "$CADDY_HOME" "HOME=$CADDY_HOME XDG_DATA_HOME=$CADDY_HOME XDG_CONFIG_HOME=$CADDY_HOME" "$PREFIX/bin/caddy run --config $ETC/Caddyfile --adapter caddyfile" "after mochi"
+    orc personalcomputer-caddy personalcomputer-caddy:personalcomputer-caddy "Personal Computer — HTTPS" "" "$CADDY_HOME" "HOME=$CADDY_HOME XDG_DATA_HOME=$CADDY_HOME XDG_CONFIG_HOME=$CADDY_HOME" "$PREFIX/bin/caddy run --config $ETC/Caddyfile --adapter caddyfile" "after personalcomputer"
   fi
   # кнопки «Обновить» и «Доступ агента» в браузере: следит за файлами-запросами сервера и выполняет их от root
-  orc mochi-updater root:root "Personal Computer — обновление и доступ агента по кнопкам в настройках" "" "$STATE" "HOME=/root" "$APP/bin/mochi-update watch"
+  orc personalcomputer-updater root:root "Personal Computer — обновление и доступ агента по кнопкам в настройках" "" "$STATE" "HOME=/root" "$APP/bin/personalcomputer-update watch"
 fi
 
-# ---------- команда mochi ----------
-cat > /usr/local/bin/mochi <<EOF
+# ---------- команда personalcomputer ----------
+cat > /usr/local/bin/personalcomputer <<EOF
 #!/bin/sh
-# Управление Personal Computer. Подробнее: mochi help
+# Управление Personal Computer. Подробнее: personalcomputer help
 INIT=$INIT
 NODE=$NODE
 APP=$APP
@@ -653,11 +756,11 @@ SERVICES="$SERVICES"
 REPO="$REPO"
 REF="$REF"
 EOF
-cat >> /usr/local/bin/mochi <<'EOF'
-need_root() { [ "$(id -u)" -eq 0 ] || { echo "Нужно через sudo: sudo mochi $*" >&2; exit 1; }; }
+cat >> /usr/local/bin/personalcomputer <<'EOF'
+need_root() { [ "$(id -u)" -eq 0 ] || { echo "Нужно через sudo: sudo personalcomputer $*" >&2; exit 1; }; }
 each() { for s in $SERVICES; do if [ "$INIT" = systemd ]; then systemctl "$1" "$s"; else rc-service "$s" "$1"; fi; done; }
 # команда из исполнителя или терминала Personal Computer (агент с root): перезапуск их служб оборвал бы её на полпути
-inside() { grep -qE 'mochi-(runner|term)' /proc/self/cgroup 2>/dev/null; }
+inside() { grep -qE 'personalcomputer-(runner|term)' /proc/self/cgroup 2>/dev/null; }
 case "${1:-help}" in
   start|stop|restart)
     need_root "$@"
@@ -666,34 +769,39 @@ case "${1:-help}" in
       systemctl "$1" --no-block $SERVICES && echo "Готово: службы Personal Computer перезапускаются (эта команда оборвётся вместе с ними — это нормально)"
     else each "$1"; fi ;;
   logs)
-    if [ "$INIT" = systemd ]; then shift; exec journalctl -u 'mochi*' -n 200 "${@:--f}"; else exec tail -n 200 -f /var/log/mochi/*.log; fi ;;
-  update) need_root "$@"; exec "$APP/bin/mochi-update" cli ;;
-  root) need_root "$@"; exec "$APP/bin/mochi-access" cli "${2:-status}" ;;
+    if [ "$INIT" = systemd ]; then shift; exec journalctl -u 'personalcomputer*' -n 200 "${@:--f}"; else exec tail -n 200 -f /var/log/personalcomputer/*.log; fi ;;
+  update) need_root "$@"; exec "$APP/bin/personalcomputer-update" cli ;;
+  root) need_root "$@"; exec "$APP/bin/personalcomputer-access" cli "${2:-status}" ;;
   uninstall) need_root "$@"; shift; curl -fsSL "https://raw.githubusercontent.com/$REPO/$REF/install.sh" | bash -s -- --uninstall "$@" ;;
   status)
     for s in $SERVICES; do
-      if [ "$INIT" = systemd ]; then printf '%-14s %s\n' "$s" "$(systemctl is-active "$s")"; else printf '%-14s ' "$s"; rc-service "$s" status 2>/dev/null | tail -1; fi
+      if [ "$INIT" = systemd ]; then printf '%-24s %s\n' "$s" "$(systemctl is-active "$s")"; else printf '%-24s ' "$s"; rc-service "$s" status 2>/dev/null | tail -1; fi
     done
-    [ "$(id -u)" -eq 0 ] && { set -a; . /etc/mochi/mochi.env; set +a; "$NODE" "$APP/mochi.js" status; } ;;
+    [ "$(id -u)" -eq 0 ] && { set -a; . /etc/personalcomputer/personalcomputer.env; set +a; "$NODE" "$APP/personalcomputer.js" status; } ;;
   invite|users|passwd|admin|deluser)
-    need_root "$@"; set -a; . /etc/mochi/mochi.env; set +a; exec "$NODE" "$APP/mochi.js" "$@" ;;
+    need_root "$@"; set -a; . /etc/personalcomputer/personalcomputer.env; set +a; exec "$NODE" "$APP/personalcomputer.js" "$@" ;;
   *)
     cat <<'H'
-mochi invite [дней]     — ссылка-приглашение для регистрации
-mochi users             — пользователи
-mochi passwd <имя>      — сбросить пароль (новый будет напечатан)
-mochi admin <имя> [off] — сделать (снять) администратора
-mochi deluser <имя>     — удалить пользователя
-mochi status | logs     — состояние и журнал
-mochi start | stop | restart
-mochi update            — обновить Personal Computer (данные сохраняются; то же — кнопка в настройках → Сервер)
-mochi root [on|off]     — полный доступ агента: root через sudo без пароля (то же — настройки → Сервер)
-mochi uninstall [--purge]
+personalcomputer invite [дней]     — ссылка-приглашение для регистрации
+personalcomputer users             — пользователи
+personalcomputer passwd <имя>      — сбросить пароль (новый будет напечатан)
+personalcomputer admin <имя> [off] — сделать (снять) администратора
+personalcomputer deluser <имя>     — удалить пользователя
+personalcomputer status | logs     — состояние и журнал
+personalcomputer start | stop | restart
+personalcomputer update            — обновить Personal Computer (данные сохраняются; то же — кнопка в настройках → Сервер)
+personalcomputer root [on|off]     — полный доступ агента: root через sudo без пароля (то же — настройки → Сервер)
+personalcomputer uninstall [--purge]
+Коротко — pc: например, sudo pc root on
 H
     ;;
 esac
 EOF
-chmod 0755 /usr/local/bin/mochi
+chmod 0755 /usr/local/bin/personalcomputer
+# короткое имя — как метка [pc] в терминале. Чужую команду pc не заслоняем
+if [ "$(readlink /usr/local/bin/pc 2>/dev/null)" = personalcomputer ] || ! command -v pc >/dev/null 2>&1; then
+  ln -sfn personalcomputer /usr/local/bin/pc
+fi
 
 # ---------- брандмауэр ----------
 if [ "$TLS" = on ] && [ "$OPEN_FW" = 1 ]; then
@@ -708,26 +816,35 @@ fi
 say "Запускаю службы…"
 for s in $SERVICES; do svc enable "$s"; done
 for s in $SERVICES; do svc restart "$s" >/dev/null 2>&1 || svc start "$s" >/dev/null; done
-# служба обновления по кнопке. Если обновляет она сама (MOCHI_UPDATER), её не перезапускаем — это оборвало бы обновление
-if [ "$INIT" = systemd ]; then UPD=mochi-update.path; else UPD=mochi-updater; fi
+# служба обновления по кнопке. Если обновляет она сама ($UPDATER), её не перезапускаем — это оборвало бы обновление
+if [ "$INIT" = systemd ]; then UPD=personalcomputer-update.path; else UPD=personalcomputer-updater; fi
 svc enable "$UPD"
-if [ -n "${MOCHI_UPDATER:-}" ]; then svc start "$UPD" >/dev/null 2>&1 || true
-else svc restart "$UPD" >/dev/null 2>&1 || svc start "$UPD" >/dev/null 2>&1 || warn "Не запустилась служба $UPD — обновлять можно командой: sudo mochi update"; fi
+if [ -n "$UPDATER" ]; then svc start "$UPD" >/dev/null 2>&1 || true
+else svc restart "$UPD" >/dev/null 2>&1 || svc start "$UPD" >/dev/null 2>&1 || warn "Не запустилась служба $UPD — обновлять можно командой: sudo personalcomputer update"; fi
 if [ "$INIT" = systemd ]; then
-  svc enable mochi-access.path
-  svc restart mochi-access.path >/dev/null 2>&1 || warn "Не запустилась служба mochi-access.path — доступ агента можно переключать командой: sudo mochi root on|off"
+  svc enable personalcomputer-access.path
+  svc restart personalcomputer-access.path >/dev/null 2>&1 || warn "Не запустилась служба personalcomputer-access.path — доступ агента можно переключать командой: sudo personalcomputer root on|off"
+fi
+# после переезда: ссылки со старых путей и прежняя служба обновления OpenRC больше не нужны. Если установщик
+# запустила прежняя служба обновления, она ещё пишет по старому пути — тогда уберём чуть позже
+# (systemd — таймером; OpenRC — служба personalcomputer-updater, как только прежнее обновление закончится)
+if [ -L "$OLD_PREFIX" ] || [ -L "$OLD_STATE" ] || [ -e "/etc/init.d/$OLD-updater" ]; then
+  if [ -z "$UPDATER" ]; then "$APP/bin/personalcomputer-update" legacy-cleanup || true
+  elif [ "$INIT" = systemd ]; then
+    systemd-run -q --on-active=90 --unit="personalcomputer-legacy-cleanup-$(date +%s)" "$APP/bin/personalcomputer-update" legacy-cleanup >/dev/null 2>&1 || true
+  fi
 fi
 
 up=0
 for _ in $(seq 1 60); do curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && { up=1; break; }; sleep 0.5; done
 if [ "$up" != 1 ]; then
-  [ "$INIT" = systemd ] && journalctl -u mochi -n 30 --no-pager >&2 || tail -n 30 /var/log/mochi/mochi.log >&2 || true
-  die "Сервер Personal Computer не запустился (журнал выше; подробнее: mochi logs)"
+  [ "$INIT" = systemd ] && journalctl -u personalcomputer -n 30 --no-pager >&2 || tail -n 30 /var/log/personalcomputer/personalcomputer.log >&2 || true
+  die "Сервер Personal Computer не запустился (журнал выше; подробнее: personalcomputer logs)"
 fi
 ok "Сервер Personal Computer работает"
 
-set -a; . "$ETC/mochi.env"; set +a
-nusers=$("$NODE" "$APP/mochi.js" status 2>/dev/null | grep -oE '"users": *[0-9]+' | grep -oE '[0-9]+$' || echo 0)
+set -a; . "$ETC/personalcomputer.env"; set +a
+nusers=$("$NODE" "$APP/personalcomputer.js" status 2>/dev/null | grep -oE '"users": *[0-9]+' | grep -oE '[0-9]+$' || echo 0)
 
 URL="${PUBLIC_URL:-http://localhost:$PORT}"
 if [ "$TLS" = on ]; then
@@ -735,7 +852,7 @@ if [ "$TLS" = on ]; then
   tls=0
   for _ in $(seq 1 45); do curl -fsS --max-time 5 "https://$DOMAIN/api/health" >/dev/null 2>&1 && { tls=1; break; }; sleep 2; done
   if [ "$tls" = 1 ]; then ok "HTTPS готов"
-  else warn "HTTPS пока не отвечает. Проверь: порты 80 и 443 открыты у хостера (облачный firewall), домен $DOMAIN указывает на этот сервер. Журнал: mochi logs"; fi
+  else warn "HTTPS пока не отвечает. Проверь: порты 80 и 443 открыты у хостера (облачный firewall), домен $DOMAIN указывает на этот сервер. Журнал: personalcomputer logs"; fi
 fi
 
 echo
@@ -743,13 +860,13 @@ printf '%s\n' "${B}${P}  ╭─────────────────�
 printf '%s\n' "${B}${P}  │   Personal Computer установлен!  [^_^]       │${N}"
 printf '%s\n' "${B}${P}  ╰─────────────────────────────────────────────╯${N}"
 if [ "${nusers:-0}" = 0 ]; then
-  inv=$("$NODE" "$APP/mochi.js" invite 7 | grep -oE '[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}' | head -1)
+  inv=$("$NODE" "$APP/personalcomputer.js" invite 7 | grep -oE '[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}' | head -1)
   echo
   echo "  Открой и зарегистрируйся (первый пользователь станет администратором):"
   echo
   echo "    ${B}${URL}/?invite=${inv}${N}"
   echo
-  echo "  Код приглашения: ${B}${inv}${N}  (одноразовый, 7 дней; новый: sudo mochi invite)"
+  echo "  Код приглашения: ${B}${inv}${N}  (одноразовый, 7 дней; новый: sudo personalcomputer invite)"
 else
   echo; echo "  Адрес: ${B}${URL}/${N}   (пользователей: $nusers)"
 fi
@@ -761,9 +878,9 @@ fi
 echo
 echo "  Дальше: в настройках Personal Computer → «Модель» — вставь ключ API. Telegram: попроси в чате «подключи Telegram»."
 if [ "$WITH_SUDO" = 1 ]; then
-  echo "  ${Y}У агента полный доступ: root через sudo без пароля.${N} Забрать: ${B}sudo mochi root off${N}"
+  echo "  ${Y}У агента полный доступ: root через sudo без пароля.${N} Забрать: ${B}sudo personalcomputer root off${N}"
 else
-  echo "  Агент работает без root. Полный доступ: настройки → Сервер → «Доступ агента» или ${B}sudo mochi root on${N}"
+  echo "  Агент работает без root. Полный доступ: настройки → Сервер → «Доступ агента» или ${B}sudo personalcomputer root on${N}"
 fi
-echo "  Управление: ${B}mochi help${N}"
+echo "  Управление: ${B}personalcomputer help${N}"
 echo

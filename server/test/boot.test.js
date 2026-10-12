@@ -8,7 +8,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { fakeModel, startMochi, registered } from './helpers.js';
+import { fakeModel, startPersonalComputer, registered } from './helpers.js';
 import { MCP_GRACE } from '../lib/ext.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -36,7 +36,7 @@ before(async () => {
     res.end(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }));
   });
   await new Promise(ok => mcp.listen(0, '127.0.0.1', ok));
-  m = await startMochi({ MOCHI_SEARCH_MCP: 'http://127.0.0.1:' + mcp.address().port + '/mcp' });
+  m = await startPersonalComputer({ PERSONALCOMPUTER_SEARCH_MCP: 'http://127.0.0.1:' + mcp.address().port + '/mcp' });
   c = await registered(m, 'boot');
   await c.json('/api/settings', { base: model.url, key: 'k', model: 'fake-1' }, 'PUT');
 });
@@ -82,7 +82,7 @@ test('в index.html нет браузерного агента: модель з�
 test('верхняя панель — компактная, с Personal Computer в углу; шагов работы и «печатает» в чате нет', () => {
   const src = fs.readFileSync(path.join(here, '..', '..', 'index.html'), 'utf8');
   assert.match(src, /<header id="petbar"[^>]*><div class="rv"><canvas id="room-cv"/);
-  assert.match(src, /const room=window\.mochiRoom=/);
+  assert.match(src, /const room=window\.personalComputerRoom=/);
   assert.match(src, /id="jrnl"/);
   /* облачко: объяснение шага, строчка ниже для реплик, ход задачи */
   assert.match(src, /id="rbubt"[\s\S]*id="rbubs"[\s\S]*id="rbubf"/);
@@ -101,9 +101,9 @@ test('приложение называется Personal Computer — и в ок
   const mf = JSON.parse(fs.readFileSync(path.join(here, '..', '..', 'manifest.webmanifest'), 'utf8'));
   assert.equal(mf.name, 'Personal Computer'); assert.equal(mf.short_name, 'Personal Computer');
   const cl = fs.readFileSync(path.join(here, '..', 'public', 'client.js'), 'utf8');
-  /* прежнее имя в интерфейсе не осталось (кроме разбора строк старого установщика при обновлении) */
+  /* прежнее имя в интерфейсе не осталось */
   assert.doesNotMatch(src, /Мочи|МОЧИ/);
-  assert.doesNotMatch(cl.replace(/\(Мочи\|Personal Computer\)/g, ''), /Мочи|МОЧИ/);
+  assert.doesNotMatch(cl, /Мочи|МОЧИ/);
 });
 
 test('поиск в интернете молчит — агент отвечает, не дожидаясь его 10 секунд', async () => {
@@ -154,7 +154,7 @@ test('предустановленный поиск выключается и у
   await ask('привет');
   assert.ok(!tools().includes('search__web_search'));
   /* подключили снова по тому же адресу, под другим именем — служебные параметры по-прежнему скрыты */
-  const r = await c.json('/api/mcp', { name: 'web', url: m.env.MOCHI_SEARCH_MCP });
+  const r = await c.json('/api/mcp', { name: 'web', url: m.env.PERSONALCOMPUTER_SEARCH_MCP });
   assert.equal(r.j.err, null);
   const w = (await c.json('/api/tools', undefined, 'GET')).j.mcp.find(x => x.name === 'web');
   assert.ok(w.preset);
@@ -180,10 +180,10 @@ test('у кого поиск был выключен (раньше — в нас
   const c2 = await registered(m, 'old');
   let id;
   for (let i = 0; i < 40 && !id; i++) {
-    id = JSON.parse(fs.readFileSync(path.join(m.env.MOCHI_DATA, 'users.json'), 'utf8')).users.find(u => u.name === 'old')?.id;
+    id = JSON.parse(fs.readFileSync(path.join(m.env.PERSONALCOMPUTER_DATA, 'users.json'), 'utf8')).users.find(u => u.name === 'old')?.id;
     if (!id) await new Promise(r => setTimeout(r, 50));
   }
-  const dir = path.join(m.env.MOCHI_DATA, 'users', id);
+  const dir = path.join(m.env.PERSONALCOMPUTER_DATA, 'users', id);
   assert.ok(id && !fs.existsSync(path.join(dir, 'ext.json')));
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ search: false, tools: { web_fetch: false } }));

@@ -2,7 +2,7 @@ import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fakeModel, startMochi, registered, sleep } from './helpers.js';
+import { fakeModel, startPersonalComputer, registered, sleep } from './helpers.js';
 import { cleanTitle } from '../lib/agent.js';
 
 let m, model;
@@ -25,7 +25,7 @@ before(async () => {
     if (u.content.startsWith('жди ')) await flagged(u.content.slice(4));
     return { text: 'Ответ на: ' + u.content };
   });
-  m = await startMochi();
+  m = await startPersonalComputer();
 });
 after(async () => { await m?.stop(); model?.close(); });
 
@@ -166,13 +166,13 @@ test('переименование, поиск, удаление с возвра
   await m.restart();
   assert.equal((await c.json('/api/chats/' + a + '/restore', {})).status, 404);
   const uid = (await c.json('/api/me', undefined, 'GET')).j.user.id;
-  assert.ok(!fs.existsSync(path.join(m.env.MOCHI_DATA, 'users', uid, 'chats', a + '.json')));
+  assert.ok(!fs.existsSync(path.join(m.env.PERSONALCOMPUTER_DATA, 'users', uid, 'chats', a + '.json')));
   assert.deepEqual((await list(c)).list.map(x => x.id), [b]);
 });
 
 test('прежний единственный чат (chat.json) переезжает в историю', async () => {
   const c = await registered(m, 'hist5');
-  const uid = (await c.json('/api/me', undefined, 'GET')).j.user.id, ud = path.join(m.env.MOCHI_DATA, 'users', uid);
+  const uid = (await c.json('/api/me', undefined, 'GET')).j.user.id, ud = path.join(m.env.PERSONALCOMPUTER_DATA, 'users', uid);
   m.proc.kill('SIGTERM'); await new Promise(r => m.proc.once('exit', r));
   fs.rmSync(path.join(ud, 'chats'), { recursive: true, force: true });
   fs.rmSync(path.join(ud, 'chats.json'), { force: true });

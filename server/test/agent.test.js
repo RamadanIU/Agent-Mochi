@@ -2,7 +2,7 @@ import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fakeModel, startMochi, registered, client, sleep } from './helpers.js';
+import { fakeModel, startPersonalComputer, registered, client, sleep } from './helpers.js';
 import { DEF_SYS, OLD_SYS } from '../lib/agent.js';
 
 let m, model;
@@ -37,8 +37,8 @@ before(async () => {
     if (last.content.includes('[код выхода: 0]') && !last.content.includes('отправлен')) return { tools: [{ name: 'send_file', args: { path: 'hi.txt', note: 'файлик' } }] };
     return { text: 'Готово ^_^' };
   });
-  m = await startMochi();
-  process.env.__DATA = m.env.MOCHI_DATA;
+  m = await startPersonalComputer();
+  process.env.__DATA = m.env.PERSONALCOMPUTER_DATA;
 });
 after(async () => { await m?.stop(); model?.close(); });
 
@@ -48,7 +48,7 @@ test('без входа API закрыт, CSRF-заголовок обязате
   assert.equal((await c('/api/settings')).status, 401);
   const r = await fetch(m.base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"name":"x","password":"y"}' });
   assert.equal(r.status, 403);
-  const r2 = await fetch(m.base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-mochi': '1', origin: 'https://evil.example' }, body: '{"name":"x","password":"y"}' });
+  const r2 = await fetch(m.base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-personalcomputer': '1', origin: 'https://evil.example' }, body: '{"name":"x","password":"y"}' });
   assert.equal(r2.status, 403);
 });
 
@@ -83,8 +83,13 @@ test('регистрация только по приглашению; вход 
   assert.equal(wrong.status, 401);
   const ok = await c.json('/api/login', { name: 'ALICE', password: 'password123' });
   assert.equal(ok.status, 200);
+  /* вход, сделанный до переименования (cookie «mochi»), продолжает действовать */
+  assert.match(c.cookie(), /^personalcomputer=/);
+  const legacy = { cookie: c.cookie().replace(/^personalcomputer=/, 'mochi=') };
+  assert.equal((await fetch(m.base + '/api/me', { headers: legacy })).status, 200);
   await c.json('/api/logout', {});
   assert.equal((await c('/api/me')).status, 401);
+  assert.equal((await fetch(m.base + '/api/me', { headers: legacy })).status, 401);
 });
 
 test('агент выполняет команду и отдаёт файл; работа идёт без открытого чата', async () => {
@@ -108,7 +113,7 @@ test('агент выполняет команду и отдаёт файл; р�
   assert.equal(model.calls.at(-1).auth, 'Bearer sk-test');
   /* ключ не попадает в журнал/поток */
   assert.ok(!JSON.stringify(evs).includes('sk-test'));
-  const ud = path.join(m.env.MOCHI_DATA, 'users', (await c.json('/api/me', undefined, 'GET')).j.user.id);
+  const ud = path.join(m.env.PERSONALCOMPUTER_DATA, 'users', (await c.json('/api/me', undefined, 'GET')).j.user.id);
   const st = JSON.parse(fs.readFileSync(path.join(ud, 'chats', JSON.parse(fs.readFileSync(path.join(ud, 'chats.json'))).act + '.json')));
   assert.ok(st.log.some(e => e.kind === 'file'));
   const snapFile = (await c.events(e => e.some(x => x.ev === 'snap'))).find(e => e.ev === 'snap').d.log.find(e => e.kind === 'file');
@@ -207,7 +212,7 @@ test('«Стоп» — сразу, даже если команда не слу�
 test('сообщение во время работы доходит до модели между шагами', async () => {
   const c = await registered(m, 'kim');
   await c.json('/api/settings', { base: model.url, model: 'fake-1' }, 'PUT');
-  const flag = path.join(m.env.MOCHI_WORK, 'kim', 'go.flag');
+  const flag = path.join(m.env.PERSONALCOMPUTER_WORK, 'kim', 'go.flag');
   const p = c.events(doneRun, 15000);
   await sleep(200);
   await c.json('/api/chat', { text: 'работай ' + flag });
@@ -231,7 +236,7 @@ test('сообщение во время работы доходит до мод
 test('сообщение, пришедшее, пока модель пишет ответ, получает ответ в той же задаче', async () => {
   const c = await registered(m, 'max');
   await c.json('/api/settings', { base: model.url, model: 'fake-1' }, 'PUT');
-  const flag = path.join(m.env.MOCHI_WORK, 'max', 'go.flag');
+  const flag = path.join(m.env.PERSONALCOMPUTER_WORK, 'max', 'go.flag');
   const p = c.events(doneRun, 15000);
   await sleep(200);
   await c.json('/api/chat', { text: 'думай ' + flag });
@@ -298,7 +303,7 @@ test('send_file не отдаёт файлы вне рабочей папки (�
 test('view_image: картинка с диска приходит модели следующим сообщением', async () => {
   const c = await registered(m, 'ivy');
   await c.json('/api/settings', { base: model.url, model: 'fake-1' }, 'PUT');
-  const d = path.join(m.env.MOCHI_WORK, 'ivy');
+  const d = path.join(m.env.PERSONALCOMPUTER_WORK, 'ivy');
   fs.mkdirSync(d, { recursive: true });
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
   fs.writeFileSync(path.join(d, 'pic.png'), png);
@@ -326,7 +331,7 @@ test('загрузка файла в inbox и сообщение с ним', asy
   const f = await r.json();
   assert.equal(r.status, 200);
   assert.equal(f.name, '_.._etc_отчёт.txt');
-  assert.ok(f.path.startsWith(path.join(m.env.MOCHI_WORK, 'gina', 'inbox') + '/'));
+  assert.ok(f.path.startsWith(path.join(m.env.PERSONALCOMPUTER_WORK, 'gina', 'inbox') + '/'));
   assert.equal(fs.readFileSync(f.path, 'utf8'), 'данные');
   const r2 = await c('/api/upload?name=' + encodeURIComponent(f.name), { method: 'POST', body: 'x' });
   assert.match((await r2.json()).name, /\(2\)/);
