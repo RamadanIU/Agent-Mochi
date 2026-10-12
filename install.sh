@@ -491,9 +491,20 @@ export NPM_CONFIG_PREFIX="\$HOME/.local"
 EOF
 chown personalcomputer-agent:personalcomputer "$A/.profile"; }
 chmod 0640 "$A/.profile" 2>/dev/null || true
-[ -f "$A/.bashrc" ] || { printf '%s\n' 'PS1="\[\e[35m\]pc\[\e[0m\]:\[\e[32m\]\w\[\e[0m\]\$ "' 'alias ll="ls -la"' > "$A/.bashrc"; chown personalcomputer-agent:personalcomputer "$A/.bashrc"; }
+# swap_line ФАЙЛ СТАРАЯ НОВАЯ — заменить строку, если она в файле ровно такая (её писал прежний установщик);
+# остальное в файле не трогаем, владелец и права остаются прежними
+swap_line() {
+  [ -f "$1" ] && grep -qxF -- "$2" "$1" || return 0
+  O="$2" N="$3" awk '$0 == ENVIRON["O"] { print ENVIRON["N"]; next } { print }' "$1" > "$TMP/swap" && cat "$TMP/swap" > "$1"
+}
+PS1_PC='PS1="\[\e[35m\]pc\[\e[0m\]:\[\e[32m\]\w\[\e[0m\]\$ "'
+README_PC="Это рабочая папка агента Personal Computer."
+[ -f "$A/.bashrc" ] || { printf '%s\n' "$PS1_PC" 'alias ll="ls -la"' > "$A/.bashrc"; chown personalcomputer-agent:personalcomputer "$A/.bashrc"; }
+# приглашение «мочи:~$» и README из версий до переименования
+swap_line "$A/.bashrc" 'PS1="\[\e[35m\]мочи\[\e[0m\]:\[\e[32m\]\w\[\e[0m\]\$ "' "$PS1_PC"
+swap_line "$A/README.txt" "Это рабочая папка агента Мочи." "$README_PC"
 chmod 0640 "$A/.bashrc" 2>/dev/null || true
-[ -f "$A/README.txt" ] || { printf '%s\n' "Это рабочая папка агента Personal Computer." "Папки пользователей: <имя>/inbox (файлы от пользователя), <имя>/outbox (результаты)." > "$A/README.txt"; chown personalcomputer-agent:personalcomputer "$A/README.txt"; }
+[ -f "$A/README.txt" ] || { printf '%s\n' "$README_PC" "Папки пользователей: <имя>/inbox (файлы от пользователя), <имя>/outbox (результаты)." > "$A/README.txt"; chown personalcomputer-agent:personalcomputer "$A/README.txt"; }
 chmod 0640 "$A/README.txt" 2>/dev/null || true
 
 # ---------- настройки ----------
