@@ -400,6 +400,8 @@ async function started() {
 function mirror() {
   if (!srvSet) return;
   Object.assign(cfg, { base: srvSet.base, model: srvSet.model, sys: srvSet.sys, vis: srvSet.vis, stepLimit: srvSet.stepLimit, maxSteps: srvSet.maxSteps, key: '' });
+  provSaved = Object.fromEntries((srvSet.provs || []).map(p => [p.base, p]));
+  provOpts();
 }
 
 /* ---------- отправка ---------- */
@@ -454,13 +456,24 @@ openSet = function (p) {
     try { srvSet = await api('api/settings'); mirror(); } catch (e) { if (e.status === 401) return check(); }
     openSet0(p || (srvSet && srvSet.hasKey ? 'me' : 'ai'));
     $('#c-key').value = '';
-    $('#c-key').placeholder = srvSet && srvSet.hasKey ? 'сохранён на сервере · пусто = не менять' : 'sk-…';
     refreshPane();
   })();
 };
 $('#c-reset').onclick = async () => {
-  if (!await ask('Сброс', 'Вернуть настройки как было с завода? Ключ API тоже сотрётся. Применится после «Сохранить».', null, 'Сбросить')) return;
-  fill(DEF); $('#c-sys').value = ''; $('#c-steps').value = srvSet?.maxStepsDef || DEF.maxSteps; $('#c-key').placeholder = 'sk-…'; clearKey = true;
+  if (!await ask('Сброс', 'Вернуть настройки как было с завода? Ключи API всех сохранённых провайдеров тоже сотрутся. Применится после «Сохранить».', null, 'Сбросить')) return;
+  fill(DEF); $('#c-sys').value = ''; $('#c-steps').value = srvSet?.maxStepsDef || DEF.maxSteps; $('#c-key').placeholder = 'sk-…'; $('#c-forget').hidden = true; clearKey = true;
+};
+/* забыть сохранённого провайдера: ключ и модель стираются на сервере сразу, без «Сохранить» */
+$('#c-forget').onclick = async () => {
+  const base = $('#c-base').value.trim().replace(/\/+$/, ''), sv = provSaved[base]; if (!sv) return;
+  const name = prov.options[prov.selectedIndex]?.text.replace(/ ✓$/, '') || base;
+  const act = base === String(srvSet?.base || '').replace(/\/+$/, '');
+  if (!await ask('Провайдер', 'Забыть ' + name + '? Ключ API и модель для него сотрутся с сервера.' + (act ? ' Сейчас Personal Computer работает через него — без ключа модель отвечать не будет.' : ''), null, 'Забыть')) return;
+  try {
+    srvSet = await api('api/settings', { method: 'PUT', json: { forget: base } });
+    provSaved = Object.fromEntries((srvSet.provs || []).map(p => [p.base, p])); provOpts();
+    $('#c-key').value = ''; syncSet(); loadModels();
+  } catch (e) { const h = $('#mh'); h.textContent = 'Не получилось: ' + e.message; h.dataset.s = 'err'; }
 };
 $('#c-save').onclick = async () => {
   const st = readSteps(); if (!st) return;
@@ -492,7 +505,7 @@ loadModels = async function () {
   } catch (e) {
     if (t !== mt) return; mdl = []; h.dataset.s = 'err';
     const u = e.j && e.j.upstream;
-    if ((e.status === 401 || e.status === 403 || u === 401 || u === 403) && !key && !(srvSet && srvSet.hasKey && String(srvSet.base || '').replace(/\/+$/, '') === base)) { h.textContent = 'Вставь API ключ — после этого загружу список моделей'; delete h.dataset.s; return; }
+    if ((e.status === 401 || e.status === 403 || u === 401 || u === 403) && !key && !(provSaved[base] && provSaved[base].hasKey)) { h.textContent = 'Вставь API ключ — после этого загружу список моделей'; delete h.dataset.s; return; }
     h.textContent = e.status === 401 || e.status === 403 || u === 401 || u === 403 ? 'Ключ не подошёл. Проверь его' : e.message === 'format' ? 'Сервер ответил, но не списком моделей. Модель можно вписать вручную' : /^Это не ключ/.test(e.message) ? e.message : 'Список моделей недоступен (' + e.message + '). Впиши модель вручную';
   }
 };
