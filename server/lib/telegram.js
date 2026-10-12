@@ -93,14 +93,14 @@ class Bot {
       return;
     }
     const chat = getChat(this.u), cmd = (txt.match(/^\/(\w+)/) || [])[1];
-    if (cmd === 'help' || cmd === 'start') return this.send('Я Personal Computer — агент на твоём сервере 🖥\nПиши задачу обычным сообщением, присылай файлы и фото. Пока я работаю, можно дописать или спросить — прочту по ходу дела.\n\n/status — что я сейчас делаю\n/stop — остановить задачу\n/now — прочитать новые сообщения сейчас, не дожидаясь конца шага\n/new — очистить чат\n/web — ссылка на веб-чат\n/notify — уведомления (away/always/off)');
+    if (cmd === 'help' || cmd === 'start') return this.send('Я Personal Computer — агент на твоём сервере 🖥\nПиши задачу обычным сообщением, присылай файлы и фото. Пока я работаю, можно дописать или спросить — прочту по ходу дела.\n\n/status — что я сейчас делаю\n/stop — остановить задачу\n/now — прочитать новые сообщения сейчас, не дожидаясь конца шага\n/new — новый чат (прошлый останется в истории)\n/web — ссылка на веб-чат\n/notify — уведомления (away/always/off)');
     if (cmd === 'status') {
       const r = chat.runState(), last = [...chat.doc.v.log].reverse().find(e => e.kind === 'tool');
       return this.send(r.running ? `⏳ Работаю уже ${dur(Date.now() - r.t)}, шагов: ${r.steps}.${last ? '\nСейчас: ' + last.label : ''}` : '😴 Свободен. Жду задачу!');
     }
     if (cmd === 'stop') { if (chat.running) { chat.stop(); return this.send('⏹ Останавливаю…'); } return this.send('Я и так ничего не делаю ^_^'); }
     if (cmd === 'now') return this.send(chat.hurry() ? '⚡ Бросаю текущий шаг и читаю твои сообщения' : chat.running ? 'Новых сообщений нет — продолжаю работу' : 'Я и так ничего не делаю ^_^');
-    if (cmd === 'new') { chat.clear(); return this.send('🧹 Чат очищен.'); }
+    if (cmd === 'new') { await chat.fresh(); return this.send('🆕 Новый чат. Прошлый остался в истории.'); }
     if (cmd === 'web') return this.send(CFG.publicUrl ? CFG.publicUrl + '/' : 'Адрес веб-чата не задан (MOCHI_PUBLIC_URL).');
     if (cmd === 'notify') {
       const mode = (txt.split(/\s+/)[1] || '').toLowerCase();
@@ -189,7 +189,7 @@ export async function connect(u, token) {
   await api(token, 'deleteWebhook', {}).catch(() => {});
   await api(token, 'setMyCommands', { commands: [
     { command: 'status', description: 'Что Personal Computer сейчас делает' }, { command: 'stop', description: 'Остановить задачу' }, { command: 'now', description: 'Прочитать новые сообщения сейчас' },
-    { command: 'new', description: 'Очистить чат' }, { command: 'web', description: 'Ссылка на веб-чат' }, { command: 'help', description: 'Помощь' }] }).catch(() => {});
+    { command: 'new', description: 'Новый чат' }, { command: 'web', description: 'Ссылка на веб-чат' }, { command: 'help', description: 'Помощь' }] }).catch(() => {});
   bots.get(u.id)?.stop();
   const c = conf(u), keep = c.v.token === token ? { chatId: c.v.chatId, tgUser: c.v.tgUser } : {};
   c.v = { token, bot: me.username, botName: me.first_name, notify: c.v.notify || 'away', ...keep };

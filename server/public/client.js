@@ -39,6 +39,79 @@ css.textContent = `
 #queue .qh{flex:1 1 100%;display:flex;align-items:center;gap:12px;margin:0 4px;color:var(--mut);font:7px/1.6 var(--pf)}
 #queue .qh span{flex:1;min-width:0}#queue .qh .pbtn{flex:none;margin:4px}#queue .qh .pbtn .pi{--ico:var(--i-enter)}
 #queue .chip{border-left:4px dashed var(--acc)}#queue .chip .n{color:var(--fg)}
+/* ---------- история чатов ---------- */
+:root{--j-search:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23000' fill-opacity='.4' d='M1 1h4v1H1zM1 2h4v1H1zM1 3h4v1H1zM1 4h4v1H1z'/%3E%3Cpath fill='%23000' d='M1 0h4v1H1zM0 1h1v1H0zM5 1h1v1H5zM0 2h1v1H0zM5 2h1v1H5zM0 3h1v1H0zM5 3h1v1H5zM0 4h1v1H0zM5 4h1v1H5zM1 5h4v1H1zM5 6h2v1H5zM6 7h2v1H6zM7 8h2v1H7zM8 9h2v1H8z'/%3E%3C/svg%3E")}
+.chist{position:absolute;top:100%;right:8px;z-index:6;display:flex;flex-direction:column;width:min(460px,calc(100% - 16px));max-height:min(680px,calc(100vh - var(--hh,80px) - 96px));max-height:min(680px,calc(100dvh - var(--hh,80px) - 96px));margin-top:12px;background:var(--bg);color:var(--fg);box-shadow:var(--sh4),8px 8px 0 0 var(--dsh);animation:inUp .3s var(--ezb);outline:none}
+.chist[hidden]{display:none}
+.chist-top{flex:none;display:flex;flex-direction:column;gap:14px;padding:16px 16px 10px}
+.chist .chist-new{width:auto;margin:4px;justify-content:flex-start;background:var(--acc);color:var(--onacc);animation:none}
+.chist .chist-new:hover:not(:disabled){background:var(--acc);color:var(--onacc);filter:brightness(1.07)}
+.chist .chist-new .pi{--ico:var(--j-plus);width:16px;height:16px}
+.chist-new span{flex:1;text-align:left}
+.chist-new kbd{font:6px/1 var(--pf);opacity:.75;text-transform:none;letter-spacing:0}
+.chist-s{display:flex;align-items:center;gap:10px;margin:4px;padding:0 4px 0 12px;background:var(--card);box-shadow:var(--sh3),var(--sunk);transition:box-shadow .2s var(--ez);cursor:text}
+.chist-s:focus-within{box-shadow:var(--sh4a),var(--sunk)}
+.chist-s>.pi{--ico:var(--j-search);width:14px;height:14px;color:var(--mut)}
+.chist-s input{flex:1;min-width:0;padding:12px 0;border:0;background:none;outline:none;font:8px/1.4 var(--pf);color:var(--fg);caret-color:var(--acc);-webkit-appearance:none;appearance:none}
+.chist-s input::placeholder{color:var(--mut);opacity:1}
+.chist-s input::-webkit-search-cancel-button{display:none}
+.chist-x{flex:none;display:flex;padding:9px;color:var(--mut)}.chist-x[hidden]{display:none}.chist-x:hover{color:var(--acc)}
+.chist-x .pi{--ico:var(--i-x);width:10px;height:10px}
+.chist-l{flex:1 1 auto;min-height:90px;overflow-y:auto;overscroll-behavior:contain;padding:0 12px 12px;scrollbar-width:thin;scrollbar-color:var(--mut) transparent}
+.chist-g{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;margin:0 -12px;padding:12px 16px 8px;background:var(--bg);color:var(--mut);font:7px/1 var(--pf)}
+.chist-g::after{content:"";flex:1;height:2px;background:repeating-linear-gradient(90deg,var(--mut) 0 4px,transparent 4px 8px);opacity:.5}
+.crow{position:relative;display:flex;align-items:center;gap:12px;min-height:54px;margin:3px 4px;padding:8px 8px 8px 16px;cursor:pointer;outline:none;transition:background-color .15s,opacity .18s,transform .18s var(--ez)}
+.crow::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:4px;background:transparent}
+.crow:hover,.crow.sel{background:var(--card)}
+.crow.sel{box-shadow:var(--sh2)}
+.crow:focus-visible{box-shadow:var(--sh2a,var(--sh2)),0 0 0 4px color-mix(in srgb,var(--acc) 35%,transparent)}
+.crow.on{background:var(--card)}.crow.on::before{background:var(--acc)}
+.crow.on .crow-t{color:var(--acc)}
+.crow.gone{opacity:0;transform:translateX(28px);pointer-events:none}
+.crow-m{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.crow-t{display:block;font:8px/1.5 var(--pf);font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crow-p{display:block;color:var(--mut);font:18px/1 var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crow-p:empty{display:none}
+.crow mark{background:color-mix(in srgb,var(--acc) 35%,transparent);color:inherit;padding:0}
+.crow-r{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:6px;min-width:46px}
+.crow time{color:var(--mut);font:7px/1 var(--pf);white-space:nowrap}
+.crow.run time{color:var(--acc)}
+.crow.run time::before{content:"";display:inline-block;width:6px;height:6px;margin:0 6px 1px 0;background:var(--acc);animation:hpb 1s steps(2) infinite}
+@keyframes hpb{50%{opacity:0}}
+.crow-a{display:none;gap:2px}
+.crow-a button{display:flex;padding:8px;color:var(--mut)}
+.crow-a button:hover,.crow-a button:focus-visible{color:var(--acc);background:var(--bg)}
+.crow-a [data-ha=del]:hover,.crow-a [data-ha=del]:focus-visible{color:var(--err)}
+.crow-a .pi{width:14px;height:14px}
+.crow-a [data-ha=ren] .pi{--ico:var(--j-pencil)}.crow-a [data-ha=del] .pi{--ico:var(--j-trash)}
+@media(hover:hover){.crow:hover .crow-a,.crow.sel .crow-a,.crow:focus-within .crow-a{display:flex}.crow:hover time,.crow.sel time,.crow:focus-within time{display:none}}
+/* на телефоне наведения нет: время сверху, карандаш и корзина — под ним, всегда под пальцем */
+@media(hover:none){.crow{padding-right:2px}.crow-r{flex-direction:column;align-items:flex-end;gap:2px}.crow-a{display:flex}.crow time{padding:4px 8px 0}.crow-a button{padding:9px}}
+.crow.edit{cursor:default;background:var(--card);box-shadow:var(--sh2)}
+.crow.edit .crow-r{display:none}
+.crow-in{display:block;width:100%;margin:0;padding:7px 9px;border:0;background:var(--bg);box-shadow:var(--sh2),var(--sunk);outline:none;font:8px/1.5 var(--pf);color:var(--fg);caret-color:var(--acc)}
+.chist-e{margin:30px 18px;color:var(--mut);font:7px/1.9 var(--pf);text-align:center}
+.chist-f{flex:none;display:flex;justify-content:space-between;gap:12px;padding:10px 16px 11px;border-top:2px dashed color-mix(in srgb,var(--mut) 55%,transparent);color:var(--mut);font:6px/1.5 var(--pf)}
+.chist-f span:empty,.chist-k[hidden]{display:none}
+.chist-k{text-align:right}
+@media(max-width:560px){.chist{right:6px;width:calc(100% - 12px)}.chist-new kbd,.chist-k{display:none}}
+@media(hover:none){.chist-new kbd{display:none}}
+/* агент работает в другом чате — плашка над полем ввода */
+#busy{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px 16px 0;background:var(--card)}#busy[hidden]{display:none}
+#busy .bi{--ico:var(--j-steps);width:14px;height:14px;color:var(--acc);animation:hpb 1.2s steps(2) infinite}
+#busy .bt{flex:1 1 180px;min-width:0;margin:0 4px;color:var(--mut);font:7px/1.6 var(--pf)}
+#busy .pbtn{flex:none;margin:4px}#busy .pbtn[hidden]{display:none}
+#busy [data-b=go] .pi{--ico:var(--i-enter)}#busy [data-b=stop] .pi{--ico:var(--i-stop)}
+#busy.nudge{animation:hpn .42s var(--ez)}#busy.nudge .bt{color:var(--fg)}
+@keyframes hpn{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+/* «Чат удалён · Вернуть» */
+.snack{position:absolute;left:0;right:0;bottom:16px;z-index:4;width:max-content;max-width:calc(100% - 24px);margin:auto;display:flex;align-items:center;gap:10px;padding:4px 4px 4px 14px;background:var(--ink);color:var(--bg);font:7px/1.6 var(--pf);box-shadow:4px 4px 0 0 var(--dsh);animation:inUp .3s var(--ezb);transition:opacity .25s}
+.snack[hidden]{display:none}.snack.out{opacity:0}
+.snack>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.snack .pbtn{flex:none;width:auto;margin:4px;background:var(--acc);color:var(--onacc);box-shadow:none;animation:none}
+.snack .pbtn .pi{--ico:var(--i-restore)}
+/* переключение чата: старая переписка гаснет, пока не пришла новая */
+#msgs{transition:opacity .18s var(--ez)}#msgs.sw{opacity:.3;transition:none}
 `;
 document.head.append(css);
 
@@ -52,7 +125,7 @@ async function api(p, o = {}) {
 }
 const post = (p, json = {}) => api(p, { method: 'POST', json });
 
-let me = null, es = null, running = false, srvSet = null, bubble = null, hideT = 0, connected = false, replaying = false, olderNow = false;
+let me = null, es = null, running = false, view = null, busyElse = null, srvSet = null, bubble = null, hideT = 0, connected = false, replaying = false, olderNow = false;
 /* событие журнала → компьютер в шапке (при перерисовке истории — только в его журнал, без реакций; старую историю «Показать раньше» не трогаем) */
 const room = (k, e) => { if (olderNow) return; try { window.mochiRoom && mochiRoom[k](e, replaying); } catch (x) { console.error(x); } };
 const isImgN = n => /\.(png|jpe?g|gif|webp)$/i.test(n || '');
@@ -173,7 +246,7 @@ function render(e) {
     case 'user': {
       bubble = null;
       const d = add('u', esc(e.text || '') + (e.origin === 'tg' ? '<span class="tgm">TG</span>' : '') + (e.files || []).map(f => '<div class="uf">' + (f.fid && isImgN(f.name) ? '<img src="api/files/' + f.fid + '" alt="" loading="lazy">' : '') + '+ ' + esc(f.name) + ' <small>' + sz(f.size) + '</small></div>').join(''));
-      stamp(d, e); room('user', e);
+      stamp(d, e); room('user', e); if (!replaying) hist.sent();
       /* сообщение из очереди ушло модели посреди задачи — она уже думает над ним */
       if (e.mid && running && !replaying) think(true);
       break;
@@ -262,6 +335,9 @@ function welcomeS(cleared) {
 function onSnap(s) {
   if (s.user) me = s.user;
   seenBuild(s.build);
+  /* какой чат на экране: просили другой, а его удалили — сервер прислал последний открытый */
+  if (s.c) view = s.c;
+  hist.shown(s);
   quietly(() => {
     const box = $('#msgs'); box.innerHTML = ''; bubble = null; cont = null; think(false); room('reset');
     const cut = cutAt(s.log, HIST);
@@ -272,7 +348,7 @@ function onSnap(s) {
     moreUI();
   });
   setRun(s, true);
-  try { window.mochiRoom && mochiRoom.snap(s); } catch (x) { console.error(x); }
+  try { window.mochiRoom && mochiRoom.snap({ ...s, running }); } catch (x) { console.error(x); }
   onQueue(s.queue);
   if (!connected) {
     connected = true; setSt(READY, 'on');
@@ -295,10 +371,13 @@ function onDelta(d) {
 }
 /* snap — состояние пришло с полной перерисовкой: компьютер в шапке обновит mochiRoom.snap, без реакций «началась задача» */
 function setRun(r, snap) {
-  const was = running; running = !!r.running;
+  /* агент один: работает в этом чате — обычный ход работы; в другом — плашка над полем ввода */
+  const was = running; running = !!r.running && (!r.rc || r.rc === view);
+  busyElse = r.running && r.rc && r.rc !== view ? { c: r.rc, t: r.rt || 'Новый чат' } : null;
+  busyUI(); hist.run(r);
   ctl = running ? { abort: stopNow } : null;
   sendUI(running);
-  if (!snap) try { window.mochiRoom && mochiRoom.run(r); } catch (x) { console.error(x); }
+  if (!snap) try { window.mochiRoom && mochiRoom.run({ ...r, running }); } catch (x) { console.error(x); }
   if (running && !bubble) think(true);
   if (!running) { think(false); if (was) setSt(READY, 'on'); }
 }
@@ -364,12 +443,15 @@ qbox.addEventListener('click', async e => {
 /* ---------- поток событий ---------- */
 function connect() {
   if (es || !me) return;
-  es = new EventSource('api/stream');
+  es = new EventSource('api/stream' + (view ? '?c=' + view : ''));
   es.addEventListener('snap', e => onSnap(JSON.parse(e.data)));
   es.addEventListener('log', e => onLog(JSON.parse(e.data)));
   es.addEventListener('delta', e => onDelta(JSON.parse(e.data).d));
   es.addEventListener('run', e => setRun(JSON.parse(e.data)));
   es.addEventListener('queue', e => onQueue(JSON.parse(e.data).queue));
+  es.addEventListener('chats', () => hist.changed());
+  /* этот чат удалили (в другой вкладке или в Telegram) — переходим в новый */
+  es.addEventListener('gone', () => hist.fresh(true));
   es.onopen = () => { if (connected) setSt(READY, 'on'); };
   es.onerror = async () => {
     if (!es) return;
@@ -410,6 +492,7 @@ window.srvSubmit = async () => {
   if (upBusy) return;
   const i = $('#inp'), t = i.value.trim(), fs = staged.slice();
   if (!t && !fs.length) return;
+  if (busyElse) { busyNudge(); return; }
   const files = []; let parts = [];
   if (fs.length) {
     upBusy = true; $('#send').disabled = true;
@@ -428,24 +511,22 @@ window.srvSubmit = async () => {
   if (i.value.trim() === t) { i.value = ''; i.style.height = ''; }
   lastSent = t;
   try {
-    const r = await post('api/chat', { text: t, files, parts });
+    const r = await post('api/chat', { text: t, files, parts, c: view });
     if (r && r.queued) { if (fs.length) held.set(r.queued, fs); window.sfx && sfx('send'); }
   } catch (e) {
     if (e.status === 401) return check();
-    add('e', esc(e.message)); if (!i.value) i.value = t;
+    if (!i.value) { i.value = t; i.dispatchEvent(new Event('input')); }
+    /* агент занят в другом чате (запустили с другого устройства) — подсказка над полем, текст остаётся */
+    if (e.j && e.j.busy) { busyElse = busyElse || { c: null, t: '' }; busyNudge(e.message); return; }
+    add('e', esc(e.message));
   }
 };
 /* «Повторить» после ошибки — на сервере (перехватываем раньше общего обработчика кнопок в чате) */
 $('#msgs').addEventListener('click', e => {
   const b = e.target.closest('[data-act=sretry]'); if (!b) return;
   e.stopImmediatePropagation(); b.closest('.ea')?.remove();
-  post('api/chat/retry').catch(x => add('e', esc(x.message)));
+  post('api/chat/retry', { c: view }).catch(x => { if (x.j && x.j.busy) busyNudge(x.message); else add('e', esc(x.message)); });
 }, true);
-$('#clr').onclick = async () => {
-  if (!await ask('Очистить чат', 'Вся переписка исчезнет, а Personal Computer забудет разговор. Файлы на сервере останутся.', null, 'Очистить')) return;
-  staged.length = 0; renderChips();
-  post('api/chat/clear').catch(e => add('e', esc(e.message)));
-};
 
 /* ---------- настройки: модель хранится на сервере, ключ наружу не отдаётся ---------- */
 let clearKey = false;
@@ -1213,6 +1294,306 @@ $('#tin').onkeydown = e => {
   else if (!i.value && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); tx(e.key === 'ArrowUp' ? '\x1b[A' : '\x1b[B'); }
   else if (e.ctrlKey && !e.altKey && !e.metaKey && /^[cdlz]$/i.test(e.key) && i.selectionStart === i.selectionEnd) { e.preventDefault(); tx(String.fromCharCode(e.key.toLowerCase().charCodeAt(0) - 96)); }
 };
+
+/* ---------- история чатов ----------
+   Кнопка с часами в шапке → окно со списком: новые сверху (по последнему сообщению), по дням, с поиском по названиям
+   и тексту. Название сначала — начало первого сообщения, после второго ответа его придумывает модель (карандаш — своё).
+   Удаление без вопросов, зато с «Вернуть». Клавиатура: Ctrl+K — история, Ctrl+Shift+O — новый чат, в списке ↑↓ Enter Del F2.
+   Агент один: пока он работает в одном чате, другие можно читать, а писать — когда он закончит (плашка над полем ввода) */
+const busy = document.createElement('div');
+busy.id = 'busy'; busy.hidden = true; busy.setAttribute('role', 'status');
+busy.innerHTML = '<i class="pi bi"></i><span class="bt"></span><button class="pbtn sm" type="button" data-b="go"><i class="pi"></i><span>Перейти</span></button><button class="pbtn sm" type="button" data-b="stop"><i class="pi"></i><span>Стоп</span></button>';
+$('#chips').before(busy);
+function busyUI() {
+  busy.hidden = !busyElse;
+  if (!busyElse) return;
+  busy.querySelector('.bt').textContent = busyElse.t ? 'Работаю в чате «' + busyElse.t + '». Сюда напишешь, когда закончу.' : 'Работаю в другом чате. Сюда напишешь, когда закончу.';
+  busy.querySelector('[data-b=go]').hidden = !busyElse.c;
+}
+/* попытались написать, пока агент занят в другом чате: плашка вздрагивает, текст остаётся в поле */
+function busyNudge(msg) {
+  if (msg && !busyElse?.t) { const m = /«(.+)»/.exec(msg); if (m) busyElse = { c: busyElse?.c || null, t: m[1] }; }
+  busyUI(); busy.classList.remove('nudge'); void busy.offsetWidth; busy.classList.add('nudge');
+  window.sfx && sfx('err');
+}
+busy.addEventListener('click', e => {
+  const b = e.target.closest('[data-b]'); if (!b) return;
+  if (b.dataset.b === 'go' && busyElse?.c) hist.open(busyElse.c);
+  if (b.dataset.b === 'stop') post('api/chat/stop').catch(x => add('e', esc(x.message)));
+});
+
+const hist = (() => {
+  const btn = $('#hist'), P = el('div', 'chist'), drafts = new Map();
+  P.id = 'hpan'; P.hidden = true; P.setAttribute('role', 'dialog'); P.setAttribute('aria-label', 'История чатов');
+  P.innerHTML = `<div class="wbar"><button class="wx" type="button" aria-label="Закрыть историю"><i class="pi"></i></button><b>ИСТОРИЯ</b><span></span></div>
+<div class="chist-top"><button class="pbtn chist-new" type="button"><i class="pi"></i><span>Новый чат</span><kbd>Ctrl+Shift+O</kbd></button>
+<label class="chist-s"><i class="pi"></i><input type="search" placeholder="поиск по чатам" autocomplete="off" spellcheck="false" enterkeyhint="go" aria-label="Поиск по названиям и сообщениям" aria-controls="chist-l"><button type="button" class="chist-x" aria-label="Очистить поиск" hidden><i class="pi"></i></button></label></div>
+<div class="chist-l" id="chist-l" role="listbox" aria-label="Чаты"></div>
+<div class="chist-f"><span class="chist-n"></span><span class="chist-k">↑↓ выбрать · Enter открыть · F2 имя · Del удалить</span></div>`;
+  $('#petbar').append(P);
+  const L = P.querySelector('.chist-l'), qi = P.querySelector('input'), qx = P.querySelector('.chist-x');
+  let open = false, items = [], loaded = false, q = '', sel = -1, runR = null, t0 = 0, editing = null, moreT = 0, title = '', empty = true;
+  const fine = matchMedia('(hover:hover) and (pointer:fine)');
+
+  /* ---- даты: группы «Сегодня / Вчера / Последние 7 дней / … / Сентябрь», справа — время, день недели или число ---- */
+  const day = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const ago = t => Math.round((day(Date.now()) - day(t)) / 864e5);
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  function group(t) {
+    const n = ago(t), d = new Date(t);
+    if (n <= 0) return 'Сегодня';
+    if (n === 1) return 'Вчера';
+    if (n < 7) return 'Последние 7 дней';
+    if (n < 30) return 'Последние 30 дней';
+    return cap(d.toLocaleDateString('ru-RU', { month: 'long' })) + (d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : '');
+  }
+  function when(t) {
+    const n = ago(t), d = new Date(t);
+    if (n <= 1) return HM.format(d);
+    if (n < 7) return d.toLocaleDateString('ru-RU', { weekday: 'short' });
+    if (d.getFullYear() !== new Date().getFullYear()) return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replace('.', '');
+  }
+  const full = t => new Date(t).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  /* найденное в тексте — подсветкой */
+  function marked(box, text, needle) {
+    const lo = text.toLowerCase(), n = needle.toLowerCase();
+    let i = 0, k;
+    while (n && (k = lo.indexOf(n, i)) >= 0) {
+      box.append(text.slice(i, k));
+      const m = document.createElement('mark'); m.textContent = text.slice(k, k + n.length); box.append(m);
+      i = k + n.length;
+    }
+    box.append(text.slice(i));
+  }
+
+  /* ---- список ---- */
+  const rows = () => [...L.querySelectorAll('.crow')];
+  async function load() {
+    const t = ++t0;
+    try {
+      const r = await api('api/chats' + (q ? '?q=' + encodeURIComponent(q) : ''));
+      if (t !== t0) return;
+      items = r.list; loaded = true; runR = r;
+      if (!editing) draw();
+    } catch (e) {
+      if (t !== t0) return;
+      if (e.status === 401) { check(); return; }
+      L.textContent = ''; L.append(el('p', 'chist-e', 'Список не загрузился: ' + e.message));
+    }
+  }
+  function draw() {
+    const keep = rows()[sel]?.dataset.id;
+    L.textContent = '';
+    if (!loaded) { L.append(el('p', 'chist-e', 'Загружаю…')); return foot(); }
+    if (!items.length) L.append(el('p', 'chist-e', q ? 'Ничего не нашёл по «' + q + '»' : 'Здесь будут твои разговоры. Напиши что-нибудь — и чат появится в списке.'));
+    let g = null;
+    for (const m of items) {
+      const gg = q ? 'Найдено' : group(m.last);
+      if (gg !== g) { g = gg; const h = el('div', 'chist-g'); h.append(el('span', '', g)); h.setAttribute('role', 'presentation'); L.append(h); }
+      const run = !!(runR && runR.running && runR.rc === m.id), on = m.id === view;
+      const r = el('div', 'crow' + (on ? ' on' : '') + (run ? ' run' : ''));
+      r.dataset.id = m.id; r.id = 'crow-' + m.id; r.tabIndex = -1; r.setAttribute('role', 'option'); r.setAttribute('aria-selected', on);
+      r.innerHTML = '<span class="crow-m"><b class="crow-t"></b><span class="crow-p"></span></span><span class="crow-r"><time></time><span class="crow-a"><button type="button" data-ha="ren" title="Переименовать (F2)" aria-label="Переименовать"><i class="pi"></i></button><button type="button" data-ha="del" title="Удалить (Del)" aria-label="Удалить"><i class="pi"></i></button></span></span>';
+      const tt = r.querySelector('.crow-t'), pv = r.querySelector('.crow-p'), tm = r.querySelector('time');
+      if (q) marked(tt, m.title, q); else tt.textContent = m.title;
+      tt.title = m.title;
+      if (!m.named) tt.classList.add('draft');
+      if (m.hit) marked(pv, m.hit, q); else pv.textContent = m.prev || '';
+      tm.dateTime = new Date(m.last).toISOString(); tm.title = full(m.last);
+      tm.textContent = run ? 'работаю' : when(m.last);
+      r.setAttribute('aria-label', m.title + (run ? ', Personal Computer работает здесь' : '') + (on ? ', открыт сейчас' : '') + ', ' + full(m.last));
+      L.append(r);
+    }
+    const rs = rows();
+    sel = keep ? rs.findIndex(x => x.dataset.id === keep) : -1;
+    hl(false);
+    foot();
+  }
+  function foot() {
+    const n = P.querySelector('.chist-n');
+    n.textContent = !loaded ? '' : q ? 'найдено: ' + items.length : items.length ? plural(items.length, 'чат', 'чата', 'чатов') : '';
+    P.querySelector('.chist-new').classList.toggle('here', empty);
+  }
+  /* выбранная строка: подсветка и прокрутка; фокус — если управляют с клавиатуры */
+  function hl(focus) {
+    const rs = rows();
+    rs.forEach((x, k) => x.classList.toggle('sel', k === sel));
+    const r = rs[sel];
+    if (r) { r.scrollIntoView({ block: 'nearest' }); if (focus) r.focus({ preventScroll: true }); }
+    qi.setAttribute('aria-activedescendant', r ? r.id : '');
+  }
+  function move(d) {
+    const rs = rows(); if (!rs.length) return;
+    sel = sel < 0 ? (d > 0 ? 0 : rs.length - 1) : Math.max(0, Math.min(rs.length - 1, sel + d));
+    hl(true);
+  }
+
+  /* ---- открыть, закрыть ---- */
+  function show(on) {
+    if (on === open) return;
+    open = on; P.hidden = !on; btn.setAttribute('aria-expanded', on);
+    if (on) {
+      if ($('#jrn').getAttribute('aria-expanded') === 'true') $('#jclose').click();
+      if (!$('#v-chat').classList.contains('on')) navTo('chat');
+      sel = -1; draw(); load();
+      /* на телефоне клавиатуру сами не открываем — список виден целиком */
+      setTimeout(() => (fine.matches ? qi : P).focus({ preventScroll: true }), 30);
+      window.sfx && sfx('key');
+    } else if (editing) editing(false);
+  }
+  P.tabIndex = -1;
+  btn.onclick = () => show(!open);
+  P.querySelector('.wx').onclick = () => { show(false); btn.focus(); };
+  document.addEventListener('pointerdown', e => { if (open && !P.contains(e.target) && !btn.contains(e.target) && !e.target.closest('#ask')) show(false); }, true);
+
+  /* переключиться на чат: текст в поле ввода у каждого чата свой (черновик) */
+  function go(id, stay) {
+    if (!id) return;
+    if (!stay) show(false);
+    if (id === view) return;
+    const i = $('#inp');
+    drafts.set(view, i.value);
+    view = id;
+    i.value = drafts.get(id) || ''; drafts.delete(id); i.dispatchEvent(new Event('input'));
+    if (es) { es.close(); es = null; }
+    $('#msgs').classList.add('sw');
+    connect();
+    if (fine.matches && !stay) i.focus();
+  }
+  /* новый чат; уже в пустом — просто к полю ввода. stay — окно истории не закрывать (удалили открытый чат) */
+  async function fresh(silent, stay) {
+    if (!stay) show(false);
+    if (!$('#v-chat').classList.contains('on')) navTo('chat');
+    if (empty && !silent) { $('#inp').focus(); return; }
+    try { go((await post('api/chats')).c, stay); }
+    catch (e) { if (e.status === 401) check(); else add('e', esc('Новый чат не создался: ' + e.message)); }
+    if (fine.matches && !stay) $('#inp').focus();
+  }
+  P.querySelector('.chist-new').onclick = () => fresh();
+
+  /* ---- удалить (с «Вернуть»), переименовать ---- */
+  const snack = el('div', 'snack'); snack.hidden = true; snack.setAttribute('role', 'status');
+  $('#v-chat .mw').append(snack);
+  let snT = 0;
+  const unsnack = () => { clearTimeout(snT); snack.classList.add('out'); setTimeout(() => { snack.hidden = true; snack.classList.remove('out'); }, 250); };
+  async function del(id) {
+    const m = items.find(x => x.id === id); if (!m) return;
+    const run = runR && runR.running && runR.rc === id;
+    if (run && !await ask('Удалить чат', 'Personal Computer сейчас работает в этом чате. Остановить задачу и удалить чат?', null, 'Удалить')) return;
+    const rs = rows(), k = rs.findIndex(x => x.dataset.id === id), r = rs[k];
+    r && r.classList.add('gone');
+    try { await api('api/chats/' + id, { method: 'DELETE' }); }
+    catch (e) { r && r.classList.remove('gone'); if (e.status === 401) check(); else add('e', esc('Не удалился: ' + e.message)); return; }
+    window.sfx && sfx('key');
+    const was = id === view;
+    items = items.filter(x => x.id !== id);
+    sel = Math.min(k, items.length - 1);
+    setTimeout(() => { if (!editing) { draw(); if (open && sel >= 0) hl(true); else if (open) qi.focus(); } }, 180);
+    if (was) fresh(true, open);
+    snack.innerHTML = '<span></span><button class="pbtn sm" type="button"><i class="pi"></i><span>Вернуть</span></button>';
+    snack.firstChild.textContent = 'Чат «' + m.title + '» удалён';
+    snack.hidden = false; clearTimeout(snT); snT = setTimeout(unsnack, 8000);
+    snack.querySelector('button').onclick = async () => {
+      unsnack();
+      try { await post('api/chats/' + id + '/restore'); if (was) go(id, open); if (open) load(); }
+      catch (e) { add('e', esc('Не получилось вернуть: ' + e.message)); }
+    };
+  }
+  function rename(r) {
+    if (editing) editing(false);
+    const id = r.dataset.id, m = items.find(x => x.id === id), t = r.querySelector('.crow-t'); if (!m || !t) return;
+    const inp = document.createElement('input');
+    inp.className = 'crow-in'; inp.value = m.title; inp.maxLength = 80; inp.setAttribute('aria-label', 'Название чата'); inp.spellcheck = false;
+    t.replaceWith(inp); r.classList.add('edit'); inp.focus(); inp.select();
+    let done = false;
+    editing = async ok => {
+      if (done) return; done = true; editing = null;
+      const v = inp.value.replace(/\s+/g, ' ').trim();
+      r.classList.remove('edit');
+      if (ok && v && v !== m.title) {
+        Object.assign(m, { title: v, named: true });
+        api('api/chats/' + id, { method: 'PATCH', json: { title: v } }).catch(e => { add('e', esc('Не переименовался: ' + e.message)); load(); });
+        if (id === view) title = v;
+      }
+      draw();
+      if (open) { sel = rows().findIndex(x => x.dataset.id === id); hl(true); }
+    };
+    inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); editing && editing(true); } else if (e.key === 'Escape') { e.preventDefault(); editing && editing(false); } });
+    inp.addEventListener('blur', () => editing && editing(true));
+    inp.addEventListener('click', e => e.stopPropagation());
+  }
+
+  L.addEventListener('click', e => {
+    const r = e.target.closest('.crow'); if (!r || r.classList.contains('edit')) return;
+    const a = e.target.closest('[data-ha]');
+    if (a) { e.stopPropagation(); if (a.dataset.ha === 'del') del(r.dataset.id); else rename(r); return; }
+    go(r.dataset.id);
+  });
+  /* двойной клик по названию — переименовать */
+  L.addEventListener('dblclick', e => { const r = e.target.closest('.crow'); if (r && e.target.closest('.crow-t')) { e.preventDefault(); rename(r); } });
+
+  /* ---- поиск ---- */
+  let qT = 0;
+  qi.addEventListener('input', () => {
+    qx.hidden = !qi.value;
+    clearTimeout(qT);
+    qT = setTimeout(() => { const v = qi.value.replace(/\s+/g, ' ').trim(); if (v === q) return; q = v; sel = -1; load(); }, 160);
+  });
+  qx.onclick = () => { qi.value = ''; qi.dispatchEvent(new Event('input')); qi.focus(); };
+
+  /* ---- клавиатура ---- */
+  P.addEventListener('keydown', e => {
+    if (e.target.classList.contains('crow-in')) return;
+    const inQ = e.target === qi, rs = rows(), r = rs[sel];
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); move(e.key === 'ArrowDown' ? 1 : -1); return; }
+    if (e.key === 'Enter' && !e.isComposing) {
+      if (r) { e.preventDefault(); go(r.dataset.id); }
+      else if (inQ && rs.length) { e.preventDefault(); go(rs[0].dataset.id); }
+      return;
+    }
+    if (inQ) return;
+    if ((e.key === 'Delete' || (e.key === 'Backspace' && e.metaKey)) && r) { e.preventDefault(); del(r.dataset.id); return; }
+    if (e.key === 'F2' && r) { e.preventDefault(); rename(r); return; }
+    if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); sel = e.key === 'Home' ? 0 : rs.length - 1; hl(true); return; }
+    /* начали печатать в списке — это поиск */
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { qi.focus(); }
+  });
+  /* Esc: сначала закрывает историю (а не останавливает задачу) */
+  addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || !open || document.activeElement?.classList.contains('crow-in') || $('#ask').open) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (document.activeElement === qi && qi.value) { qi.value = ''; qi.dispatchEvent(new Event('input')); return; }
+    show(false); btn.focus();
+  }, true);
+  /* Ctrl/⌘+K — история, Ctrl/⌘+Shift+O — новый чат (по коду клавиши: работает и в русской раскладке) */
+  addEventListener('keydown', e => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || !me || $('#dlg').open || $('#ask').open || auth.open) return;
+    if (e.code === 'KeyK' && !e.shiftKey) { e.preventDefault(); if (!open) show(true); else qi.focus(); }
+    else if (e.code === 'KeyO' && e.shiftKey) { e.preventDefault(); fresh(); }
+  });
+  if (!fine.matches) P.querySelector('.chist-k').hidden = true;
+
+  /* ---- события с сервера ---- */
+  let chT = 0;
+  return {
+    open: go, fresh,
+    /* на экране новый чат: подсветка в списке, название — в подсказке кнопки */
+    shown(s) {
+      title = s.title || ''; empty = !s.log.some(e => e.kind === 'user');
+      btn.title = 'История чатов (Ctrl+K)' + (title ? ' · сейчас: «' + title + '»' : '');
+      setTimeout(() => $('#msgs').classList.remove('sw'), 0);
+      if (open) draw();
+    },
+    run(r) { runR = { ...(runR || {}), ...r }; if (open && !editing) draw(); },
+    /* список поменялся (новое сообщение, название от модели, удаление в другой вкладке) */
+    changed() {
+      if (!open) return;
+      clearTimeout(chT); chT = setTimeout(load, 150);
+    },
+    sent() { empty = false; foot(); },
+  };
+})();
 
 /* ---------- старт ----------
    Сервер не ответил (перезапускается, обновляется, пропала сеть) — не висим на «подключаюсь…», а пробуем снова;

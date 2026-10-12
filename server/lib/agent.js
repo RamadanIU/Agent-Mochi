@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import { CFG } from './config.js';
 import { Doc, ensureDir, rid, writeJSONSync, readJSON } from './store.js';
 import { runCmd, fileCmd, agentInfo } from './runner-client.js';
-import { userDir, pullFile, storeFile, sz } from './files.js';
+import { userDir, pullFile, storeFile, dropFids, sz } from './files.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
 import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens, setPresetSeed, presetsOff } from './ext.js';
 
@@ -161,6 +161,28 @@ export function friendly(e) {
   return e.message || 'ошибка';
 }
 
+/* ---------- история чатов ----------
+   У пользователя много чатов: индекс chats.json (название, время последнего сообщения, превью) и по файлу на чат в chats/.
+   Агент один, как и компьютер: он работает в «активном» чате (туда же пишет Telegram), а смотреть можно любой.
+   Название сначала — начало первого сообщения, после второго ответа его придумывает модель (если не переименовали сами) */
+const MAX_CONVS = 300, UNDO_MS = 60000;
+const newConv = () => ({ hist: [], log: [], seq: 0, run: null, cwd: null, sess: rid(16) });
+const oneLine = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s; };
+const TITLE_SYS = 'Придумай короткое название для чата по его началу: 2–5 слов, суть темы, на языке пользователя. Без кавычек, точки в конце, эмодзи и слов «чат», «диалог», «разговор», «вопрос». Ответь только названием.';
+/* ответ модели → название: без рассуждений (<think>), разметки, кавычек и «Название:» */
+export function cleanTitle(s) {
+  if (Array.isArray(s)) s = s.map(p => p?.text || '').join('');
+  s = String(s || '').replace(/<think>[\s\S]*?(<\/think>|$)/gi, '').replace(/[*_`#>]/g, '');
+  s = (s.split('\n').map(x => x.trim()).find(Boolean) || '').replace(/^(название|title)\s*[:：—-]\s*/i, '').replace(/^["'«»“”„]+|["'«»“”„.!。]+$/g, '').trim();
+  if (!s) return '';
+  if (s.length > 60) s = s.slice(0, 60).replace(/\s+\S*$/, '') + '…';
+  return s[0].toUpperCase() + s.slice(1);
+}
+/* что показать в списке, пока модель не придумала название: начало первого сообщения или имя файла */
+const draftTitle = e => oneLine(e.text || (e.files || []).map(f => f.name).join(', '), 60);
+/* файлы чата в хранилище сервера (миниатюры и отданные агентом) — удаляются вместе с ним */
+const fidsOf = log => log.flatMap(e => [e.fid, ...(e.files || []).map(f => f.fid)]).filter(Boolean);
+
 const chats = new Map();
 export function getChat(u) {
   if (!chats.has(u.id)) chats.set(u.id, new Chat(u));
@@ -175,8 +197,16 @@ export class Chat extends EventEmitter {
     this.u = u;
     this.dir = path.join(CFG.data, 'users', u.id);
     ensureDir(this.dir);
-    this.doc = new Doc(path.join(this.dir, 'chat.json'), { hist: [], log: [], seq: 0, run: null, cwd: null, sess: rid(16) });
     this.set = new Doc(path.join(this.dir, 'settings.json'), () => ({ ...DEF_SETTINGS }));
+    /* act — чат, где работает агент; cur — какой чат открывали последним (с него начинается новая вкладка) */
+    this.idx = new Doc(path.join(this.dir, 'chats.json'), { act: null, cur: null, list: {} });
+    this.naming = new Set(); this.chatsT = null;
+    this.migrate();
+    this.purge(true);
+    const L = this.idx.v.list;
+    this.cid = L[this.idx.v.act] && !L[this.idx.v.act].del ? this.idx.v.act : this.newConv();
+    this.idx.v.act = this.cid;
+    this.doc = new Doc(this.convFile(this.cid), newConv);
     this.clients = new Set();
     /* ctl — вся задача («Стоп»), stepCtl — текущий шаг («Прочитать сейчас»), ended — обещание конца задачи */
     this.ctl = null; this.stepCtl = null; this.ended = Promise.resolve(); this.partial = ''; this.gen = 0; this.noVis = 0;
@@ -185,13 +215,167 @@ export class Chat extends EventEmitter {
     this.seen = new Map(); this.turn = 0; this.phKey = null;
   }
   get running() { return !!this.ctl; }
+
+  /* ---------- история чатов ---------- */
+  convFile(id) { return path.join(this.dir, 'chats', id + '.json'); }
+  meta(id = this.cid) { return this.idx.v.list[id]; }
+  has(id) { const m = typeof id === 'string' && this.idx.v.list[id]; return !!m && !m.del; }
+  /* содержимое чата: активный — из памяти, остальные — с диска */
+  peek(id) { return id === this.cid ? this.doc.v : readJSON(this.convFile(id), newConv); }
+  /* список поменялся — страницы перерисуют историю (одно событие на пачку изменений) */
+  metaChanged() {
+    this.idx.save();
+    if (this.chatsT) return;
+    this.chatsT = setTimeout(() => { this.chatsT = null; this.emit('chats'); }, 300);
+    this.chatsT.unref?.();
+  }
+
+  /* прежний единственный чат (chat.json) становится первым в истории */
+  migrate() {
+    const old = path.join(this.dir, 'chat.json');
+    if (Object.keys(this.idx.v.list).length || !fs.existsSync(old)) return;
+    const v = readJSON(old, null);
+    if (!v || !Array.isArray(v.log)) return;
+    const id = rid(6), msgs = v.log.filter(e => e.kind === 'user' || e.kind === 'assistant'), first = v.log.find(e => e.kind === 'user');
+    ensureDir(path.join(this.dir, 'chats'));
+    fs.renameSync(old, this.convFile(id));
+    const answers = msgs.filter(e => e.kind === 'assistant').length;
+    this.idx.v.list[id] = { id, title: first ? draftTitle(first) : '', named: 0, t: v.log[0]?.t || Date.now(), last: msgs.at(-1)?.t || v.log.at(-1)?.t || Date.now(), n: msgs.length, answers, prev: oneLine(msgs.at(-1)?.text, 90) };
+    this.idx.v.act = this.idx.v.cur = id;
+    this.idx.flush();
+    /* старый разговор длинный — название можно придумать сразу */
+    if (answers >= 2) setTimeout(() => this.nameConv(id), 5000).unref?.();
+  }
+
+  /* новый чат; пустой (ещё без сообщений) не плодим — он один и переиспользуется */
+  newConv() {
+    const L = this.idx.v.list, empty = Object.values(L).find(m => !m.n && !m.del);
+    if (empty) return empty.id;
+    const id = rid(6), now = Date.now();
+    L[id] = { id, title: '', named: 0, t: now, last: now, n: 0, answers: 0 };
+    /* не больше MAX_CONVS: самые давние уходят (кроме активного) */
+    const all = Object.values(L).filter(m => !m.del).sort((a, b) => b.last - a.last);
+    for (const m of all.slice(MAX_CONVS)) if (m.id !== this.cid) { m.del = 1; }
+    if (all.length > MAX_CONVS) this.purge(true);
+    this.metaChanged();
+    return id;
+  }
+
+  /* сделать чат активным: агент свободен — переключаемся; занят в другом чате — ошибка с его названием */
+  use(id) {
+    if (id === undefined || id === null || id === this.cid) return;
+    if (!this.has(id)) throw Object.assign(new Error('Такого чата больше нет — возможно, его удалили'), { status: 404 });
+    if (this.running) throw Object.assign(new Error('Personal Computer сейчас работает в чате «' + (this.meta()?.title || 'Новый чат') + '». Дождись или останови его.'), { status: 409, busy: true });
+    if (this.doc.t) this.doc.flush();
+    this.doc.drop();
+    this.cid = id; this.doc = new Doc(this.convFile(id), newConv);
+    /* заговорили в чате или начали новый — его и открывает новая вкладка */
+    this.idx.v.act = this.idx.v.cur = id; this.idx.save();
+    this.seen.clear(); this.turn = 0; this.phKey = null; this.partial = '';
+  }
+
+  /* «Новый чат» (и /new в Telegram): задача останавливается, прошлый разговор остаётся в истории */
+  async fresh() {
+    await this.stop();
+    this.use(this.newConv());
+    this.emit('run', this.runState());
+    return this.cid;
+  }
+
+  listConvs(q) {
+    const all = Object.values(this.idx.v.list).filter(m => !m.del && m.n > 0).sort((a, b) => b.last - a.last)
+      .map(m => ({ id: m.id, title: m.title || 'Новый чат', named: !!m.named, t: m.t, last: m.last, n: m.n, prev: m.prev || '' }));
+    q = String(q || '').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 100);
+    if (!q) return all;
+    /* поиск: по названию, а потом по тексту сообщений — с кусочком текста вокруг найденного */
+    const out = [];
+    for (const m of all) {
+      if (m.title.toLowerCase().includes(q)) { out.push(m); continue; }
+      const e = this.peek(m.id).log.find(x => (x.kind === 'user' || x.kind === 'assistant') && String(x.text || '').toLowerCase().includes(q));
+      if (!e) continue;
+      const t = String(e.text).replace(/\s+/g, ' '), i = t.toLowerCase().indexOf(q), a = Math.max(0, i - 30);
+      out.push({ ...m, hit: (a ? '…' : '') + t.slice(a, i + q.length + 60) + (i + q.length + 60 < t.length ? '…' : '') });
+      if (out.length >= 50) break;
+    }
+    return out;
+  }
+
+  rename(id, title) {
+    if (!this.has(id)) throw Object.assign(new Error('Такого чата больше нет'), { status: 404 });
+    const t = oneLine(title, 80);
+    if (!t) throw Object.assign(new Error('Название не может быть пустым'), { status: 400 });
+    Object.assign(this.meta(id), { title: t, named: 1 });
+    this.metaChanged();
+  }
+
+  /* удаление — с возможностью вернуть: чат прячется сразу, а стирается через минуту */
+  async remove(id) {
+    if (!this.has(id)) return false;
+    if (id === this.cid && this.running) await this.stop();
+    this.meta(id).del = Date.now();
+    if (id === this.cid) this.use(this.newConv());
+    this.metaChanged();
+    this.emit('gone', id);
+    this.emit('run', this.runState());
+    setTimeout(() => this.purge(), UNDO_MS + 500).unref?.();
+    return true;
+  }
+  restore(id) {
+    const m = this.meta(id);
+    if (!m || !m.del) return false;
+    delete m.del;
+    this.metaChanged();
+    return true;
+  }
+  /* стереть удалённые насовсем: файл чата, вложения для модели и файлы в хранилище */
+  purge(all) {
+    const L = this.idx.v.list;
+    let n = 0;
+    for (const m of Object.values(L)) {
+      if (!m.del || (!all && Date.now() - m.del < UNDO_MS) || m.id === this.cid) continue;
+      const v = readJSON(this.convFile(m.id), newConv);
+      this.dropParts([...(v.hist || []), ...(v.queue || []).map(q => q.msg)]);
+      dropFids(this.u, fidsOf(v.log || []));
+      fs.rm(this.convFile(m.id), { force: true }, () => {});
+      delete L[m.id]; n++;
+    }
+    if (n) this.idx.save();
+  }
+
+  /* название от модели: короткий отдельный запрос без инструментов; не вышло — попробуем после следующего ответа */
+  async nameConv(id) {
+    const m = this.meta(id), S = this.settings();
+    if (!m || m.del || m.named || this.naming.has(id)) return;
+    this.naming.add(id);
+    try {
+      const log = this.peek(id).log.filter(e => (e.kind === 'user' || e.kind === 'assistant') && e.text).slice(0, 8);
+      if (!log.length) return;
+      const text = log.map(e => (e.kind === 'user' ? 'Пользователь: ' : 'Ассистент: ') + oneLine(e.text, 600)).join('\n');
+      const h = { 'Content-Type': 'application/json' };
+      if (S.key) h.Authorization = 'Bearer ' + S.key;
+      const r = await apiFetch(S.base.replace(/\/+$/, '') + '/chat/completions', { method: 'POST', headers: h, signal: AbortSignal.timeout(60000),
+        body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: TITLE_SYS }, { role: 'user', content: text }], stream: false }) });
+      if (!r.ok) return;
+      const t = cleanTitle((await r.json().catch(() => null))?.choices?.[0]?.message?.content);
+      /* пока модель думала, чат переименовали или удалили — их выбор главнее */
+      if (!t || m.named || m.del) return;
+      Object.assign(m, { title: t, named: 1 });
+      this.metaChanged();
+    } catch (e) { console.warn('agent: название чата:', e.message); }
+    finally { this.naming.delete(id); }
+  }
   get away() { return this.clients.size === 0; }
   settings() { const s = { ...DEF_SETTINGS, ...this.set.v }; if (OLD_SYS.has(s.sys)) s.sys = DEF_SYS; return s; }
+  /* rc — в каком чате работает агент (rt — его название) */
   runState() {
     const r = this.doc.v.run;
-    return { running: this.running, ...(r ? { origin: r.origin, t: r.t, steps: r.steps } : {}) };
+    return { running: this.running, rc: this.cid, rt: this.meta()?.title || '', ...(r ? { origin: r.origin, t: r.t, steps: r.steps } : {}) };
   }
-  snapshot() { return { log: this.doc.v.log, seq: this.doc.v.seq, partial: this.partial, queue: this.queueView(), ...this.runState() }; }
+  /* c — какой чат показываем (не обязательно тот, где работает агент) */
+  snapshot(id = this.cid) {
+    const own = id === this.cid, v = this.peek(id);
+    return { c: id, title: this.meta(id)?.title || '', log: v.log, seq: v.seq, partial: own ? this.partial : '', queue: own ? this.queueView() : [], ...this.runState() };
+  }
   /* очередь для экрана: без готового сообщения для модели */
   queueView() { return (this.doc.v.queue || []).map(({ id, text, files, origin, t }) => ({ id, text, files, origin, t })); }
 
@@ -202,10 +386,20 @@ export class Chat extends EventEmitter {
     L.push(e);
     if (L.length > 400) L.splice(0, L.length - 400);
     this.doc.save();
-    this.emit('log', e);
+    if (e.kind === 'user' || e.kind === 'assistant' || e.kind === 'file') this.touch(e);
+    this.emit('log', e, this.cid);
     return e;
   }
-  update(e) { e.u = Date.now(); this.doc.save(); this.emit('log', e); }
+  update(e) { e.u = Date.now(); this.doc.save(); this.emit('log', e, this.cid); }
+  /* новое сообщение → время, счётчик и превью чата в истории */
+  touch(e) {
+    const m = this.meta(); if (!m) return;
+    m.last = e.t;
+    if (e.kind !== 'file') m.n = (m.n || 0) + 1;
+    if (e.kind === 'user' && !m.title) m.title = draftTitle(e);
+    m.prev = oneLine(e.kind === 'file' ? '📎 ' + e.name : e.text || (e.files || []).map(f => '📎 ' + f.name).join(' '), 90);
+    this.metaChanged();
+  }
 
   /* ---------- вложения (картинки/PDF для модели) хранятся отдельными файлами ---------- */
   partsFile(id) { return path.join(this.dir, 'parts', id + '.json'); }
@@ -255,9 +449,10 @@ export class Chat extends EventEmitter {
   /* ---------- управление ---------- */
   /* Personal Computer свободен — сообщение начинает задачу. Занят — ждёт в очереди и уходит модели в ближайшей паузе между шагами
      (после текущей команды или ответа модели) с пометкой MID: модель понимает, что это дополнение или вопрос по ходу дела */
-  submit({ text = '', files = [], parts = [], origin = 'web' }) {
+  submit({ text = '', files = [], parts = [], origin = 'web', c }) {
     text = String(text).slice(0, 100000);
     if (!text.trim() && !files.length) throw Object.assign(new Error('пустое сообщение'), { status: 400 });
+    this.use(c);
     const busy = this.running, Q = this.doc.v.queue ||= [];
     if (busy && Q.length >= MAX_QUEUE) throw Object.assign(new Error('Personal Computer ещё не прочёл прошлые сообщения — подожди немного'), { status: 429 });
     const content = (text.trim() || 'Файлы во вложении.') + (files.length
@@ -270,7 +465,7 @@ export class Chat extends EventEmitter {
       Q.push(q);
       if (origin === 'tg' && this.doc.v.run) this.doc.v.run.tg = 1;
       this.doc.save();
-      this.emit('queue', this.queueView());
+      this.emit('queue', this.queueView(), this.cid);
       return { queued: q.id };
     }
     this.doc.v.hist.push(m);
@@ -292,7 +487,7 @@ export class Chat extends EventEmitter {
     }
     this.turn++;
     this.trimHist();
-    this.emit('queue', []);
+    this.emit('queue', [], this.cid);
     return all;
   }
 
@@ -310,12 +505,13 @@ export class Chat extends EventEmitter {
     const [q] = Q.splice(i, 1);
     this.dropParts([q.msg]);
     this.doc.save();
-    this.emit('queue', this.queueView());
+    this.emit('queue', this.queueView(), this.cid);
     return q;
   }
 
-  retry(origin = 'web') {
+  retry(origin = 'web', c) {
     if (this.running) throw Object.assign(new Error('Personal Computer уже работает'), { status: 409 });
+    this.use(c);
     const H = this.doc.v.hist, last = H[H.length - 1];
     if (!last || last.role === 'assistant') throw Object.assign(new Error('нечего повторять'), { status: 400 });
     this.start(origin);
@@ -336,7 +532,7 @@ export class Chat extends EventEmitter {
     this.dropParts((this.doc.v.queue || []).map(q => q.msg));
     Object.assign(this.doc.v, { hist: [], log: [], run: null, sess: rid(16), act: [], queue: [] });
     this.doc.save();
-    this.emit('reset');
+    this.emit('reset', this.cid);
     this.emit('run', this.runState());
   }
 
@@ -365,6 +561,9 @@ export class Chat extends EventEmitter {
     else if (ctl.signal.aborted) this.push({ kind: 'note', text: left ? 'Остановлено · Personal Computer ещё не ответил на сообщения выше' : 'Остановлено', ...(left ? { retry: true } : {}) });
     this.doc.v.run = null; this.doc.save();
     this.ctl = null;
+    /* второй ответ в чате — модель придумывает ему название */
+    const m = this.meta();
+    if (m && !err && !ctl.signal.aborted && text) { m.answers = (m.answers || 0) + 1; this.idx.save(); if (m.answers >= 2 && !m.named) this.nameConv(this.cid); }
     this.emit('run', this.runState());
     this.emit('done', { origin: run.origin, tg: !!run.tg, text, err, stopped: ctl.signal.aborted && !err, steps: run.steps, ms: Date.now() - run.t });
     fin();
@@ -622,7 +821,7 @@ export class Chat extends EventEmitter {
       if (fn.name && c.function.name !== fn.name) c.function.name += fn.name;
       if (fn.arguments != null) c.function.arguments += typeof fn.arguments === 'string' ? fn.arguments : JSON.stringify(fn.arguments);
     };
-    const delta = d => { text += d; this.partial = text; this.emit('delta', d); };
+    const delta = d => { text += d; this.partial = text; this.emit('delta', d, this.cid); };
     if (!(r.headers.get('content-type') || '').includes('event-stream')) {
       const j = await r.json();
       if (j && j.error) throw apiErr(j.error);
