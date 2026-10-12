@@ -151,23 +151,53 @@ function stream(req, res, u) {
   req.on('close', done); res.on('error', done);
 }
 
-/* ---------- настройки модели (ключ наружу не отдаём) ---------- */
-const pubSettings = c => { const { key, ...s } = c.settings(); return { ...s, hasKey: !!key, maxStepsDef: DEF_SETTINGS.maxSteps }; };
+/* ---------- настройки модели (ключ наружу не отдаём) ----------
+   Сохранённые провайдеры: provs — адрес API → { key, model }. Активный — base/key/model (их читает агент):
+   переключился на сохранённого — ключ и модель берутся оттуда, вписывать заново не надо */
+const normBase = x => String(x || '').trim().replace(/\/+$/, '');
+const MAX_PROVS = 30;
+function provsOf(S) {
+  const P = S.provs && typeof S.provs === 'object' && !Array.isArray(S.provs) ? S.provs : {};
+  /* настройки до сохранения провайдеров: текущий ключ — первый сохранённый */
+  if (S.key && S.base && !P[S.base]) P[S.base] = { key: S.key, model: S.model || DEF_SETTINGS.model };
+  return P;
+}
+const pubSettings = c => {
+  const S = c.settings(), { key, provs, ...s } = S;
+  return { ...s, hasKey: !!key, maxStepsDef: DEF_SETTINGS.maxSteps,
+    provs: Object.entries(provsOf(S)).map(([base, p]) => ({ base, model: p.model || '', hasKey: !!p.key })) };
+};
 function putSettings(c, b) {
   const s = c.set.v, steps = b.maxSteps === undefined ? undefined : Math.round(+b.maxSteps);
+  const P = s.provs = provsOf(c.settings()), prev = s.base || DEF_SETTINGS.base;
+  /* забыть сохранённого провайдера (ключ и модель); забыли активного — без ключа он больше не работает */
+  if (b.forget !== undefined) {
+    const f = normBase(b.forget);
+    delete P[f];
+    if (f === prev) s.key = '';
+    return c.set.save();
+  }
   if (steps !== undefined && !(steps >= 1 && steps <= MAX_STEPS)) throw new HttpErr(400, 'Лимит шагов — от 1 до ' + MAX_STEPS);
   if (b.base !== undefined) {
-    const base = String(b.base).trim().replace(/\/+$/, '');
+    const base = normBase(b.base);
     if (base && !/^https?:\/\/[^\s]+$/i.test(base)) throw new HttpErr(400, 'Адрес API должен начинаться с http:// или https://');
     s.base = base || DEF_SETTINGS.base;
   }
-  if (b.clearKey) s.key = '';
+  const cur = s.base || DEF_SETTINGS.base, moved = cur !== prev;
+  /* «Сбросить всё» стирает ключи всех провайдеров */
+  if (b.clearKey) { s.key = ''; for (const k in P) delete P[k]; }
   else if (typeof b.key === 'string' && b.key.trim()) s.key = b.key.trim().slice(0, 500);
+  else if (moved) s.key = P[cur]?.key || '';
   if (b.model !== undefined) s.model = String(b.model).trim().slice(0, 200) || DEF_SETTINGS.model;
+  else if (moved && P[cur]?.model) s.model = P[cur].model;
   if (b.sys !== undefined) s.sys = String(b.sys).trim().slice(0, 20000) || DEF_SETTINGS.sys;
   if (b.vis !== undefined) { s.vis = !!b.vis; c.noVis = 0; }
   if (b.stepLimit !== undefined) s.stepLimit = !!b.stepLimit;
   if (steps !== undefined) s.maxSteps = steps;
+  if (!b.clearKey) {
+    P[cur] = { key: s.key || '', model: s.model || DEF_SETTINGS.model };
+    const ks = Object.keys(P); while (ks.length > MAX_PROVS) delete P[ks.shift()];
+  }
   c.set.save();
 }
 /* провайдеры, у которых /models открыт всем: по нему не понять, подходит ли ключ */
@@ -176,9 +206,9 @@ const isOpenRouter = base => hostIs(base, /(^|\.)openrouter\.ai$/i);
 const isOllamaCloud = base => hostIs(base, /(^|\.)ollama\.com$/i);
 async function models(c, b) {
   const S = c.settings();
-  const base = String(b.base || S.base).trim().replace(/\/+$/, '');
+  const base = normBase(b.base || S.base);
   if (!/^https?:\/\//i.test(base)) throw new HttpErr(400, 'неверный адрес API');
-  const key = String(b.key || '').trim() || (base === S.base ? S.key : '');
+  const key = String(b.key || '').trim() || provsOf(S)[base]?.key || (base === S.base ? S.key : '');
   const auth = key ? { Authorization: 'Bearer ' + key } : {};
   const r = await apiFetch(base + '/models', { headers: auth, signal: AbortSignal.timeout(15000) })
     .catch(e => { throw new HttpErr(502, 'сервер модели не отвечает: ' + (e.cause?.code || e.message)); });

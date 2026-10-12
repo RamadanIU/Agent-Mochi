@@ -78,3 +78,80 @@ test('вызов инструмента с обрезанным JSON: дальш
     assert.match(msgs.find(x => x.role === 'tool').content, /невалидный JSON/);
   } finally { fm.close(); }
 });
+
+test('сохранённые провайдеры: переключение без повторного ввода ключа, ключи наружу не уходят, «забыть»', async () => {
+  const a = await fakeModel(() => ({ text: 'это A' })), b = await fakeModel(() => ({ text: 'это B' }));
+  try {
+    const c = await registered(m, 'provs');
+    await c.json('/api/settings', { base: a.url, key: 'sk-aaa', model: 'fake-1' }, 'PUT');
+    const r = await c.json('/api/settings', { base: b.url + '/', key: 'sk-bbb', model: 'fake-2' }, 'PUT');
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.j.provs, [{ base: a.url, model: 'fake-1', hasKey: true }, { base: b.url, model: 'fake-2', hasKey: true }]);
+    assert.doesNotMatch(JSON.stringify(r.j), /sk-aaa|sk-bbb/);
+
+    /* назад к A: ни ключа, ни модели — сервер берёт сохранённые */
+    const s = (await c.json('/api/settings', { base: a.url }, 'PUT')).j;
+    assert.equal(s.base, a.url); assert.equal(s.model, 'fake-1'); assert.equal(s.hasKey, true);
+    const say = async (fm, want) => {
+      const done = c.events(evs => evs.some(e => e.ev === 'log' && e.d.kind === 'assistant' && e.d.text === want));
+      assert.equal((await c.json('/api/chat', { text: 'кто ты?' })).status, 200);
+      await done;
+    };
+    await say(a, 'это A');
+    assert.equal(a.calls.at(-1).auth, 'Bearer sk-aaa');
+    assert.equal(a.calls.at(-1).body.model, 'fake-1');
+
+    /* список моделей нового провайдера проверяется его сохранённым ключом */
+    assert.equal((await c.json('/api/models', { base: b.url })).status, 200);
+
+    /* к B — с моделью из поля, ключ сохранённый */
+    await c.json('/api/settings', { base: b.url, model: 'fake-2' }, 'PUT');
+    await say(b, 'это B');
+    assert.equal(b.calls.at(-1).auth, 'Bearer sk-bbb');
+
+    /* новый ключ для B заменяет старый только у B */
+    await c.json('/api/settings', { base: b.url, key: 'sk-bbb2', model: 'fake-2' }, 'PUT');
+    await c.json('/api/settings', { base: a.url, model: 'fake-1' }, 'PUT');
+    await c.json('/api/settings', { base: b.url, model: 'fake-2' }, 'PUT');
+    await say(b, 'это B');
+    assert.equal(b.calls.at(-1).auth, 'Bearer sk-bbb2');
+
+    /* забыть неактивного: активный не трогаем */
+    const f = (await c.json('/api/settings', { forget: a.url }, 'PUT')).j;
+    assert.deepEqual(f.provs.map(p => p.base), [b.url]);
+    assert.equal(f.base, b.url); assert.equal(f.hasKey, true);
+    /* забыть активного — ключа больше нет */
+    const g = (await c.json('/api/settings', { forget: b.url }, 'PUT')).j;
+    assert.deepEqual(g.provs, []); assert.equal(g.hasKey, false);
+
+    /* переход на несохранённый адрес не уносит туда чужой ключ */
+    await c.json('/api/settings', { base: a.url, key: 'sk-aaa', model: 'fake-1' }, 'PUT');
+    const h = (await c.json('/api/settings', { base: 'http://127.0.0.1:9/v1', model: 'x' }, 'PUT')).j;
+    assert.equal(h.hasKey, false);
+    assert.deepEqual(h.provs.map(p => [p.base, p.hasKey]), [[a.url, true], ['http://127.0.0.1:9/v1', false]]);
+
+    /* «Сбросить всё» стирает ключи всех провайдеров */
+    const z = (await c.json('/api/settings', { base: '', model: '', clearKey: true }, 'PUT')).j;
+    assert.deepEqual(z.provs, []); assert.equal(z.hasKey, false);
+
+    /* переживает перезапуск */
+    await c.json('/api/settings', { base: a.url, key: 'sk-aaa', model: 'fake-1' }, 'PUT');
+    await m.restart();
+    assert.deepEqual((await c.json('/api/settings', undefined, 'GET')).j.provs, [{ base: a.url, model: 'fake-1', hasKey: true }]);
+  } finally { a.close(); b.close(); }
+});
+
+test('настройки до сохранения провайдеров: текущий ключ становится первым сохранённым', async () => {
+  const c = await registered(m, 'legacy');
+  const me = (await c.json('/api/account', undefined, 'GET')).j.user;
+  const fs = await import('node:fs'), path = await import('node:path');
+  const dir = path.join(m.env.MOCHI_DATA, 'users', me.id);
+  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ base: 'https://old.example/v1', key: 'sk-old', model: 'old-1' }));
+  await m.restart();
+  const s = (await c.json('/api/settings', undefined, 'GET')).j;
+  assert.deepEqual(s.provs, [{ base: 'https://old.example/v1', model: 'old-1', hasKey: true }]);
+  /* ушли на другой адрес и вернулись — старый ключ на месте */
+  await c.json('/api/settings', { base: 'https://new.example/v1', key: 'sk-new', model: 'n' }, 'PUT');
+  const back = (await c.json('/api/settings', { base: 'https://old.example/v1' }, 'PUT')).j;
+  assert.equal(back.hasKey, true); assert.equal(back.model, 'old-1');
+});

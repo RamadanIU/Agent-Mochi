@@ -70,6 +70,7 @@ dialog::backdrop{background:rgba(30,15,50,.65)}
 .dh{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
 .dh b{font:11px var(--pf);color:var(--acc)}
 .f{display:block;margin-top:18px;font:8px/1.6 var(--pf);color:var(--mut);text-transform:uppercase}.f[hidden]{display:none}
+#c-forget{margin:10px 4px 0;padding:4px 0;font-size:7px}#c-forget[hidden]{display:none}
 .f input,.f textarea,.f select{display:block;width:calc(100% - 8px);margin:10px 4px 0;background:var(--bg);border:0;padding:8px 12px;font:20px var(--vt);text-transform:none;color:var(--fg);outline:none}
 .f textarea{resize:vertical;min-height:96px}
 .f select{appearance:none;-webkit-appearance:none;padding-right:34px;background:var(--bg) var(--arr) no-repeat right 12px center/14px 8px}
@@ -1516,6 +1517,7 @@ const tick=setInterval(paint,100);paint();
     <label class="f">Провайдер<select id="c-prov"></select></label>
     <label class="f" id="f-base" hidden>Адрес API<input id="c-base" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="https://…/v1"></label>
     <label class="f" id="f-key">API ключ<span class="fx"><input id="c-key" type="password" autocomplete="off" spellcheck="false"><button type="button" class="eye" id="c-eye" aria-label="Показать ключ" aria-pressed="false"><i class="pi"></i></button></span></label>
+    <button class="lnk" id="c-forget" type="button" hidden>Забыть этого провайдера</button>
     <label class="f">Модель<input id="c-model" autocapitalize="off" autocomplete="off" spellcheck="false"></label><div id="ml" hidden></div><small id="mh"></small>
     </div>
     <div class="grp" data-i="abil"><h3 class="gh">Возможности</h3>
@@ -3319,17 +3321,34 @@ $('#ask').addEventListener('click',e=>{if(e.target===$('#ask'))$('#ask').close('
 const PRESETS={OpenAI:'https://api.openai.com/v1',OpenRouter:'https://openrouter.ai/api/v1','Ollama Cloud':'https://ollama.com/v1',JustWoker:'https://api.justwoker.icu/v1','LM Studio':'http://localhost:1234/v1'};
 const LOCAL=['LM Studio'],CUSTOM='Другой';
 const prov=$('#c-prov');
-for(const k of [...Object.keys(PRESETS),CUSTOM])prov.add(new Option(k,k));
+/* сохранённые на сервере провайдеры: адрес API → {model, hasKey} (заполняет client.js; сами ключи в браузер не приходят).
+   В списке: готовые провайдеры (✓ — ключ сохранён), затем свои адреса, которые уже сохраняли, и «Другой» — новый адрес */
+let provSaved={};
+const nb=x=>String(x||'').trim().replace(/\/+$/,'');
+const hostOf=b=>{try{const u=new URL(b);return u.host+(u.pathname.replace(/\/+$/,'')||'')}catch(e){return b}};
+function provOpts(){const v=prov.value;prov.innerHTML='';
+  for(const k of Object.keys(PRESETS))prov.add(new Option(k+(provSaved[PRESETS[k]]?.hasKey?' ✓':''),k));
+  for(const b in provSaved)if(!Object.values(PRESETS).includes(b))prov.add(new Option(hostOf(b)+(provSaved[b].hasKey?' ✓':''),b));
+  prov.add(new Option(CUSTOM+' (новый адрес)',CUSTOM));
+  if(v)prov.value=[...prov.options].some(o=>o.value===v)?v:CUSTOM}
+provOpts();
+const provBase=p=>PRESETS[p]||(p!==CUSTOM?p:'');
 const F={base:'#c-base',key:'#c-key',model:'#c-model',sys:'#c-sys'};
-function syncSet(){const p=prov.value;$('#f-steps').hidden=!$('#c-lim').checked;$('#sh').hidden=true;$('#f-base').hidden=p!==CUSTOM;$('#f-key').hidden=LOCAL.includes(p)}
+/* ключ этого провайдера уже на сервере — поле можно оставить пустым */
+function keyHint(){const sv=provSaved[nb($('#c-base').value)];
+  $('#c-key').placeholder=sv&&sv.hasKey?'сохранён на сервере · пусто = не менять':'sk-…';$('#c-forget').hidden=!sv}
+function syncSet(){const p=prov.value;$('#f-steps').hidden=!$('#c-lim').checked;$('#sh').hidden=true;$('#f-base').hidden=!!PRESETS[p];$('#f-key').hidden=LOCAL.includes(p);keyHint()}
 function fill(s){
   for(const k in F)$(F[k]).value=s[k]||'';
-  prov.value=Object.keys(PRESETS).find(k=>PRESETS[k]===s.base)||CUSTOM;
+  const b=nb(s.base);prov.value=Object.keys(PRESETS).find(k=>PRESETS[k]===b)||(provSaved[b]?b:CUSTOM);
   $('#c-sfx').checked=s.sfx!==false;$('#c-room').checked=s.room!==false;$('#c-vol').value=Number.isFinite(+s.vol)&&s.vol!==''?s.vol:60;$('#c-crt').value=s.crt||'';$('#c-key').type='password';$('#c-eye').setAttribute('aria-pressed','false');$('#c-vis').checked=s.vis!==false;$('#c-lim').checked=s.stepLimit!==false;$('#c-steps').value=s.maxSteps||DEF.maxSteps;$('#c-tts').checked=s.tts!==false;$('#c-vlang').value=s.vlang||(window.mochiGuess?mochiGuess():'ru-RU');
   syncSet()}
 /* сменили провайдера — модель из старого списка там, скорее всего, не найдётся: loadModels подберёт новую */
 let provNew=false;
-prov.onchange=()=>{if(prov.value!==CUSTOM)$('#c-base').value=PRESETS[prov.value];provNew=true;syncSet();loadModels()};
+/* сохранённый провайдер — подставляем его последнюю модель, ключ сервер возьмёт свой; «Другой» — пустой адрес для нового */
+prov.onchange=()=>{const b=provBase(prov.value),sv=provSaved[b];$('#c-base').value=b;$('#c-key').value='';
+  if(sv&&sv.model){mi().value=sv.model;provNew=false}else provNew=true;
+  syncSet();if(b)loadModels();else{$('#mh').textContent='';$('#c-base').focus()}};
 $('#c-lim').onchange=syncSet;
 /* лимит шагов: пустое или вне 1…10000 не сохраняем, а показываем ошибку у поля */
 function readSteps(){const n=stepsOk($('#c-steps').value),h=$('#sh');
@@ -3367,7 +3386,7 @@ let loadModels=()=>{};
 mi().oninput=mi().onfocus=showModels;
 $('#dlg').addEventListener('pointerdown',e=>{if(!e.target.closest('#ml,#c-model'))$('#ml').hidden=true});
 /* проверяем заново, как только ключ или адрес вставили/дописали — не дожидаясь ухода фокуса с поля */
-['#c-base','#c-key'].forEach(q=>$(q).oninput=$(q).onchange=()=>{clearTimeout(md_t);md_t=setTimeout(loadModels,500)});
+['#c-base','#c-key'].forEach(q=>$(q).oninput=$(q).onchange=()=>{if(q==='#c-base')keyHint();clearTimeout(md_t);md_t=setTimeout(loadModels,500)});
 const keyStr=s=>s.replace(/\\x([0-9a-f]{2})/gi,(m,h)=>String.fromCharCode(parseInt(h,16))).replace(/\\t/g,'\t');
 /* выпуклый экран: карта смещений под реальный размер (края «уплывают» к центру, как на кинескопе) */
 (()=>{const sc=$('#scr'),fm=$('#crtm');let w0=0,h0=0,tm;
