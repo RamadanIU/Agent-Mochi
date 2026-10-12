@@ -229,15 +229,46 @@ fi
 say "${B}Устанавливаю Personal Computer${N} · $OS_NAME · $(uname -m) · $INIT · пакеты: $PM"
 
 # ---------- пакеты ----------
-pkgs() {
+# уже стоит? (тогда менеджер пакетов не трогаем вовсе: при обновлении всё нужное обычно уже есть,
+# а apt бывает занят автообновлением или сломан чужим пакетом)
+have_pkg() {
   case "$PM" in
-    apt-get) export DEBIAN_FRONTEND=noninteractive; apt-get update -qq >/dev/null; apt-get install -y -qq --no-install-recommends "$@" >/dev/null ;;
-    dnf) dnf install -y -q "$@" >/dev/null ;;
-    yum) yum install -y -q "$@" >/dev/null ;;
-    apk) apk add --no-cache -q "$@" >/dev/null ;;
-    pacman) pacman -Sy --noconfirm --needed "$@" >/dev/null ;;
-    zypper) zypper -n -q install --no-recommends "$@" >/dev/null ;;
+    apt-get) case "$(dpkg-query -W -f='${db:Status-Abbrev}' "$1" 2>/dev/null)" in ii*) return 0 ;; esac; return 1 ;;
+    dnf|yum|zypper) rpm -q --whatprovides "$1" >/dev/null 2>&1 ;;
+    apk) apk info -e "$1" >/dev/null 2>&1 ;;
+    pacman) pacman -Q "$1" >/dev/null 2>&1 ;;
   esac
+}
+pkgs_run() {
+  case "$PM" in
+    # занят apt (автообновление unattended-upgrades) — ждём до 10 минут, а не падаем сразу
+    apt-get) export DEBIAN_FRONTEND=noninteractive
+             apt-get -o DPkg::Lock::Timeout=600 update -qq || true
+             apt-get -o DPkg::Lock::Timeout=600 install -y -qq --no-install-recommends "$@" ;;
+    dnf) dnf install -y -q "$@" ;;
+    yum) yum install -y -q "$@" ;;
+    apk) apk add --no-cache -q "$@" ;;
+    pacman) pacman -Sy --noconfirm --needed "$@" ;;
+    zypper) zypper -n -q install --no-recommends "$@" ;;
+  esac
+}
+PKG_LOG="$TMP/pkgs.log"
+pkgs() { # pkgs ПАКЕТ… — ставит только недостающие; при ошибке её строки — в $PKG_LOG
+  local need="" p
+  for p in "$@"; do have_pkg "$p" || need="$need $p"; done
+  [ -n "$need" ] || return 0
+  # shellcheck disable=SC2086
+  pkgs_run $need >"$PKG_LOG" 2>&1 && return 0
+  # прерванная установка (dpkg) — доделываем и пробуем ещё раз
+  if [ "$PM" = apt-get ] && grep -q 'dpkg --configure -a' "$PKG_LOG"; then
+    # shellcheck disable=SC2086
+    dpkg --configure -a >>"$PKG_LOG" 2>&1 && pkgs_run $need >"$PKG_LOG" 2>&1 && return 0
+  fi
+  return 1
+}
+pkg_why() { # последние строки ошибки менеджера пакетов — их видно и в окне обновления в браузере
+  local l
+  { grep -E '^(E:|Error|error:|ERROR)' "$PKG_LOG" 2>/dev/null || tail -n 3 "$PKG_LOG" 2>/dev/null; } | tail -n 4 | while IFS= read -r l; do warn "$l"; done
 }
 case "$PM" in
   apt-get) BASE="curl ca-certificates tar xz-utils gzip bash tmux git procps iproute2 passwd"; EXTRA="python3 python3-venv python3-pip build-essential unzip jq file less" ;;
@@ -250,7 +281,7 @@ esac
 BASE="$BASE sudo"
 say "Ставлю системные пакеты…"
 # shellcheck disable=SC2086
-pkgs $BASE || die "Не удалось поставить пакеты: $BASE"
+pkgs $BASE || { pkg_why; die "Не удалось поставить пакеты:$(for p in $BASE; do have_pkg "$p" || printf ' %s' "$p"; done) (причина — строки выше)"; }
 # необязательное — инструменты для агента; без них всё равно работает
 # shellcheck disable=SC2086
 pkgs $EXTRA 2>/dev/null || warn "Часть дополнительных пакетов не поставилась ($EXTRA) — не страшно"
