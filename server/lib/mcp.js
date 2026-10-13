@@ -34,7 +34,7 @@ class HttpT {
     if (this.sid) h['Mcp-Session-Id'] = this.sid;
     const id = notify ? undefined : ++this.id;
     /* как к API модели: если Cloudflare не пускает Node.js, apiFetch повторит запрос через curl */
-    const r = await apiFetch(this.url, { method: 'POST', headers: h, signal, body: JSON.stringify({ jsonrpc: '2.0', method, ...(params ? { params } : {}), ...(notify ? {} : { id }) }) })
+    const r = await apiFetch(this.url, { method: 'POST', headers: h, signal, body: JSON.stringify({ jsonrpc: '2.0', method, ...(params ? { params } : {}), ...(notify ? {} : { id }) }) }, 'mcp')
       .catch(e => { throw signal?.aborted ? e : new Error('не достучался до ' + new URL(this.url).host + ' (' + (e.cause?.code || e.cause?.message || e.message) + ')'); });
     this.sid = r.headers.get('Mcp-Session-Id') || this.sid;
     if (!r.ok) {
@@ -53,7 +53,7 @@ class HttpT {
   reset() { this.sid = null; }
   close() {
     if (!this.sid) return;
-    apiFetch(this.url, { method: 'DELETE', headers: { ...this.headers, 'Mcp-Session-Id': this.sid }, signal: AbortSignal.timeout(5000) }).then(r => r.body?.cancel(), () => {});
+    apiFetch(this.url, { method: 'DELETE', headers: { ...this.headers, 'Mcp-Session-Id': this.sid }, signal: AbortSignal.timeout(5000) }, 'mcp').then(r => r.body?.cancel(), () => {});
     this.sid = null;
   }
 }

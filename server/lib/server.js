@@ -20,6 +20,7 @@ import * as TG from './telegram.js';
 import { TERM_PREFIX, proxyHttp, proxyUpgrade } from './term.js';
 import * as U from './update.js';
 import * as AC from './access.js';
+import * as PX from './proxy.js';
 import { fsCmd, fsGet, fsUpload, agentInfo } from './runner-client.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -526,6 +527,27 @@ async function api(req, res, url) {
         try { AC.requestAccess(b.root); } catch (e) { throw new HttpErr(e.status || 400, e.message); }
         return json(res, 200, await accInfo(u));
       }
+    /* прокси: посмотреть может каждый (без ключей), менять — только администратор: через него ходит весь сервер */
+    case '/api/proxy':
+      if (M === 'GET') return json(res, 200, await PX.state(u));
+      if (M !== 'PUT') break;
+      if (!u.admin) throw new HttpErr(403, 'Прокси настраивает администратор сервера');
+      try { await PX.update(await jbody(req)); } catch (e) { throw new HttpErr(e.status || 400, e.message); }
+      return json(res, 200, await PX.state(u));
+    case '/api/proxy/add': {
+      if (M !== 'POST') break;
+      if (!u.admin) throw new HttpErr(403, 'Прокси настраивает администратор сервера');
+      const b = await jbody(req, 4 * 2 ** 20);
+      let r; try { r = await PX.addInput(b.text, b.select !== false); } catch (e) { throw new HttpErr(e.status || 400, e.message); }
+      return json(res, 200, { ...r, state: await PX.state(u) });
+    }
+    case '/api/proxy/test': {
+      if (M !== 'POST') break;
+      if (!u.admin) throw new HttpErr(403, 'Прокси проверяет администратор сервера');
+      const b = await jbody(req), S = chat.settings();
+      const r = await PX.test(typeof b.id === 'string' ? b.id : '', { base: S.base, key: S.key });
+      return json(res, 200, { result: r, state: await PX.state(u) });
+    }
     case '/api/account':
       if (M === 'GET') return json(res, 200, { user: A.publicUser(u), sessions: A.sessionCount(u.id), work: userDir(u), invites: u.admin ? A.inviteCount() : undefined, users: u.admin ? A.listUsers().map(A.publicUser) : undefined });
       break;
@@ -553,6 +575,17 @@ async function api(req, res, url) {
     if (M === 'GET') { const raw = await X.skillRaw(u, sm[1]); if (raw == null) throw new HttpErr(404, 'нет такого навыка'); return json(res, 200, { name: sm[1], raw }); }
     if (M === 'POST') { await X.skillSet(u, sm[1], !!(await jbody(req)).on); return json(res, 200, { ok: true }); }
     if (M === 'DELETE') { await X.skillDel(u, sm[1]); return json(res, 200, { ok: true }); }
+  }
+  const pm = p.match(/^\/api\/proxy\/(servers|subs)\/([0-9a-f]{12})$/);
+  if (pm && (M === 'DELETE' || (M === 'POST' && pm[1] === 'subs'))) {
+    if (!u.admin) throw new HttpErr(403, 'Прокси настраивает администратор сервера');
+    let r = null;
+    try {
+      if (M === 'POST') r = await PX.refreshSubById(pm[2]);
+      else if (pm[1] === 'servers') await PX.removeServer(pm[2]);
+      else await PX.removeSub(pm[2]);
+    } catch (e) { throw new HttpErr(e.status || 400, e.message); }
+    return json(res, 200, { ...(r || {}), state: await PX.state(u) });
   }
   const fm = p.match(/^\/api\/files\/([0-9a-f]{24})$/);
   if (fm && (M === 'GET' || M === 'HEAD')) {
@@ -624,7 +657,7 @@ async function admin(cmd) {
       await fsp.rm(path.join(CFG.data, 'users', u.id), { recursive: true, force: true });
       return { ok: true, note: 'рабочая папка ' + path.join(CFG.work, u.name) + ' оставлена' };
     }
-    case 'status': return { version: VERSION, build: U.buildId(), users: A.listUsers().length, running: A.listUsers().filter(u => getChat(u).running).map(u => u.name), publicUrl: CFG.publicUrl, uptime: Math.round(process.uptime()) };
+    case 'status': return { version: VERSION, build: U.buildId(), users: A.listUsers().length, running: A.listUsers().filter(u => getChat(u).running).map(u => u.name), publicUrl: CFG.publicUrl, uptime: Math.round(process.uptime()), proxy: PX.summary() };
     default: throw new Error('неизвестная команда');
   }
 }
@@ -653,6 +686,8 @@ export function startServer() {
   ensureDir(path.join(CFG.data, 'users'));
   if (CFG.dev) fs.mkdirSync(CFG.work, { recursive: true });
   A.initAuth();
+  /* прокси — раньше Telegram, агента и MCP: их первые запросы уже идут как надо */
+  PX.initProxy();
   TG.initTelegram(A.listUsers);
   resumeAll(A.listUsers());
   /* MCP-серверы (и предустановленный поиск в интернете) подключаем заранее: иначе первое сообщение после перезапуска

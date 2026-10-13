@@ -10,6 +10,7 @@ import { Doc, ensureDir, rid, writeJSONSync, readJSON } from './store.js';
 import { runCmd, fileCmd, agentInfo } from './runner-client.js';
 import { userDir, pullFile, storeFile, dropFids, sz } from './files.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
+import { agentNote } from './proxy.js';
 import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens, setPresetSeed, presetsOff } from './ext.js';
 
 export const DEF_SYS = 'Тебя зовут Personal Computer — ты ламповый пиксельный компьютер-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
@@ -584,7 +585,7 @@ export class Chat extends EventEmitter {
       + '\n' + FMT
       + '\nВ поле action у инструментов коротко (2–6 слов) и по-человечески пиши, что делаешь сейчас, — пользователь видит это, пока идёт шаг.'
       + `\nСегодня ${now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}, время сервера ${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}.`
-      + (run ? `\nСервер: ${I.os}, ядро ${I.kernel}, ${I.arch}, ${I.cpus || '?'} CPU, ${I.mem || '?'} МБ RAM. Ты работаешь как пользователь ${I.user}. ${pkg} Установлено: ${(I.tools || []).join(', ') || '—'}, node.` : '')
+      + (run ? `\nСервер: ${I.os}, ядро ${I.kernel}, ${I.arch}, ${I.cpus || '?'} CPU, ${I.mem || '?'} МБ RAM. Ты работаешь как пользователь ${I.user}. ${pkg} Установлено: ${(I.tools || []).join(', ') || '—'}, node.` + agentNote() : '')
       + `\nРабочая папка пользователя: ${dir} (inbox/ — файлы от пользователя, outbox/ — для файлов пользователю). Задачи выполняются на сервере в фоне: пользователь может закрыть браузер, работа продолжится, а результат он увидит в чате.`
       + ' У пользователя есть вкладка «Файлы» — проводник по серверу с твоими же правами: там он сам открывает, смотрит и правит файлы, поэтому, сделав файл, достаточно назвать путь. Пути в `обратных кавычках` в его сообщении — файлы, выбранные там.'
       + (run ? ' Долгие процессы (серверы, длинные загрузки, сборки дольше часа) запускай в фоне: nohup команда > файл.log 2>&1 & — и проверяй позже. Команды, ждущие ввода, не работают (stdin пустой): используй флаги -y и т. п.' : '')
@@ -802,7 +803,7 @@ export class Chat extends EventEmitter {
         if (sig.aborted) throw abortErr();
         const net = e instanceof TypeError || idle.signal.aborted || e.name === 'AbortError';
         if (net && attempt < 3) { await sleep([3000, 10000, 30000][attempt], sig); if (sig.aborted) throw abortErr(); continue; }
-        if (net) throw Object.assign(new Error(idle.signal.aborted ? 'Модель не отвечает уже 3 минуты. Нажми «Повторить».' : 'Не достучался до модели (' + (e.cause?.code || e.message) + '). Проверь адрес API в настройках.'), { detail: '' });
+        if (net) throw Object.assign(new Error(idle.signal.aborted ? 'Модель не отвечает уже 3 минуты. Нажми «Повторить».' : 'Не достучался до модели (' + (e.cause?.code || e.message) + '). ' + (e.proxy ? 'Проверь прокси: настройки → Сервер → «Прокси» → «Проверить».' : 'Проверь адрес API в настройках.')), { detail: '' });
         throw e;
       } finally { clearTimeout(it); }
     }

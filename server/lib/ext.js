@@ -15,6 +15,7 @@ import { Doc, rid } from './store.js';
 import { McpClient, toOpenAI } from './mcp.js';
 import { runCmd } from './runner-client.js';
 import { userDir, readWork } from './files.js';
+import { netFetch } from './net.js';
 
 const bad = m => Object.assign(new Error(m), { status: 400 });
 const oneLine = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
@@ -363,7 +364,7 @@ export async function skillInstall(u, src, want) {
   if (!/^https?:\/\/\S+$/i.test(src)) throw bad('Нужна ссылка: папка или репозиторий на GitHub, или прямой URL на SKILL.md');
   const g = parseGit(src);
   if (!g) {
-    const r = await fetch(src, { signal: AbortSignal.timeout(20000) }).catch(e => { throw bad('Не скачалось: ' + (e.cause?.code || e.message)); });
+    const r = await netFetch(src, { signal: AbortSignal.timeout(20000) }, 'mcp').catch(e => { throw bad('Не скачалось: ' + (e.cause?.code || e.message)); });
     if (!r.ok) throw bad('Не скачалось: HTTP ' + r.status);
     const txt = (await r.text()).slice(0, 200000), fm = frontmatter(txt);
     if (!fm.description) throw bad('По ссылке не SKILL.md: нет заголовка с description');

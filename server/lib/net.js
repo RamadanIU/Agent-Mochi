@@ -3,11 +3,16 @@
    403 {"success":false,"error":"Access denied by security policy."} — ещё до проверки ключа. Браузер и curl он пускает.
    apiFetch делает обычный fetch, а на такой ответ повторяет запрос через curl и дальше ходит к этому хосту только через него.
    Так же пробуем curl и на другие страницы блокировки Cloudflare (см. cfBlock): если пустил — дальше через него.
-   curlFetch отдаёт настоящий Response с потоковым телом: SSE-ответ модели читается так же, как от fetch. */
+   curlFetch отдаёт настоящий Response с потоковым телом: SSE-ответ модели читается так же, как от fetch.
+   Прокси (настройки → Сервер → «Прокси»): kind — что это за запрос ('model', 'mcp', 'tg', 'upd'); через прокси идут
+   и fetch, и curl. netFetch — то же без обхода Cloudflare (Telegram, GitHub, скачивание навыков). */
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pfetch, curlProxy } from './proxy.js';
+
+export const netFetch = (url, init = {}, kind) => pfetch(url, init, kind);
 
 const viaCurl = new Set();
 let noCurl = false;
@@ -35,17 +40,18 @@ export function cfMessage(kind, url, headers) {
   return `Это не ключ: Cloudflare перед ${host || 'API модели'} заблокировал запрос с этого сервера (HTTP 403 «Sorry, you have been blocked»). Так настроена защита у провайдера — обычно по IP-адресу или стране сервера. ${sup} или запусти Personal Computer на другом сервере.`;
 }
 
-export async function apiFetch(url, init = {}) {
+export async function apiFetch(url, init = {}, kind = 'model') {
   const host = new URL(url).host;
-  if (viaCurl.has(host) && !noCurl) return curlFetch(url, init);
-  const r = await fetch(url, init);
+  const viaProxy = async () => ({ ...init, proxy: await curlProxy(url, kind).catch(e => { throw Object.assign(new TypeError('fetch failed', { cause: e }), { proxy: true }); }) });
+  if (viaCurl.has(host) && !noCurl) return curlFetch(url, await viaProxy());
+  const r = await pfetch(url, init, kind);
   if ((r.status !== 403 && r.status !== 503) || noCurl) return r;
   const text = await r.text().catch(() => '');
   const again = () => new Response(text, { status: r.status, statusText: r.statusText, headers: r.headers });
-  const kind = cfBlock(r.status, text, r.headers);
-  if (!kind) return again();
+  const cf = cfBlock(r.status, text, r.headers);
+  if (!cf) return again();
   let c;
-  try { c = await curlFetch(url, init); } catch (e) {
+  try { c = await curlFetch(url, await viaProxy()); } catch (e) {
     if (e.code !== 'ENOENT') throw e;
     noCurl = true;
     console.warn('net: ' + host + ' не пускает Node.js (Cloudflare), а curl не установлен');
@@ -67,7 +73,7 @@ const netErr = (msg, code) => Object.assign(new TypeError(msg), { cause: { code 
 /* fetch через curl: адрес и заголовки — конфигом через stdin (ключ не виден в списке процессов),
    тело — временным файлом 0600 (в stdin уже конфиг, а лишний fd у Node — сокет, curl его не читает) */
 const q = v => '"' + String(v).replace(/[\r\n]/g, ' ').replace(/[\\"]/g, m => '\\' + m) + '"';
-export function curlFetch(url, { method = 'GET', headers = {}, body, signal } = {}) {
+export function curlFetch(url, { method = 'GET', headers = {}, body, signal, proxy } = {}) {
   return new Promise((ok, no) => {
     if (signal?.aborted) return no(signal.reason);
     let tmp = null;
@@ -77,6 +83,8 @@ export function curlFetch(url, { method = 'GET', headers = {}, body, signal } = 
     }
     const conf = ['url = ' + q(url), 'request = ' + q(method), ...[...new Headers(headers)].map(([k, v]) => 'header = ' + q(k + ': ' + v)), 'header = "Expect:"'];
     if (tmp) conf.push('data-binary = ' + q('@' + path.join(tmp, 'body')));
+    /* через прокси: адрес с паролем — тоже в конфиге, не в списке процессов */
+    if (proxy) conf.push('proxy = ' + q(proxy));
     const p = spawn('curl', ['-sS', '-N', '-i', '--suppress-connect-headers', '--connect-timeout', '20', '-K', '-']);
     let err = '', head = Buffer.alloc(0), ctl = null, settled = false;
     const fail = e => { if (!settled) { settled = true; no(e); } else if (ctl) { try { ctl.error(e); } catch {} ctl = null; } };

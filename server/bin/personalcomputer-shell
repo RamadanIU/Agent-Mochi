@@ -5,6 +5,11 @@ DIR=$(cd "$(dirname "$0")" && pwd)
 cd "$HOME" 2>/dev/null || cd /
 export TERM=xterm-256color LANG="${LANG:-C.UTF-8}"
 export PATH="$HOME/.local/bin:/opt/personalcomputer/node/bin:$PATH" NPM_CONFIG_PREFIX="$HOME/.local"
+# прокси из настроек Personal Computer (HTTP_PROXY, HTTPS_PROXY, NO_PROXY): файл пишет исполнитель агента,
+# нет файла — прокси выключен. tmux переносит эти переменные в новые окна (update-environment в tmux.conf)
+PX="$HOME/.local/state/personalcomputer/proxy.env"
+# shellcheck disable=SC1090
+[ -r "$PX" ] && . "$PX"
 SH=$(command -v bash || echo /bin/sh)
 if command -v tmux >/dev/null 2>&1; then
   # сокет tmux — не в /tmp: у служб он свой (PrivateTmp), а исполнителю агента нужен доступ к панели

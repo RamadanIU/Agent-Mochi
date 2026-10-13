@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { CFG } from './config.js';
 import { readJSON, writeJSONSync } from './store.js';
+import { netFetch } from './net.js';
 
 const EVERY = 6 * 3600e3, RETRY = 30 * 60e3, MANUAL = CFG.dev ? 1000 : 15e3, STALE = 45 * 60e3;
 const reqFile = () => path.join(CFG.data, 'update.request');
@@ -41,7 +42,7 @@ function title(msg, merge) {
 async function get(url, accept) {
   const h = { accept, 'user-agent': 'personalcomputer-server' };
   if (cache.etag && cache.url === url && cache.list.length) h['if-none-match'] = cache.etag;
-  try { return await fetch(url, { headers: h, signal: AbortSignal.timeout(15000) }); }
+  try { return await netFetch(url, { headers: h, signal: AbortSignal.timeout(15000) }, 'upd'); }
   catch (e) { throw Object.assign(new Error('нет связи с GitHub (' + (e.cause?.code || e.name || e.message) + ')'), { fallback: true }); }
 }
 const done = (url, r, list) => ({ url, etag: r.headers.get('etag') || null, list });

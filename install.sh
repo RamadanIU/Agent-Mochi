@@ -8,7 +8,7 @@
 # │  Без HTTPS (только через SSH-туннель):  … | sudo bash -s -- --no-tls     │
 # │  Помощь:       … | sudo bash -s -- --help                                │
 # └──────────────────────────────────────────────────────────────────────────┘
-# Что делает: определяет ОС и архитектуру, ставит зависимости, Node.js, ttyd и Caddy
+# Что делает: определяет ОС и архитектуру, ставит зависимости, Node.js, ttyd, Caddy и Xray (прокси)
 # (с проверкой контрольных сумм), заводит отдельных пользователей, службы systemd/OpenRC,
 # HTTPS-сертификат и печатает ссылку для первой регистрации. Повторный запуск = обновление.
 set -Eeuo pipefail
@@ -36,6 +36,7 @@ PORT=8787
 NODE_MAJOR=22
 TTYD_VER=1.7.7
 CADDY_VER=2.10.2
+XRAY_VER=26.9.9
 
 DOMAIN=""; EMAIL=""; TLS=auto; PUBLIC_URL=""; WITH_SUDO=0; SUDO_ARG=""; MODE=install; PURGE=0; SRC=""; OPEN_FW=1
 
@@ -115,9 +116,9 @@ elif command -v openrc-run >/dev/null 2>&1 || [ -x /sbin/openrc-run ]; then INIT
 else die "Нужен systemd или OpenRC (в контейнере без init установка служб невозможна)"; fi
 
 case "$(uname -m)" in
-  x86_64|amd64) NODE_ARCH=x64;    TTYD_ARCH=x86_64;  CADDY_ARCH=amd64 ;;
-  aarch64|arm64) NODE_ARCH=arm64; TTYD_ARCH=aarch64; CADDY_ARCH=arm64 ;;
-  armv7l|armv7*) NODE_ARCH=armv7l; TTYD_ARCH=armhf;  CADDY_ARCH=armv7 ;;
+  x86_64|amd64) NODE_ARCH=x64;    TTYD_ARCH=x86_64;  CADDY_ARCH=amd64; XRAY_ARCH=64 ;;
+  aarch64|arm64) NODE_ARCH=arm64; TTYD_ARCH=aarch64; CADDY_ARCH=arm64; XRAY_ARCH=arm64-v8a ;;
+  armv7l|armv7*) NODE_ARCH=armv7l; TTYD_ARCH=armhf;  CADDY_ARCH=armv7; XRAY_ARCH=arm32-v7a ;;
   *) die "Архитектура $(uname -m) пока не поддерживается" ;;
 esac
 MUSL=0; { [ "$OS_ID" = alpine ] || ldd --version 2>&1 | grep -qi musl; } && MUSL=1
@@ -131,6 +132,10 @@ caddy_sha() { case "$1" in
   amd64) echo 747df7ee74de188485157a383633a1a963fd9233b71fbb4a69ddcbcc589ce4e2cc82dacf5dbbe136cb51d17e14c59daeb5d9bc92487610b0f3b93680b2646546 ;;
   arm64) echo 6ce061a690312ab38367df3c5d5f89a2e4a263e7300d300d87356211bb81e79b15933e6d6203e03fbf26f15cc0311f264805f336147dbdd24938d84b57a4421c ;;
   armv7) echo 215af42cf952726d962c9753a12c04248781221b66df8b7110726fa7905d7a5c2e50056e0b47ab3c709d3dcfb48fde0f11e184a6950de0a2ddf941d3e503d07b ;; esac; }
+xray_sha() { case "$1" in
+  64)        echo 1eb9175d0f0a8f8149c9230a7fc5ae66ce332ed20a53155ce61fe62e3f58b7df ;;
+  arm64-v8a) echo 3e38d72dfc5eb65c91df0e5583e9b6676c32232041da47de6ae73946b526d66c ;;
+  arm32-v7a) echo 5b2a9e2767c0197f7bd41c2db133f91440e845771e621178e0fd2b8520228e5f ;; esac; }
 
 TMP=$(mktemp -d /tmp/personalcomputer-install.XXXXXX)
 cleanup() { rm -rf "$TMP"; }
@@ -325,6 +330,31 @@ else
   sum_ok sha256 "$(ttyd_sha "$TTYD_ARCH")" "$TMP/ttyd" || die "Контрольная сумма ttyd не совпала!"
   install -m 0755 "$TMP/ttyd" "$PREFIX/bin/ttyd"
   ok "ttyd $TTYD_VER"
+fi
+
+# ---------- Xray: прокси vless/vmess/trojan/ss/hysteria2 (настройки → Сервер → «Прокси») ----------
+# необязательный: не скачался — Personal Computer работает и без него (прокси socks5/http — тоже), Xray встанет при следующем обновлении
+unzip_one() { # unzip_one АРХИВ ФАЙЛ ПАПКА — достать один файл из zip: unzip, busybox, python3 или bsdtar — что найдётся
+  if command -v unzip >/dev/null 2>&1; then unzip -o -q "$1" "$2" -d "$3"
+  elif command -v busybox >/dev/null 2>&1 && busybox --list 2>/dev/null | grep -qx unzip; then busybox unzip -o -q "$1" "$2" -d "$3"
+  elif command -v python3 >/dev/null 2>&1; then python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extract(sys.argv[2], sys.argv[3])' "$1" "$2" "$3"
+  elif command -v bsdtar >/dev/null 2>&1; then bsdtar -xf "$1" -C "$3" "$2"
+  else return 1; fi
+}
+if [ -x "$PREFIX/bin/xray" ] && "$PREFIX/bin/xray" version 2>/dev/null | grep -q "^Xray $XRAY_VER "; then ok "Xray $XRAY_VER уже стоит"
+else
+  say "Скачиваю Xray $XRAY_VER (прокси)…"
+  f="Xray-linux-${XRAY_ARCH}.zip"
+  if ! curl -fsSL --proto '=https' --tlsv1.2 --retry 3 --retry-delay 2 --connect-timeout 20 -o "$TMP/$f" "https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VER}/$f"; then
+    warn "Xray не скачался — прокси vless/vmess/trojan/ss/hysteria2 заработает после следующего обновления (socks5 и http работают и так)"
+  elif ! sum_ok sha256 "$(xray_sha "$XRAY_ARCH")" "$TMP/$f"; then
+    warn "Контрольная сумма Xray не совпала — не ставлю его! Прокси vless/vmess/trojan/ss/hysteria2 пока недоступен"
+  elif mkdir -p "$TMP/xray" && unzip_one "$TMP/$f" xray "$TMP/xray" && [ -s "$TMP/xray/xray" ]; then
+    install -m 0755 "$TMP/xray/xray" "$PREFIX/bin/xray"
+    ok "Xray $XRAY_VER"
+  else
+    warn "Не получилось распаковать Xray: нужен unzip (поставь его и запусти обновление ещё раз)"
+  fi
 fi
 
 # ---------- адрес и HTTPS ----------
@@ -522,6 +552,7 @@ PERSONALCOMPUTER_AGENT_SUDO=$WITH_SUDO
 PERSONALCOMPUTER_RUNNER_SOCK=/run/personalcomputer-runner/runner.sock
 PERSONALCOMPUTER_TTYD_SOCK=/run/personalcomputer-term/ttyd.sock
 PERSONALCOMPUTER_TTYD_BIN=$PREFIX/bin/ttyd
+PERSONALCOMPUTER_XRAY=$PREFIX/bin/xray
 PERSONALCOMPUTER_UPDATE_DIR=$STATE/update
 PERSONALCOMPUTER_ACCESS_CTL=1
 EOF

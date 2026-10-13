@@ -42,12 +42,30 @@ export function cleanOut(s) {
     .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
 }
 
+/* прокси (настройки → Сервер → «Прокси»): переменные для команд и stdio-серверов MCP — их присылает сервер.
+   Терминалу — тот же набор файлом ~/.local/state/personalcomputer/proxy.env: его читает оболочка терминала при запуске */
+const PROXY_KEYS = /^(https?|no)_proxy$/i;
+let proxyEnv = {};
+export function setProxyEnv(env) {
+  const e = {};
+  for (const [k, v] of Object.entries(env && typeof env === 'object' ? env : {})) if (PROXY_KEYS.test(k) && typeof v === 'string' && !/[\0\n]/.test(v)) e[k] = v;
+  proxyEnv = e;
+  const f = path.join(os.homedir(), '.local/state/personalcomputer/proxy.env');
+  try {
+    if (!Object.keys(e).length) return void fs.rmSync(f, { force: true });
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    const sq = v => "'" + v.replace(/'/g, "'\\''") + "'";
+    fs.writeFileSync(f + '.tmp', '# Прокси Personal Computer (настройки → Сервер → «Прокси»). Файл пишет сервер — правки затрутся.\nexport ' + Object.entries(e).map(([k, v]) => k + '=' + sq(v)).join(' ') + '\n', { mode: 0o600 });
+    fs.renameSync(f + '.tmp', f);
+  } catch (x) { console.warn('runner: proxy.env:', x.message); }
+}
+
 function agentEnv(home) {
   const e = { ...process.env };
   for (const k of Object.keys(e)) if (/^PERSONALCOMPUTER_|^NOTIFY_SOCKET$|^INVOCATION_ID$|^JOURNAL_STREAM$/.test(k)) delete e[k];
   const nodeBin = path.dirname(process.execPath);
   return {
-    ...e,
+    ...e, ...proxyEnv,
     HOME: home, USER: os.userInfo().username, LOGNAME: os.userInfo().username,
     SHELL, LANG: e.LANG || 'C.UTF-8', LC_ALL: e.LC_ALL || 'C.UTF-8',
     PATH: [path.join(home, '.local/bin'), nodeBin, '/usr/local/sbin', '/usr/local/bin', '/usr/sbin', '/usr/bin', '/sbin', '/bin'].join(':'),
@@ -295,6 +313,7 @@ export function startRunner(sock) {
       } else if (m.op === 'write') jobs.get(m.id)?.write?.(m.data);
       else if (m.op === 'kill') jobs.get(m.id)?.kill();
       else if (m.op === 'info') send({ id: m.id, op: 'info', ...sysInfo() });
+      else if (m.op === 'penv') setProxyEnv(m.env);
     });
     /* сервер отключился (перезапуск) — его команды больше никто не ждёт */
     const drop = () => { for (const j of jobs.values()) j.kill(); jobs.clear(); };
