@@ -475,6 +475,8 @@ async function check() {
 async function started() {
   bt('go', 'set');
   try { srvSet = await api('api/settings'); mirror(); bt('ok', 'set', srvSet.hasKey ? srvSet.model : 'нужен ключ'); } catch (e) { bt('ok', 'set', 'не загрузились'); }
+  /* приложение открывается в новом чате (пустой сервер отдаёт повторно); старые — в истории */
+  if (!view) try { view = (await post('api/chats')).c; } catch (e) {}
   connect();
   initPane();
   updBoot(true);
