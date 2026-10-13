@@ -2,7 +2,7 @@
    В режиме разработки (PERSONALCOMPUTER_RUNNER_SOCK=inline) команды выполняются прямо в процессе сервера. */
 import net from 'node:net';
 import { CFG } from './config.js';
-import { execCommand, spawnProcess, sysInfo, agentFileOp, agentFsOp, agentFsOpen, agentFsPut } from './runner.js';
+import { execCommand, spawnProcess, sysInfo, agentFileOp, agentFsOp, agentFsOpen, agentFsPut, setProxyEnv } from './runner.js';
 import { readHead } from './rawio.js';
 
 let conn = null, buf = '', seq = 0;
@@ -12,7 +12,8 @@ function connect() {
   if (conn) return conn;
   return conn = new Promise((ok, no) => {
     const c = net.createConnection(CFG.runnerSock);
-    c.once('connect', () => ok(c));
+    /* исполнитель (пере)запустился — первым делом переменные прокси: команды после этого уже их получат */
+    c.once('connect', () => { if (penv) c.write(JSON.stringify({ id: 0, op: 'penv', env: penv }) + '\n'); ok(c); });
     c.on('data', d => {
       buf += d.toString('utf8');
       let i;
@@ -129,6 +130,14 @@ export function spawnProc(opts, onLine, onExit) {
     e => end(null, 'исполнитель команд недоступен (служба personalcomputer-runner не запущена?): ' + (e.code || e.message)));
   const send = m => ready.then(() => { if (c && !dead) c.write(JSON.stringify({ ...m, id }) + '\n'); });
   return { write: data => send({ op: 'write', data }), kill: () => send({ op: 'kill' }) };
+}
+
+/* прокси для команд агента, stdio-серверов MCP и терминала (HTTP_PROXY и т. п., см. proxy.js) */
+let penv = null;
+export function setAgentProxy(env) {
+  penv = env || {};
+  if (CFG.runnerSock === 'inline') return setProxyEnv(penv);
+  connect().then(c => c.write(JSON.stringify({ id: 0, op: 'penv', env: penv }) + '\n'), () => {});
 }
 
 let info = null;

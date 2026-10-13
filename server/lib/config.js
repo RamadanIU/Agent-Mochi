@@ -42,5 +42,9 @@ export const CFG = {
   maxUpload: (+env.PERSONALCOMPUTER_MAX_UPLOAD_MB || 4096) * 2 ** 20,
   allowRegister: env.PERSONALCOMPUTER_OPEN_REGISTRATION === '1', /* по умолчанию — только по приглашению */
   searchMcp: env.PERSONALCOMPUTER_SEARCH_MCP ?? 'https://search.parallel.ai/mcp',
+  /* ядро Xray для прокси vless/vmess/trojan/ss/hysteria2 (ставит установщик; пусто — ищем в /opt/personalcomputer/bin и PATH) */
+  xray: env.PERSONALCOMPUTER_XRAY || '',
+  /* «Проверить» в настройках прокси: откуда узнаём адрес и страну выхода (ответ вида ip=…, loc=…) */
+  proxyTrace: env.PERSONALCOMPUTER_PROXY_TRACE || 'https://www.cloudflare.com/cdn-cgi/trace',
   tgApi: (env.PERSONALCOMPUTER_TG_API || 'https://api.telegram.org').replace(/\/+$/, ''),
 };

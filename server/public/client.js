@@ -4,7 +4,7 @@
    • агент работает на сервере в фоне: чат подписан на поток событий и после возвращения
      показывает и прогресс, и итог;
    • вкладка «Терминал» — настоящий терминал сервера (ttyd за авторизацией);
-   • в настройках — вкладка «Сервер» (Telegram, приглашения, пароль, выход, обновления, доступ агента — root) и «Инструменты» (вкл/выкл, MCP, навыки).
+   • в настройках — вкладка «Сервер» (Telegram, прокси, приглашения, пароль, выход, обновления, доступ агента — root) и «Инструменты» (вкл/выкл, MCP, навыки).
    Используем функции основного скрипта (add, md, think, ask…), а не дублируем их. Работу агента (шаги, «думаю», итог)
    показывает компьютер в верхней панели — personalComputerRoom (index.html); в чате остаются только сообщения, файлы и ошибки. */
 (() => {
@@ -628,6 +628,7 @@ async function refreshPane() {
     const [a, t] = await Promise.all([api('api/account'), api('api/telegram')]);
     api('api/update').then(updState).catch(() => {});
     api('api/access').then(i => { accState(i); if (accBusy(i)) accTick(); }).catch(() => {});
+    pxLoad();
     $('#s-acct').textContent = a.user.name + (a.user.admin ? ' · администратор' : '') + ' · сессий: ' + a.sessions;
     foldMeta(fAcct, a.user.name + (a.user.admin ? ' · админ' : ''));
     $('#s-inv').hidden = !a.user.admin;
@@ -745,7 +746,7 @@ const dday = s => { const d = s ? new Date(s) : null; return d && !isNaN(d) ? d.
 const ago = t => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'только что' : m < 60 ? m + ' мин назад' : m < 1440 ? Math.round(m / 60) + ' ч назад' : dday(t); };
 const ver = (c, d) => (c && c.commit ? c.commit : 'неизвестно') + ((d || c && c.date) ? ' от ' + dday(d || c.date) : '');
 /* доля готовности — по шагам установщика (он печатает их по порядку) */
-const UPCT = [[/что нового/, 4], [/Устанавливаю Personal Computer/, 8], [/системные пакеты/, 12], [/Пакеты на месте/, 26], [/Node\.js/, 38], [/ttyd/, 46], [/Caddy/, 52],
+const UPCT = [[/что нового/, 4], [/Устанавливаю Personal Computer/, 8], [/системные пакеты/, 12], [/Пакеты на месте/, 26], [/Node\.js/, 38], [/ttyd/, 46], [/Xray/, 49], [/Caddy/, 52],
   [/код Personal Computer/, 58], [/^Код:/, 68], [/Запускаю службы/, 76], [/Сервер Personal Computer работает/, 88], [/сертификат/, 92], [/HTTPS/, 96]];
 const pct = steps => steps.reduce((p, s) => Math.max(p, ...UPCT.filter(([re]) => re.test(s.t)).map(x => x[1])), 3);
 /* «Позже» — не напоминать об этой версии сутки */
@@ -1003,6 +1004,185 @@ async function accSet(on) {
 }
 $('#s-accgo').onclick = () => accI && accSet(!accI.root);
 $('#s-acccn').onclick = async () => { try { accState(await api('api/access', { method: 'DELETE' })); accWait = 0; clearTimeout(accPoll); } catch (e) { $('#s-accn').textContent = e.message; } };
+
+/* ---------- настройки → Сервер → «Прокси» ----------
+   Ключ vless/vmess/trojan/ss/hysteria2, socks5/http или ссылка на подписку. Через прокси идёт то, что сервер отправляет
+   в интернет: модель, поиск и MCP, Telegram, команды агента и терминал, проверка обновлений (что именно — выбирается ниже).
+   Ключи хранятся на сервере и сюда не возвращаются: видно только имя, протокол и адрес. Менять может администратор. */
+const fPx = fold('px', 'Прокси');
+fTg.after(fPx);
+css.textContent += `
+#p-srv #s-px{white-space:pre-line}#p-srv #s-px b{color:var(--acc);font-weight:normal}#p-srv #s-px .bad{color:var(--err)}
+#p-srv .pxl{display:flex;flex-direction:column;gap:8px;margin:16px 2px 0}
+#p-srv .pxg{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:10px 2px 0;color:var(--mut);font:7px/1.7 var(--pf)}
+#p-srv .pxg b{color:var(--fg);font-weight:normal}#p-srv .pxg .bad{color:var(--err)}#p-srv .pxg .pbtn{margin:2px}
+#p-srv .pxr{position:relative;display:flex;align-items:center;gap:12px;width:100%;margin:0;padding:10px 6px 10px 12px;background:var(--bg);color:var(--fg);text-align:left;box-shadow:var(--sh2);cursor:pointer;transition:background-color .15s}
+#p-srv .pxr::before{content:"";flex:none;width:10px;height:10px;background:var(--bg);box-shadow:var(--sh2)}
+#p-srv .pxr[aria-checked=true]::before{background:var(--acc)}
+#p-srv .pxr[aria-checked=true] .pxn{color:var(--acc)}
+#p-srv .pxr[aria-disabled=true]{cursor:default}
+@media(hover:hover){#p-srv .pxr:not([aria-disabled=true]):hover{background:color-mix(in srgb,var(--acc) 7%,var(--bg))}}
+#p-srv .pxr:focus-visible{outline:none;box-shadow:var(--sh2),0 0 0 4px color-mix(in srgb,var(--acc) 35%,transparent)}
+#p-srv .pxm{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+#p-srv .pxn{font:8px/1.5 var(--pf);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#p-srv .pxd{font:7px/1.6 var(--pf);color:var(--mut);overflow-wrap:anywhere}
+#p-srv .pxd.ok{color:var(--ok)}#p-srv .pxd.bad{color:var(--err)}
+#p-srv .pxx{flex:none;display:flex;padding:9px;color:var(--mut)}#p-srv .pxx:hover,#p-srv .pxx:focus-visible{color:var(--err)}
+#p-srv .pxx .pi{--ico:var(--j-trash);width:14px;height:14px}
+#p-srv .pxe{margin:14px 2px 0;color:var(--mut);font:7px/1.7 var(--pf)}
+#p-srv .xmsg{display:block;margin:12px 4px 0;font-size:9px;line-height:1.7;color:var(--err);white-space:pre-line;overflow-wrap:anywhere}#p-srv .xmsg:empty{display:none}#p-srv .xmsg[data-s=ok]{color:var(--ok)}#p-srv .xmsg[data-s=wait]{color:var(--mut)}
+#dlg .fold[data-k=px]>summary::before{content:"";flex:none;width:20px;height:20px;background:var(--acc);-webkit-mask:var(--j-globe) center/contain no-repeat;mask:var(--j-globe) center/contain no-repeat}
+#dlg .fold>summary .fm.pxon{color:var(--acc)}
+`;
+const PX_USE = [
+  ['model', 'Модель', 'Запросы к API модели'],
+  ['mcp', 'Поиск и MCP-серверы', 'Поиск в интернете, внешние инструменты, установка навыков по ссылке'],
+  ['tg', 'Telegram', 'Бот: команды и уведомления'],
+  ['agent', 'Команды агента и терминал', 'HTTP_PROXY и HTTPS_PROXY для curl, pip, npm, git… В терминале — в новых окнах'],
+  ['upd', 'Проверка обновлений', 'Запросы к GitHub'],
+];
+let pxI = null, pxMsgT = ['', ''], pxDraft = '';
+const fmtB = n => n >= 2 ** 40 ? (n / 2 ** 40).toFixed(1) + ' ТБ' : n >= 2 ** 30 ? (n / 2 ** 30).toFixed(1) + ' ГБ' : Math.round(n / 2 ** 20) + ' МБ';
+const pxRes = t => !t ? '' : t.ok ? '✓ выход ' + (t.loc ? t.loc + ' · ' : '') + t.ip + ' · ' + t.ms + ' мс' : '✗ ' + t.err;
+function pxSay(t, s) { pxMsgT = [t || '', s || '']; const m = $('#s-pxm'); if (!m) return; m.textContent = pxMsgT[0]; if (pxMsgT[1]) m.dataset.s = pxMsgT[1]; else delete m.dataset.s; }
+/* итог проверки — по-человечески: куда выходим, чем это отличается от сервера, отвечает ли модель */
+function pxTold(r) {
+  if (!r.ok) return 'Не работает: ' + r.err;
+  const a = ['Работает: выход ' + (r.loc ? r.loc + ' · ' : '') + r.ip + ' · ' + r.ms + ' мс'];
+  if (r.direct) a.push(r.direct.ip === r.ip ? 'Осторожно: адрес тот же, что у сервера без прокси (' + r.direct.ip + ')' : 'Без прокси сервер выходит как ' + (r.direct.loc ? r.direct.loc + ' · ' : '') + r.direct.ip);
+  const m = r.model;
+  if (m) a.push(m.err ? 'Модель (' + m.host + ') через прокси не отвечает: ' + m.err
+    : m.region ? 'Модель (' + m.host + ') не работает в стране выхода — выбери сервер в другой стране'
+    : m.status === 401 || m.status === 403 ? 'Модель (' + m.host + ') отвечает, но не принимает ключ API (HTTP ' + m.status + ') — проверь его на вкладке «Модель»'
+    : 'Модель (' + m.host + ') отвечает: HTTP ' + m.status + ' · ' + m.ms + ' мс');
+  return a.join('\n');
+}
+function pxSw(title, sub, on, fn) {
+  const l = el('label', 'sw'), s = el('span', null, title), i = el('input');
+  if (sub) s.append(el('small', null, sub));
+  i.type = 'checkbox'; i.setAttribute('role', 'switch'); i.checked = on;
+  i.onchange = async () => { i.disabled = true; try { await fn(i.checked); } catch (e) { i.checked = !i.checked; pxSay(e.message); } finally { i.disabled = false; } };
+  l.append(s, i); return l;
+}
+const pxBtn = (txt, fn, cls = 'pbtn') => { const b = el('button', cls); b.type = 'button'; b.append(el('span', null, txt)); b.onclick = async () => { b.disabled = true; try { await fn(b); } catch (e) { pxSay(e.message); } finally { b.disabled = false; } }; return b; };
+
+async function pxLoad() { try { pxRender(await api('api/proxy')); } catch (e) { if (e.status === 401) check(); } }
+async function pxPut(body, quiet) {
+  const i = await api('api/proxy', { method: 'PUT', json: body });
+  pxRender(i);
+  /* включили или сменили сервер — сразу видно, куда теперь выходим */
+  if (!quiet && i.on && (body.on || body.active)) await pxRun();
+  return i;
+}
+async function pxRun(id) {
+  pxSay('Проверяю: подключаюсь через прокси и узнаю адрес выхода…', 'wait');
+  try {
+    const r = await post('api/proxy/test', id ? { id } : {});
+    pxRender(r.state); pxSay(pxTold(r.result), r.result.ok && !(r.result.model && (r.result.model.err || r.result.model.region)) ? 'ok' : '');
+    if (window.petSet) petSet(r.result.ok ? 'happy' : 'sad', r.result.ok ? 'Прокси работает' + (r.result.loc ? ': выхожу из ' + r.result.loc : '') + ' ^_^' : 'Прокси не отвечает…', 3000);
+  } catch (e) { pxSay(e.message); }
+}
+
+function pxRender(i) {
+  if (!i || !i.status) return;
+  pxI = i;
+  const b = fPx.body, draft = $('#s-pxk') ? $('#s-pxk').value : pxDraft, by = $('#s-pxby') ? $('#s-pxby').value : null;
+  const st = i.status, act = i.servers.find(s => s.id === i.active) || null, adm = i.admin, y = $('#dlg .sbody').scrollTop;
+  b.innerHTML = '';
+  /* что сейчас */
+  const box = el('span', 'tgs'); box.id = 's-px';
+  const line = (t, cls) => { if (box.childNodes.length) box.append('\n'); box.append(cls ? el('span', cls, t) : t); };
+  if (!i.on) line(i.servers.length ? 'Выключен: сервер ходит в интернет напрямую.' + (act ? ' Выбран «' + act.name + '».' : '') : 'Не настроен. Вставь ключ vless://, vmess://, trojan://, ss://, hysteria2://, socks5:// или ссылку на подписку — и включи.');
+  else if (st.state === 'starting') line('Запускаю прокси…');
+  else if (st.state === 'ok' && act) { box.append('Работает через '); box.append(el('b', null, '«' + act.name + '»')); box.append(' — ' + act.desc + (st.mode === 'direct' ? ' (без Xray, напрямую из сервера)' : '')); if (act.test) line(pxRes(act.test), act.test.ok ? null : 'bad'); }
+  else { line('Не работает: ' + (st.err || 'ошибка'), 'bad'); line('Пока прокси не заработает, запросы через него не уходят никуда — в том числе напрямую. Выбери другой сервер или выключи прокси.'); }
+  if (!i.core) line('Ядра Xray на сервере нет: без него работают только socks5:// и http://. Обнови Personal Computer — установщик поставит Xray.');
+  b.append(box);
+  if (adm) b.append(pxSw('Через прокси', 'Запросы сервера идут через выбранный ниже сервер', i.on, v => pxPut({ on: v })));
+  /* серверы: свои, потом по подпискам */
+  if (i.servers.length) {
+    const lst = el('div', 'pxl'); lst.setAttribute('role', 'radiogroup'); lst.setAttribute('aria-label', 'Серверы прокси');
+    const row = s => {
+      const r = el('div', 'pxr'), m = el('span', 'pxm');
+      r.setAttribute('role', 'radio'); r.setAttribute('aria-checked', String(s.id === i.active)); r.tabIndex = s.id === i.active || !act ? 0 : -1;
+      if (!adm) r.setAttribute('aria-disabled', 'true');
+      m.append(el('span', 'pxn', s.name), el('span', 'pxd', s.desc + ' · ' + (s.host.includes(':') ? '[' + s.host + ']' : s.host) + ':' + s.port + (s.pinned ? ' · сертификат закреплён' : '') + (s.xray && !i.core ? ' · нужен Xray' : '')));
+      if (s.test) m.append(el('span', 'pxd ' + (s.test.ok ? 'ok' : 'bad'), pxRes(s.test)));
+      r.append(m);
+      const pick = async () => { if (!adm || s.id === i.active) return; pxSay('Переключаю на «' + s.name + '»…', 'wait'); try { await pxPut({ active: s.id }); if (!pxI.on) pxSay('Выбран «' + s.name + '». Включи прокси, когда будешь готов.', 'ok'); } catch (e) { pxSay(e.message); } };
+      r.onclick = e => { if (!e.target.closest('.pxx')) pick(); };
+      r.onkeydown = e => {
+        if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); pick(); return; }
+        const d = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0; if (!d) return;
+        e.preventDefault(); const all = [...lst.querySelectorAll('.pxr')], n = all[(all.indexOf(r) + d + all.length) % all.length]; n.focus();
+      };
+      if (adm && !s.sub) {
+        const x = el('button', 'pxx'); x.type = 'button'; x.title = 'Удалить «' + s.name + '»'; x.setAttribute('aria-label', x.title); x.append(el('i', 'pi'));
+        x.onclick = async () => {
+          if (!await ask('Прокси', 'Удалить «' + s.name + '»?' + (s.id === i.active && i.on ? ' Сейчас сервер работает через него — прокси переключится на следующий из списка или выключится.' : ''), null, 'Удалить')) return;
+          try { pxRender((await api('api/proxy/servers/' + s.id, { method: 'DELETE' })).state); pxSay(''); } catch (e) { pxSay(e.message); }
+        };
+        r.append(x);
+      }
+      return r;
+    };
+    for (const s of i.servers.filter(s => !s.sub)) lst.append(row(s));
+    for (const sb of i.subs) {
+      const g = el('div', 'pxg'), inf = sb.info || {};
+      g.append(el('b', null, 'Подписка «' + sb.name + '»'), (sb.n || 0) + ' · обновлена ' + (sb.t ? ago(sb.t) : '—'));
+      if (inf.total) g.append(' · трафик ' + fmtB(inf.used || 0) + ' из ' + fmtB(inf.total));
+      if (inf.expire) g.append(' · до ' + dday(inf.expire * 1000));
+      if (sb.err) g.append(el('span', 'bad', ' · ' + sb.err));
+      if (adm) {
+        g.append(pxBtn('Обновить', async () => { pxSay('Обновляю подписку…', 'wait'); const r = await post('api/proxy/subs/' + sb.id); pxRender(r.state); pxSay('Подписка обновлена: серверов ' + r.n + (r.errors && r.errors.length ? '. Не подошли: ' + r.errors.slice(0, 3).join('; ') : ''), 'ok'); }, 'pbtn sm'));
+        g.append(pxBtn('Удалить', async () => { if (!await ask('Прокси', 'Удалить подписку «' + sb.name + '» вместе с её серверами?', null, 'Удалить')) return; pxRender((await api('api/proxy/subs/' + sb.id, { method: 'DELETE' })).state); pxSay(''); }, 'pbtn sm'));
+      }
+      lst.append(g);
+      for (const s of i.servers.filter(s => s.sub === sb.id)) lst.append(row(s));
+    }
+    b.append(lst);
+  }
+  if (adm) {
+    const f = el('label', 'f', 'Ключ или подписка'), t = el('textarea');
+    t.id = 's-pxk'; t.rows = 3; t.spellcheck = false; t.autocomplete = 'off'; t.setAttribute('autocapitalize', 'off'); t.value = draft;
+    t.placeholder = 'vless://…  vmess://…  trojan://…  ss://…  hysteria2://…  socks5://…  или https://… (подписка)';
+    t.oninput = () => { pxDraft = t.value; };
+    f.append(t); b.append(f);
+    const rw = el('div', 'row2');
+    rw.append(pxBtn('Добавить', async () => {
+      const v = t.value.trim(); if (!v) { pxSay('Вставь ключ или ссылку на подписку'); t.focus(); return; }
+      pxSay(/^https?:\/\/\S+\/\S/.test(v) ? 'Скачиваю подписку…' : 'Проверяю ключ…', 'wait');
+      const r = await post('api/proxy/add', { text: v });
+      t.value = pxDraft = '';
+      pxRender(r.state);
+      const sel = r.state.servers.find(s => s.id === r.state.active);
+      pxSay((r.sub ? 'Подписка добавлена: серверов ' + r.added : r.added ? 'Добавлено: ' + plural(r.added, 'сервер', 'сервера', 'серверов') : 'Такой ключ уже есть') + (sel && r.ids.includes(sel.id) ? ' · выбран «' + sel.name + '»' : '') + '.'
+        + (r.errors.length ? '\nНе подошли: ' + r.errors.slice(0, 3).join('; ') + (r.errors.length > 3 ? ' и ещё ' + (r.errors.length - 3) : '') : '')
+        + (r.selErr ? '\nНе переключил: ' + r.selErr : '')
+        + (!r.state.on && !r.selErr ? '\nВключи «Через прокси», когда будешь готов.' : ''), r.selErr ? '' : 'ok');
+      if (r.state.on && sel && r.ids.includes(sel.id) && !r.selErr) await pxRun();
+    }));
+    const tb = pxBtn('Проверить', () => pxRun()); tb.hidden = !act; rw.append(tb);
+    b.append(rw);
+  }
+  const msg = el('small', 'xmsg'); msg.id = 's-pxm'; msg.setAttribute('role', 'status'); b.append(msg); pxSay(...pxMsgT);
+  if (adm) {
+    const U = fold('px:use', 'Что идёт через прокси', PX_USE.filter(([k]) => i.use[k]).length + ' из ' + PX_USE.length);
+    for (const [k, title, sub] of PX_USE) U.body.append(pxSw(title, sub, !!i.use[k], v => pxPut({ use: { [k]: v } }, true)));
+    const bf = el('label', 'f', 'Без прокси: домены и адреса через запятую или с новой строки'), bt = el('textarea');
+    bt.id = 's-pxby'; bt.rows = 2; bt.spellcheck = false; bt.setAttribute('autocapitalize', 'off'); bt.value = by ?? i.bypass; bt.placeholder = 'example.com, *.corp.lan, 203.0.113.0/24';
+    bf.append(bt); U.body.append(bf);
+    U.body.append(pxBtn('Сохранить исключения', async () => { await pxPut({ bypass: bt.value }, true); pxSay('Исключения сохранены', 'ok'); }, 'pbtn xgo'));
+    U.body.append(el('small', 'pxe', 'Локальные адреса — localhost, 127.x, 10.x, 172.16–31.x, 192.168.x, *.local и имена без точки (свой Ollama, LM Studio) — всегда идут напрямую.'));
+    b.append(U);
+  }
+  b.append(el('small', 'note', adm ? 'Ключи и подписки хранятся на сервере и в браузер не возвращаются. Подписки обновляются сами раз в 12 часов.' : 'Прокси настраивает администратор сервера.'));
+  foldMeta(fPx, !i.on ? 'выкл.' : st.state === 'starting' ? 'запуск…' : st.state === 'ok' ? ((act && act.test && act.test.ok && act.test.loc ? act.test.loc + ' · ' : '') + (act ? act.desc.split(' · ')[0] : '')) : st.state === 'nocore' ? 'нет Xray' : 'не работает', i.on && st.state !== 'ok' && st.state !== 'starting');
+  fPx.querySelector(':scope>summary>.fm').classList.toggle('pxon', i.on && st.state === 'ok');
+  $('#dlg .sbody').scrollTop = y;
+  /* запускается — заглянем ещё раз */
+  if (i.on && st.state === 'starting') setTimeout(() => { if ($('#dlg').open) pxLoad(); }, 1500);
+}
 
 /* при входе и при возвращении на вкладку (если давно не смотрели): есть новая версия — предлагаем */
 async function updBoot(auto) {

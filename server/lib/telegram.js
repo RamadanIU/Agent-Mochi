@@ -9,6 +9,7 @@ import { CFG } from './config.js';
 import { Doc, rid } from './store.js';
 import { getChat, hooks } from './agent.js';
 import { putInbox, storeCopy, sz } from './files.js';
+import { netFetch } from './net.js';
 
 const TOKEN_RE = /^\d{5,15}:[A-Za-z0-9_-]{30,64}$/;
 const LINK_TTL = 30 * 60e3;
@@ -20,9 +21,10 @@ const docs = new Map();
 const conf = u => { if (!docs.has(u.id)) docs.set(u.id, tgDoc(u)); return docs.get(u.id); };
 
 async function api(token, method, params = {}, signal, form) {
-  const r = await fetch(`${CFG.tgApi}/bot${token}/${method}`, form
+  const r = await netFetch(`${CFG.tgApi}/bot${token}/${method}`, form
     ? { method: 'POST', body: form, signal }
-    : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params), signal });
+    : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params), signal }, 'tg')
+    .catch(e => { throw signal?.aborted || !(e instanceof TypeError) ? e : new Error('нет связи с Telegram (' + (e.cause?.code || e.cause?.message || e.message) + ')'); });
   let j; try { j = await r.json(); } catch { j = { ok: false, description: 'HTTP ' + r.status }; }
   if (!j.ok) throw Object.assign(new Error(j.description || 'ошибка Telegram'), { code: j.error_code, retry: j.parameters?.retry_after });
   return j.result;
@@ -114,7 +116,7 @@ class Bot {
       try {
         if (fobj.file_size > 20 * 2 ** 20) throw new Error('Telegram отдаёт ботам файлы только до 20 МБ — загрузи его через веб-чат');
         const f = await api(v.token, 'getFile', { file_id: fobj.file_id });
-        const r = await fetch(`${CFG.tgApi}/file/bot${v.token}/${f.file_path}`);
+        const r = await netFetch(`${CFG.tgApi}/file/bot${v.token}/${f.file_path}`, {}, 'tg');
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const name = m.document?.file_name || (m.photo ? 'photo_' + m.message_id + '.jpg' : path.basename(f.file_path));
         const saved = await putInbox(this.u, name, Buffer.from(await r.arrayBuffer()));
