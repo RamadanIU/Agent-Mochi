@@ -460,6 +460,8 @@ background:linear-gradient(color-mix(in srgb,var(--line) 80%,transparent) 2px,tr
 .k-hex{fill:color-mix(in srgb,var(--p5) 26%,var(--card))}
 .k-para,.k-para2,.k-trap,.k-trap2,.k-flag{fill:color-mix(in srgb,var(--p2) 24%,var(--card))}
 .k-sub{fill:color-mix(in srgb,var(--p6) 22%,var(--card))}
+.k-note{fill:color-mix(in srgb,var(--p4) 30%,var(--card))}
+.xgt{font:8px/1.6 var(--pf)}
 .gx{fill:none;stroke:var(--onacc);stroke-width:2}.gx2{fill:none;stroke:var(--ink);stroke-width:2}
 .ge{fill:none;stroke:var(--ink);stroke-width:2}.ge.dot{stroke-dasharray:4 4}.ge.thk{stroke-width:4}
 .gh{fill:var(--ink)}
@@ -496,6 +498,42 @@ background:linear-gradient(color-mix(in srgb,var(--line) 80%,transparent) 2px,tr
 .xtp{align-self:start;padding:5px 8px;white-space:nowrap;background:var(--c);color:#fff;text-shadow:1px 1px 0 rgba(0,0,0,.3);box-shadow:var(--sh2)}
 .md .xtr ul{padding:0 0 0 12px;border-left:2px dashed var(--mut)}
 .md .xtr li{margin-bottom:8px;padding:4px 8px;background:var(--card);box-shadow:var(--sh2)}.md .xtr li::before{content:none}
+/* графики — карточка, как у pie: заголовок, легенда, под ними пиксельный SVG */
+.xch{display:inline-block;max-width:100%;padding:14px 16px 16px;vertical-align:top;text-align:left;font:8px/1.6 var(--pf);color:var(--fg);background:var(--card);box-shadow:var(--sh2)}
+.xg .xch svg{display:block;width:100%;max-width:none}
+.xlg{display:flex;flex-wrap:wrap;gap:6px 16px;margin:-2px 0 14px}
+.xlg span{display:inline-flex;align-items:center;gap:7px}
+.xlg i{flex:none;width:10px;height:10px;box-shadow:var(--sh2)}.xlg i.ln{width:16px;height:4px}
+.xgb text.tm{fill:var(--mut)}
+.xgr{fill:none;stroke:color-mix(in srgb,var(--mut) 45%,transparent);stroke-width:2;stroke-dasharray:2 4}
+.xax{fill:none;stroke:var(--ink);stroke-width:2}
+.xbr,.xpt{stroke:var(--ink);stroke-width:2}
+.xlo{fill:none;stroke:var(--ink);stroke-width:6;stroke-linejoin:round;stroke-linecap:square}
+.xln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:square}
+.xgb g:hover>.xbr,.xgb g:hover>.xpt{filter:brightness(1.12) saturate(1.1)}
+.xgb text.hl{paint-order:stroke;stroke:var(--card);stroke-width:4px;stroke-linejoin:round}
+.xgb tspan.tm{fill:var(--mut)}
+.xrf{fill-opacity:.16;stroke:none}
+.xsk{fill-opacity:.38;transition:fill-opacity .15s}.xsk:hover{fill-opacity:.62}
+.xgx{fill:color-mix(in srgb,var(--mut) 14%,transparent)}
+.xtd{fill:none;stroke:var(--acc);stroke-width:2;stroke-dasharray:6 4}.xgb text.xtdt{fill:var(--acc)}
+.xvt{fill:none;stroke:var(--ink);stroke-width:2;stroke-dasharray:2 2}
+.xjl{fill:none;stroke:var(--mut);stroke-width:2;stroke-dasharray:4 4}
+.xgl{fill:none;stroke-width:4;stroke-linejoin:round}.xgl.dot{stroke-width:2;stroke-dasharray:4 4}
+.xfc{fill:#2a1a33}
+.xgb text.hlb{paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
+.xgb text.gtl{fill:var(--fg)}.xgb text.tmu{fill:var(--mut)}.xgb text.tac{fill:color-mix(in srgb,var(--acc) 80%,var(--fg))}
+/* kanban — колонки-стопки карточек */
+.xkt{text-align:left;font:8px/1.6 var(--pf)}
+.xkb{display:inline-flex;gap:14px;align-items:flex-start;text-align:left;font:8px/1.7 var(--pf);color:var(--fg)}
+.xkc{flex:none;width:184px;padding:0 0 10px;background:color-mix(in srgb,var(--c) 10%,var(--card));box-shadow:var(--sh2)}
+.xkh{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--c);color:#fff;text-shadow:1px 1px 0 rgba(0,0,0,.3)}
+.xkh span{flex:1;min-width:0;overflow-wrap:anywhere}.xkh b{font-weight:400;color:inherit;padding:2px 5px;background:rgba(0,0,0,.18)}
+.xki{margin:10px 10px 0;padding:8px 9px 8px 11px;background:var(--card);box-shadow:var(--sh2),3px 3px 0 0 var(--dsh);border-left:4px solid var(--pr,var(--c));overflow-wrap:anywhere}
+.xkm{display:flex;flex-wrap:wrap;gap:4px 6px;margin-top:7px;font-size:7px}
+.xkm>*{padding:2px 5px;background:color-mix(in srgb,var(--mut) 18%,var(--card))}
+.xkm .xkp{background:color-mix(in srgb,var(--pr,var(--mut)) 30%,var(--card))}.md .xkm a{color:inherit}
+.xke{margin:10px 10px 0;padding:8px;color:var(--mut);text-align:center;border:2px dashed color-mix(in srgb,var(--mut) 50%,transparent)}
 /* ===== v10: интерфейс 2.0 — объём, понятные значки, плавные движения (чат и настройки) =====
    Кнопки — выпуклые (блик сверху, «ступенька» снизу), поля ввода — утопленные, карточки отбрасывают жёсткую пиксельную тень.
    Значки — двухтонные маски на сетке 10×10 (полутон — fill-opacity), рисуются ×2 без размытия. */
@@ -2572,8 +2610,9 @@ raf=requestAnimationFrame(loop);
    Свой разборщик без библиотек: страница работает офлайн и под строгой CSP сервера.
    Умеет: заголовки, абзацы, списки (вложенные, нумерованные, с галочками), цитаты и врезки > [!NOTE],
    таблицы, код с подсветкой, формулы LaTeX ($…$, $$…$$, \(…\), \[…\]), сноски, ссылки-источники [1],
-   <details>, <kbd>, ==выделение==, ~~зачёркнутое~~, картинки. Схемы ```mermaid (flowchart, sequence, state,
-   pie, mindmap, timeline) и ```dot рисуются пиксельным SVG/HTML.
+   <details>, <kbd>, ==выделение==, ~~зачёркнутое~~, картинки. ```mermaid — все виды схем и графиков: flowchart, sequence,
+   class, state, er, requirement, C4, gitGraph, block, architecture, mindmap, timeline, journey, gantt, kanban, pie,
+   xychart, quadrant, radar, sankey, treemap, packet; и ```dot. Рисуются пиксельным SVG/HTML в цветах темы.
    Ответ перерисовывается целиком на каждый кусочек потока — всё терпит недописанный текст. */
 (()=>{
 const E=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -2905,21 +2944,42 @@ function wrap(t,max=18){
     out.push(line)}
   while(out.length>1&&!out[out.length-1])out.pop();
   return out.length?out:['']}
-const lab=t=>String(t||'').replace(/<br\s*\/?>/gi,'\n').replace(/\\n/g,'\n').replace(/<\/?[a-z][^>]*>/gi,'').replace(/\*\*|__|`/g,'')
+const lab=t=>String(t||'').trim().replace(/<br\s*\/?>/gi,'\n').replace(/\\n/g,'\n').replace(/<\/?[a-z][^>]*>/gi,'').replace(/\*\*|__|`/g,'')
   .replace(/#quot;/g,'"').replace(/#(\d+);/g,(m,n)=>String.fromCodePoint(+n)).replace(/fa:fa-[\w-]+\s*/g,'').replace(/^["']|["']$/g,'').trim();
 const TX=(x,y,lines,c,anchor)=>lines.map((l,k)=>'<text class="gt'+(c?' '+c:'')+'" x="'+x+'" y="'+(y-(lines.length-1)*LH/2+k*LH)+'" text-anchor="'+(anchor||'middle')+'" dominant-baseline="central">'+E(l)+'</text>').join('');
 const svg=(w,h,body,label)=>'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" style="min-width:'+Math.round(w*.75)+'px" shape-rendering="crispEdges" role="img" aria-label="'+E(label||'схема')+'">'+body+'</svg>';
 const diagram=f=>{try{return f()}catch(e){return null}};
 
 function mermaid(src){
-  const s=src.replace(/^\s*%%.*$/gm,'').replace(/^\s*---[\s\S]*?---\s*/,'').trim(),h=(s.match(/^\S+/)||[''])[0].toLowerCase();
+  /* шапка ---…--- (title: …) и строки %% выкидываем; заголовок из шапки — запасной для графиков */
+  let fm='';const s=src.replace(/^\s*%%.*$/gm,'').replace(/^\s*---[ \t]*\n([\s\S]*?)\n\s*---\s*/,(m,b)=>{fm=b;return ''}).trim(),h=(s.match(/^\S+/)||[''])[0].toLowerCase();
+  const ft=lab((fm.match(/^\s*title\s*:\s*(.+)$/m)||[])[1]||'');
   const d=f=>diagram(f);let r;
   if(/^(graph|flowchart)/.test(h))r=['схема',d(()=>graph(flowParse(s)))];
   else if(/^statediagram/.test(h))r=['состояния',d(()=>graph(stateParse(s)))];
   else if(h==='sequencediagram')r=['диалог',d(()=>sequence(s))];
+  else if(/^classdiagram(-v2)?$/.test(h))r=['классы',d(()=>graph(classParse(s)))];
+  else if(h==='erdiagram')r=['сущности',d(()=>graph(erParse(s)))];
+  else if(h==='requirementdiagram')r=['требования',d(()=>graph(reqParse(s)))];
+  else if(/^c4(context|container|component|dynamic|deployment)$/.test(h))r=['c4 · '+{c4context:'контекст',c4container:'контейнеры',c4component:'компоненты',c4dynamic:'взаимодействие',c4deployment:'развёртывание'}[h],d(()=>{const G=c4Parse(s),g=graph(G);return (G.t?'<b class="xpt xgt">'+E(G.t)+'</b>':'')+g})];
   else if(h==='pie')r=['диаграмма',d(()=>pie(s))];
   else if(h==='mindmap')r=['карта мыслей',d(()=>mindmap(s))];
   else if(h==='timeline')r=['хронология',d(()=>timeline(s))];
+  else if(/^xychart(-beta)?$/.test(h))r=['график',d(()=>xychart(s,ft))];
+  else if(h==='quadrantchart')r=['квадранты',d(()=>quadrant(s,ft))];
+  else if(/^radar(-beta)?$/.test(h))r=['радар',d(()=>radar(s,ft))];
+  else if(/^sankey(-beta)?$/.test(h))r=['потоки',d(()=>sankey(s,ft))];
+  else if(/^treemap(-beta)?$/.test(h))r=['доли',d(()=>treemap(s,ft))];
+  else if(/^packet(-beta)?$/.test(h))r=['пакет',d(()=>packet(s,ft))];
+  else if(h==='gantt')r=['диаграмма ганта',d(()=>gantt(s,ft))];
+  else if(h==='journey')r=['путь пользователя',d(()=>journey(s,ft))];
+  else if(h==='kanban')r=['канбан',d(()=>kanban(s,ft,fm))];
+  else if(/^gitgraph:?$/.test(h))r=['ветки git',d(()=>gitgraph(s))];
+  else if(/^block(-beta)?$/.test(h))r=['блоки',d(()=>block(s))];
+  else if(/^architecture(-beta)?$/.test(h))r=['архитектура',d(()=>arch(s))];
+  /* страховка: если где-то в координатах вылез NaN — лучше честно показать код, чем битую картинку */
+  if(r&&r[1]&&/\s(?:x|y|cx|cy|r|width|height|points|d|transform|viewBox|style)="[^"]*(?:NaN|Infinity|undefined)/.test(r[1]))r[1]=null;
+  if(r&&r[1]&&ft&&!r[1].includes('class="xpt'))r[1]='<b class="xpt xgt">'+E(ft)+'</b>'+r[1];
   return r&&r[1]?r:null}
 
 /* flowchart: узлы, формы и стрелки */
@@ -3002,8 +3062,90 @@ function dotParse(src){
     for(let k=0;k+1<chain.length;k++)G.edges.push({a:chain[k],b:chain[k+1],label:lab((o.label||'').replace(/\\[nlr]/g,'\n')),st:/dash|dot/.test(o.style||'')?'dot':/bold/.test(o.style||'')?'thk':'',hd:ops[k]==='->'?'>':'',tl:o.dir==='both'?'>':'',len:1})}
   return G}
 
+/* classDiagram: классы с полями и методами, наследование, композиция, агрегация */
+const CHEAD='color-mix(in srgb,var(--acc) 22%,var(--card))';
+function classParse(src){
+  const G={dir:'TD',nodes:new Map(),edges:[],groups:[],gp:52},ns=[],AN=new Map();let blk=null;
+  const gen=s=>String(s).replace(/~([^~]*)~/g,'<$1>');
+  const node=id=>{id=id.replace(/^`|`$/g,'');if(!G.nodes.has(id)){const n={id,label:gen(id),at:[],me:[],an:'',k:G.nodes.size};G.nodes.set(id,n);ns.forEach(g=>g.m.add(n))}return G.nodes.get(id)};
+  const mem=(n,m)=>{m=m.trim();if(!m)return;let a;if(a=m.match(/^<<(.+)>>$/)){n.an=a[1].trim();return}m=gen(m).replace(/[$*]$/,'');(/\(/.test(m)?n.me:n.at).push(m)};
+  const N='(`[^`]+`|[\\w$~\\u0080-\\uffff]+)',REL=new RegExp('^'+N+'\\s*(?:"([^"]*)")?\\s*(<\\||\\*|o|<|\\(\\))?(--|\\.\\.)(\\|>|\\*|o|>|\\(\\))?\\s*(?:"([^"]*)")?\\s*'+N+'\\s*(?::\\s*(.*))?$');
+  const MK={'<|':'tri','|>':'tri','*':'dia','o':'odia','<':'>','>':'>','()':'lol'};
+  for(let l of src.split('\n').slice(1)){l=l.trim();let m;if(!l)continue;
+    if(blk){if(l==='}'){blk=null;continue}mem(blk,l);continue}
+    if(m=l.match(/^direction\s+(TB|TD|BT|RL|LR)/i)){G.dir=m[1].toUpperCase().replace('TB','TD');continue}
+    if(/^(classDef|cssClass|style|click|callback|link|accTitle|accDescr)\b/.test(l))continue;
+    if(m=l.match(/^namespace\s+(\S+)\s*\{?$/)){const g={id:m[1],t:lab(m[1]),m:new Set()};G.groups.push(g);ns.push(g);continue}
+    if(l==='}'){ns.pop();continue}
+    if(m=l.match(/^class\s+(`[^`]+`|[^\s{\[:]+)\s*(?:\["?([^\]"]*)"?\])?(?::::[\w-]+)?\s*(\{)?\s*(.*?)\}?\s*$/)){const n=node(m[1]);if(m[2])n.label=lab(m[2]);if(m[3]){if(m[4])m[4].split(';').forEach(x=>mem(n,x));if(!/\}\s*$/.test(l))blk=n}continue}
+    if(m=l.match(/^<<(.+?)>>\s*(\S+)$/)){node(m[2]).an=m[1].trim();continue}
+    if(m=l.match(/^note\s+for\s+(\S+)\s+"([\s\S]*)"$/i)){const id='__n'+G.nodes.size;G.nodes.set(id,{id,label:lab(m[2]),shape:'note'});G.edges.push({a:G.nodes.get(id),b:node(m[1]),label:'',st:'dot',hd:'',tl:'',len:1});continue}
+    if(m=l.match(/^note\s+"([\s\S]*)"$/i)){const id='__n'+G.nodes.size;G.nodes.set(id,{id,label:lab(m[1]),shape:'note'});continue}
+    if(m=l.match(REL)){const a=node(m[1]),b=node(m[7]);G.edges.push({a,b,label:lab(m[8]||''),st:m[4]==='..'?'dot':'',tl:MK[m[3]]||'',hd:MK[m[5]]||'',la:lab(m[2]||''),lb:lab(m[6]||''),len:1});continue}
+    if(m=l.match(/^(`[^`]+`|[^\s:]+)\s*:\s*(.+)$/)){mem(node(m[1]),m[2]);continue}
+    if(m=l.match(/^(`[^`]+`|[\w$~\u0080-￿]+)$/))node(m[1])}
+  /* наследник ниже родителя: стрелка «к родителю» — значит родитель в начале ребра */
+  G.edges.forEach(e=>{if(!e.tl&&(e.hd==='tri'||e.hd==='dia'||e.hd==='odia')){[e.a,e.b]=[e.b,e.a];[e.tl,e.hd]=[e.hd,''];[e.la,e.lb]=[e.lb,e.la]}});
+  G.nodes.forEach(n=>{if(n.shape==='note')return;const hd=(n.an?[{t:'«'+n.an+'»',c:'tmu'}]:[]).concat(wrap(n.label,24));
+    n.parts=[{L:hd,f:CHEAD}];if(n.at.length||n.me.length)n.parts.push({L:n.at,a:'l'},{L:n.me,a:'l'})});
+  return G}
+
+/* erDiagram: сущности с атрибутами, связи с «вороньими лапками» */
+function erParse(src){
+  const G={dir:'TD',nodes:new Map(),edges:[],groups:[],gp:60};let blk=null;
+  const node=raw=>{let m=String(raw).trim().match(/^(?:"([^"]+)"|([^\s\[{]+))\s*(?:\[\s*"?([^\]"]*)"?\s*\])?/);if(!m)return null;const id=m[1]||m[2];
+    if(!G.nodes.has(id))G.nodes.set(id,{id,label:lab(id),at:[]});const n=G.nodes.get(id);if(m[3])n.label=lab(m[3]);return n};
+  const N='("[^"]+"|[^\\s"|}{o.-][^\\s|}{]*?(?:\\[[^\\]]*\\])?)',REL=new RegExp('^'+N+'\\s*(\\|o|\\|\\||\\}o|\\}\\|)(--|\\.\\.)(o\\||\\|\\||o\\{|\\|\\{)\\s*'+N+'\\s*(?::\\s*(.*))?$');
+  const RM={'o|':'|o','||':'||','o{':'}o','|{':'}|'};
+  for(let l of src.split('\n').slice(1)){l=l.trim();let m;if(!l)continue;
+    if(blk){if(l==='}'){blk=null;continue}const q=l.match(/^([\w\[\]().,<>-]+)\s+([^\s"]+)\s*((?:PK|FK|UK)(?:\s*,\s*(?:PK|FK|UK))*)?\s*(?:"([^"]*)")?/i);if(q)blk.at.push([q[1],q[2],(q[3]||'').replace(/\s+/g,'').toUpperCase(),q[4]?fit(lab(q[4]),160):'']);continue}
+    if(m=l.match(/^direction\s+(TB|TD|BT|RL|LR)/i)){G.dir=m[1].toUpperCase().replace('TB','TD');continue}
+    if(/^(classDef|class|style|accTitle|accDescr)\b/.test(l))continue;
+    if(m=l.match(REL)){const a=node(m[1]),b=node(m[5]);if(a&&b)G.edges.push({a,b,label:lab(m[6]||''),st:m[3]==='..'?'dot':'',tl:m[2],hd:RM[m[4]],len:1});continue}
+    if(m=l.match(/^(.+?)\s*\{\s*(\})?$/)){const n=node(m[1]);if(n&&!m[2])blk=n;continue}
+    node(l)}
+  G.nodes.forEach(n=>{n.parts=[{L:wrap(n.label,24),f:CHEAD}];if(n.at.length){const c=n.at.some(r=>r[3]);n.parts.push({rows:n.at.map(r=>c?r:r.slice(0,3)),cc:['tmu','','tac','tmu']})}});
+  return G}
+
+/* requirementDiagram: требования и элементы, связи «satisfies», «verifies»… */
+function reqParse(src){
+  const G={dir:'TD',nodes:new Map(),edges:[],groups:[],gp:48};let blk=null;
+  const KIND={requirement:'Requirement',functionalrequirement:'Functional Requirement',interfacerequirement:'Interface Requirement',performancerequirement:'Performance Requirement',physicalrequirement:'Physical Requirement',designconstraint:'Design Constraint',element:'Element'};
+  const FN={id:'Id',text:'Text',risk:'Risk',verifymethod:'Verification',type:'Type',docref:'Doc Ref'};
+  const node=id=>{id=id.replace(/^"|"$/g,'');if(!G.nodes.has(id))G.nodes.set(id,{id,label:lab(id),kind:'Element',f:[]});return G.nodes.get(id)};
+  for(let l of src.split('\n').slice(1)){l=l.trim();let m;if(!l)continue;
+    if(blk){if(l==='}'){blk=null;continue}if(m=l.match(/^(\w+)\s*:\s*(.*)$/))blk.f.push((FN[m[1].toLowerCase()]||m[1])+': '+lab(m[2]));continue}
+    if(m=l.match(/^direction\s+(TB|TD|BT|RL|LR)/i)){G.dir=m[1].toUpperCase().replace('TB','TD');continue}
+    if(m=l.match(/^(\w+)\s+("[^"]+"|[^\s{]+)\s*\{\s*$/)){if(!KIND[m[1].toLowerCase()])continue;blk=node(m[2]);blk.kind=KIND[m[1].toLowerCase()];continue}
+    /* подпись связи — в своём «этаже», чтобы подписи соседних связей не наезжали */
+    if(m=l.match(/^("[^"]+"|\S+)\s*-\s*(\w+)\s*->\s*("[^"]+"|\S+)$/)){G.edges.push({a:node(m[1]),b:node(m[3]),label:'«'+m[2].toLowerCase()+'»',st:'dot',hd:'open',tl:'',len:2});continue}
+    if(m=l.match(/^("[^"]+"|\S+)\s*<-\s*(\w+)\s*-\s*("[^"]+"|\S+)$/))G.edges.push({a:node(m[3]),b:node(m[1]),label:'«'+m[2].toLowerCase()+'»',st:'dot',hd:'open',tl:'',len:2})}
+  G.nodes.forEach(n=>{n.parts=[{L:[{t:'«'+n.kind+'»',c:'tmu'}].concat(wrap(n.label,26)),f:n.kind==='Element'?'color-mix(in srgb,var(--p2) 24%,var(--card))':CHEAD}];
+    if(n.f.length)n.parts.push({L:n.f.flatMap(x=>wrap(x,30)),a:'l'})});
+  return G}
+
+/* C4: люди, системы, контейнеры, компоненты; границы — рамками */
+function c4Parse(src){
+  const G={dir:'TD',nodes:new Map(),edges:[],groups:[],gp:56},st=[];
+  const args=s=>splitTop(s).filter(x=>!/^\$/.test(x.trim())).map(x=>lab(x.trim()));
+  const KC={person:'var(--acc)',system:'var(--p3)',container:'var(--p5)',component:'var(--p2)',node:'var(--p6)'};
+  for(let l of src.split('\n').slice(1)){l=l.trim();let m;if(!l)continue;
+    if(l==='}'){st.pop();continue}
+    if(m=l.match(/^title\s+(.+)$/i)){G.t=lab(m[1]);continue}
+    if(m=l.match(/^(\w+)\s*\(([\s\S]*)\)\s*(\{)?\s*$/)){const f=m[1],A=args(m[2]),fl=f.toLowerCase();
+      if(/boundary$|^deployment_node|^node(_l|_r)?$/.test(fl)&&m[3]){const g={id:A[0],t:(A[1]||A[0])+(A[2]&&!/boundary$/.test(fl)?' ['+A[2]+']':fl.replace(/_?boundary$/,'')?' ['+fl.replace(/_?boundary$/,'').replace('enterprise','Enterprise').replace('system','System').replace('container','Container')+']':''),m:new Set()};G.groups.push(g);st.push(g);continue}
+      if(/^(birel|rel(index)?|rel_(u|up|d|down|l|left|r|right|back|neighbor))$/.test(fl)){if(fl==='relindex')A.shift();const back=fl==='rel_back',a=G.nodes.get(A[back?1:0]),b=G.nodes.get(A[back?0:1]);
+        if(a&&b)G.edges.push({a,b,label:(A[2]||'')+(A[3]?'\n['+A[3]+']':''),st:'',hd:'>',tl:fl==='birel'?'>':'',len:1});continue}
+      const k=fl.match(/^(person|system|container|component)(db|queue)?(_ext)?$/);if(!k||!A[0])continue;
+      const tech=k[1]==='container'||k[1]==='component'?A[2]:'',desc=k[1]==='container'||k[1]==='component'?A[3]:A[2],ext=!!k[3];
+      const type=(k[1][0].toUpperCase()+k[1].slice(1))+(k[2]?(k[2]==='db'?' DB':' Queue'):'')+(tech?': '+tech:'');
+      const n={id:A[0],label:A[1]||A[0],parts:[{L:wrap(A[1]||A[0],22),f:ext?'var(--mut)':KC[k[1]],c:'on'},{L:[{t:'['+type+']',c:'tmu'}].concat(desc?wrap(desc,26).slice(0,6):[])}],mw:150};
+      G.nodes.set(A[0],n);st.forEach(g=>g.m.add(n))}}
+  return G}
+
 /* раскладка: слои по длинному пути, порядок — барицентрами, ровные рёбра под прямыми углами */
 function nsize(n){
+  if(n.parts){n.L=[];boxSize(n);return}
   const L=n.L=n.shape==='start'||n.shape==='end'||n.shape==='bar'?[]:wrap(n.label),w=L.length?Math.max(...L.map(tw)):0,h=L.length*LH;
   let W,H;
   switch(n.shape){
@@ -3067,13 +3209,15 @@ function graph(G){
     for(let r=RN-2;r>=0;r--)place(L[r],x=>avg(dn.get(x))??x.x)}
   for(let r=0;r<RN;r++)place(L[r],x=>avg(up.get(x).concat(dn.get(x)))??x.x);
   /* по главной оси: толщина слоёв и промежутки (шире, если в них подписи) */
-  const th=L.map(l=>Math.max(0,...l.map(x=>x.ms))),gp=Array(RN).fill(hz?44:40);
+  const th=L.map(l=>Math.max(0,...l.map(x=>x.ms))),gp=Array(RN).fill(G.gp||(hz?44:40));
   segs.forEach(s=>{const e=s.e;if(e.label&&!e.ch.length)gp[e.u.r]=Math.max(gp[e.u.r],(hz?e.lw:e.lh)+26)});
   const y0=[];let yy=0;for(let r=0;r<RN;r++){y0[r]=yy;yy+=th[r]+gp[r]}const HM=yy-gp[RN-1];
   all.forEach(x=>x.y=y0[x.r]+th[x.r]/2);
   /* порты: рёбра расходятся по стороне узла */
   const port=(n,list,key)=>{const ps=list.filter(s=>s[key===0?'u':'v']===n).sort((a,b)=>(key===0?a.v.x-b.v.x:a.u.x-b.u.x));
-    const pin=n.shape==='dia'||n.shape==='circle'||n.shape==='dc'||n.shape==='start'||n.shape==='end',k=ps.length,spc=pin?0:Math.min(14,(n.cs-14)/Math.max(1,k-1));
+    /* значки у концов (UML, ER) просят места; стрелки наследования к одному родителю сходятся в одну */
+    const mk=ps.map(s=>s.e.a===n?s.e.tl:s.e.b===n?s.e.hd:''),one=ps.length>1&&mk.every(m=>m==='tri');
+    const pin=one||n.shape==='dia'||n.shape==='circle'||n.shape==='dc'||n.shape==='start'||n.shape==='end',k=ps.length,spc=pin?0:Math.min(mk.some(m=>m&&m!=='>')?24:14,(n.cs-14)/Math.max(1,k-1));
     ps.forEach((s,j)=>s[key===0?'px':'qx']=Math.round(n.x+(j-(k-1)/2)*spc))};
   N.forEach(n=>{port(n,segs,0);port(n,segs,1)});
   /* дорожки в промежутках, чтобы горизонтали не слипались */
@@ -3096,7 +3240,8 @@ function graph(G){
     let p=pathOf(e).map(([x,y])=>tf(x,y));if(e.rev)p.reverse();
     p=p.filter((q,k)=>!k||q[0]!==p[k-1][0]||q[1]!==p[k-1][1]);
     const H=[];
-    if(e.hd)H.push(head(p,e.hd,1));if(e.tl)H.push(head(p,'>',0));
+    if(e.hd)H.push(head(p,e.hd,1));if(e.tl)H.push(head(p,e.tl,0));
+    if(e.la)lb+=endLab(p,0,e.la);if(e.lb)lb+=endLab(p,1,e.lb);
     p.forEach(q=>bx(q[0],q[1],8,8));
     o+='<path class="ge'+(e.st?' '+e.st:'')+'" d="M'+p.map(q=>q.map(Math.round).join(' ')).join('L')+'"/>'+H.join('');
     if(e.L){let c;const d=e.ch.find(x=>x.lab);
@@ -3110,7 +3255,7 @@ function graph(G){
     o+='<path class="ge'+(e.st?' '+e.st:'')+'" d="M'+x+' '+(y-6)+'h16v12h-12"/>'+head([[x+16,y+6],[x+4,y+6]],'>',1);
     if(L.length){const w=Math.max(...L.map(tw));lb+=TX(x+22,y,L,'gtl','start');bx(x+24+w/2,y,w+4,L.length*LH)}bx(x+10,y,24,16)});
   N.forEach(n=>{const on=n.shape==='circle'||n.shape==='dc'?' on':'';
-    nd+=shape(n,n.X+3,n.Y+3,'gsh')+shape(n,n.X,n.Y,'gn k-'+n.shape)+TX(n.X,n.Y,n.L,on)});
+    nd+=n.parts?boxDraw(n,n.X,n.Y):shape(n,n.X+3,n.Y+3,'gsh')+shape(n,n.X,n.Y,'gn k-'+n.shape)+TX(n.X,n.Y,n.L,on)});
   /* подграфы: рамка, если в неё не попал чужой узел */
   (G.groups||[]).forEach(g=>{const m=[...g.m];if(!m.length)return;
     const x1=Math.min(...m.map(n=>n.X-n.w/2))-12,y1=Math.min(...m.map(n=>n.Y-n.h/2))-26,x2=Math.max(...m.map(n=>n.X+n.w/2))+14,y2=Math.max(...m.map(n=>n.Y+n.h/2))+14;
@@ -3119,12 +3264,44 @@ function graph(G){
     bx((x1+x2)/2,(y1+y2)/2,x2-x1,y2-y1)});
   const M=14,W=Math.ceil(B[2]-B[0]+2*M),Hh=Math.ceil(B[3]-B[1]+2*M),dx=Math.round(M-B[0]),dy=Math.round(M-B[1]);
   return svg(W,Hh,'<g transform="translate('+dx+' '+dy+')">'+grp+o+lb+nd+'</g>')}
+function endLab(p,end,t){
+  let a=end?p[p.length-1]:p[0],j=end?p.length-2:1,b=p[j];while(b&&b[0]===a[0]&&b[1]===a[1]){j+=end?-1:1;b=p[j]}if(!b)return '';
+  const dx=Math.sign(b[0]-a[0]),dy=Math.sign(b[1]-a[1]),f=26;
+  return dy?TX(a[0]+8,a[1]+dy*f,[t],'gtl hlb','start'):TX(a[0]+dx*f,a[1]-10,[t],'gtl hlb')}
+/* узел-карточка из отсеков (класс, сущность, требование, C4): шапка с заливкой, списки, таблица с колонками */
+const pl1=l=>typeof l==='string'?{t:l}:l;
+function boxSize(n){
+  let w=0,h=0;
+  n.parts.forEach(p=>{
+    if(p.rows){p.cw=[];p.rows.forEach(r=>r.forEach((c,i)=>p.cw[i]=Math.max(p.cw[i]||0,tw(c))));w=Math.max(w,p.cw.reduce((s,c)=>s+c+(c?12:0),0)+8);p.h=p.rows.length?p.rows.length*LH+10:8}
+    else{w=Math.max(w,...p.L.map(l=>tw(pl1(l).t)+20));p.h=p.L.length?p.L.length*LH+10:8}
+    h+=p.h});
+  n.w=Math.ceil(Math.max(w,n.mw||72)/2)*2;n.h=Math.ceil(h/2)*2}
+function boxDraw(n,x,y){
+  const l=x-n.w/2,t=y-n.h/2;let o='<rect class="gsh" x="'+(l+3)+'" y="'+(t+3)+'" width="'+n.w+'" height="'+n.h+'"/><rect class="gn" x="'+l+'" y="'+t+'" width="'+n.w+'" height="'+n.h+'"'+(n.fill?' style="fill:'+n.fill+'"':'')+'/>',yy=t,tx='';
+  n.parts.forEach((p,k)=>{
+    if(p.f)o+='<rect class="gn" x="'+l+'" y="'+yy+'" width="'+n.w+'" height="'+p.h+'" style="fill:'+p.f+'"/>';else if(k)o+='<path class="ge" d="M'+l+' '+yy+'h'+n.w+'"/>';
+    if(p.rows)p.rows.forEach((r,i)=>{let xx=l+10;r.forEach((c,j)=>{if(!p.cw[j])return;if(c)tx+=TX(xx,yy+5+LH/2+i*LH,[c],(p.cc||[])[j]||'','start');xx+=p.cw[j]+12})});
+    else{const cy=yy+p.h/2,L=p.L.map(pl1);L.forEach((q,i)=>{tx+=TX(p.a==='l'?l+10:x,cy-(L.length-1)*LH/2+i*LH,[q.t],q.c||p.c||'',p.a==='l'?'start':'middle')})}
+    yy+=p.h});
+  return o+tx}
 function head(p,k,end){
   let a=end?p[p.length-1]:p[0],j=end?p.length-2:1,b=p[j];
   while(b&&b[0]===a[0]&&b[1]===a[1]){j+=end?-1:1;b=p[j]}if(!b)return '';
   const dx=Math.sign(a[0]-b[0]),dy=Math.sign(a[1]-b[1]),x=a[0],y=a[1];
   if(k==='o')return '<rect class="gh" x="'+(x-dx*5-4)+'" y="'+(y-dy*5-4)+'" width="8" height="8"/>';
   if(k==='x')return '<path class="ge" d="M'+(x-dx*6-4)+' '+(y-dy*6-4)+'l8 8m0 -8l-8 8"/>';
+  /* f — отступ от острия назад по линии, s — вбок */
+  const Q=(f,s)=>(x-dx*f-dy*s)+' '+(y-dy*f+dx*s),poly=(c,...P)=>'<polygon class="'+c+'" points="'+P.join(' ')+'"/>',ln=(f1,s1,f2,s2)=>'M'+Q(f1,s1)+'L'+Q(f2,s2);
+  const ring=f=>{const[cx,cy]=Q(f,0).split(' ').map(Number);return '<rect class="gn" x="'+(cx-4)+'" y="'+(cy-4)+'" width="8" height="8"/>'};
+  if(k==='tri')return poly('gn',Q(0,0),Q(13,-7),Q(13,7));
+  if(k==='dia')return poly('gh',Q(0,0),Q(8,-5),Q(16,0),Q(8,5));
+  if(k==='odia')return poly('gn',Q(0,0),Q(8,-5),Q(16,0),Q(8,5));
+  if(k==='open')return '<path class="ge" d="'+ln(9,-6,0,0)+'L'+Q(9,6)+'"/>';
+  if(k==='lol')return ring(4);
+  /* «вороньи лапки» ER: | — ровно один, o — может не быть, } — много */
+  if(/^[|}][|o]$/.test(k)){const bar=f=>ln(f,-6,f,6),crow=ln(12,0,0,-7)+ln(12,0,0,7)+ln(12,0,0,0),many=k[0]==='}';
+    return '<path class="ge" d="'+(many?crow:bar(6))+(k[1]==='|'?bar(many?16:11):'')+'"/>'+(k[1]==='o'?ring(many?18:15):'')}
   const P=[[x,y],[x-dx*9-dy*5,y-dy*9-dx*5],[x-dx*9+dy*5,y-dy*9+dx*5]];
   return '<polygon class="gh" points="'+P.map(q=>q.join(',')).join(' ')+'"/>'}
 function shape(n,x,y,c){
@@ -3144,6 +3321,7 @@ function shape(n,x,y,c){
     case 'trap':return P([[l+10,t],[r-10,t],[r,b],[l,b]]);
     case 'trap2':return P([[l,t],[r,t],[r-10,b],[l+10,b]]);
     case 'flag':return P([[l,t],[r,t],[r,b],[l,b],[l+10,y]]);
+    case 'note':return P([[l,t],[r-10,t],[r,t+10],[r,b],[l,b]])+(sh?'':'<path class="gx2" d="M'+(r-10)+' '+t+'v10h10"/>');
     case 'start':return sh?'':ch(5).replace(c,'gh');
     case 'end':return sh?'':ch(5).replace(c,'gn')+P([[l+6,t+4],[r-6,t+4],[r-4,t+6],[r-4,b-6],[r-6,b-4],[l+6,b-4],[l+4,b-6],[l+4,t+6]]).replace(c,'gh');
     case 'bar':return sh?'':rc.replace(c,'gh');
@@ -3249,6 +3427,589 @@ function timeline(src){
     cur=p.slice(1).filter(Boolean);out.push({t:p[0],ev:cur,k:k++})}
   if(!out.some(x=>typeof x==='object'))return null;
   return '<div class="xtl">'+(title?'<b class="xpt">'+E(lab(title))+'</b>':'')+out.map(x=>typeof x==='string'?x:'<div class="xtr" style="--c:var(--p'+(x.k%6+1)+')"><span class="xtp">'+E(lab(x.t))+'</span><ul>'+x.ev.map(e=>'<li>'+E(lab(e))+'</li>').join('')+'</ul></div>').join('')+'</div>'}
+
+/* ===== графики: карточка с заголовком и легендой, шкалы, числа ===== */
+const PC=k=>'var(--p'+(k%6+1)+')';
+const q2=v=>Math.round(v/2)*2;
+/* список через запятую; запятая в "кавычках" — часть текста */
+const items=s=>{const r=[];let c='',q=0;for(const ch of String(s)){if(ch==='"'){q^=1;continue}if(ch===','&&!q){r.push(c.trim());c=''}else c+=ch}r.push(c.trim());return r.length===1&&!r[0]?[]:r};
+const pn=s=>{s=String(s).trim();return /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(s)&&isFinite(+s)?+s:null};
+/* 12500 → 12.5k: в пиксельном шрифте каждая буква на счету */
+const UN=a=>a>=1e9?[1e9,'B']:a>=1e6?[1e6,'M']:a>=1e4?[1e3,'k']:[1,''];
+const vf=v=>{if(v==null||!isFinite(v))return '';const[d,s]=UN(Math.abs(v)),x=v/d,b=Math.abs(x);return String(+x.toFixed(s?(b>=100?0:1):b>=1e3?0:b>=100?1:b>=1?2:3))+s};
+const tfm=(st,m)=>{const[d,s]=UN(m),dec=Math.min(6,(String(+(st/d).toPrecision(6)).split('.')[1]||'').length);return v=>{const t=(v/d).toFixed(dec);return +t?t+s:'0'}};
+/* «круглые» деления: шаг 1, 2, 2.5 или 5 на степень десяти */
+function axisScale(lo,hi,fix,n=5){
+  if(!(hi>lo)){lo=Math.min(lo,0);hi=Math.max(hi,0);if(hi===lo)hi=lo+1}
+  const r=(hi-lo)/n,p=10**Math.floor(Math.log10(r)),f=r/p,st=(f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*p;
+  if(!fix){lo=Math.floor(lo/st+1e-9)*st;hi=Math.ceil(hi/st-1e-9)*st}
+  const t=[];for(let k=Math.ceil(lo/st-1e-9);k*st<=hi+st*1e-9;k++)t.push(+(k*st).toPrecision(12));
+  return {lo,hi,st,t,f:tfm(st,Math.max(Math.abs(lo),Math.abs(hi)))}}
+const psvg=(w,h,body,label)=>'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" shape-rendering="crispEdges" role="img" aria-label="'+E(label||'график')+'">'+body+'</svg>';
+const legend=it=>it.length?'<div class="xlg">'+it.map(([t,c,k])=>'<span><i'+(k?' class="'+k+'"':'')+' style="background:'+c+'"></i>'+E(t)+'</span>').join('')+'</div>':'';
+/* ширина карточки — по графику; на узком экране сжимается до ¾, дальше прокрутка */
+const chartCard=(w,title,lg,body,cls)=>'<div class="xch'+(cls?' '+cls:'')+'" style="width:'+(w+32)+'px;min-width:'+(Math.round(w*.75)+32)+'px">'+(title?'<b class="xpt">'+E(title)+'</b>':'')+(lg||'')+body+'</div>';
+const fit=(t,w)=>{if(tw(t)<=w)return t;let s='';for(const c of t){if(tw(s+c+'…')>w)break;s+=c}return s.trimEnd()+'…'};
+const tip=(...a)=>'<title>'+E(a.filter(x=>x!==''&&x!=null).join(' · '))+'</title>';
+
+/* xychart: столбики и линии; несколько столбиков в одной категории — рядом, а не друг на друге */
+function xyParse(src){
+  const ls=src.split('\n'),C={hz:/\bhorizontal\b/i.test(ls[0]),t:'',x:{},y:{},S:[]};
+  const ax=s=>{const o={};let m;s=s.trim();
+    if(m=s.match(/\[([^\]]*)\]?\s*$/)){o.c=items(m[1]).map(lab);s=s.slice(0,m.index)}
+    else if(m=s.match(/([+-]?[\d.]+(?:e[+-]?\d+)?)\s*-->\s*([+-]?[\d.]+(?:e[+-]?\d+)?)\s*$/i)){if(pn(m[1])!=null&&pn(m[2])!=null)o.r=[+m[1],+m[2]];s=s.slice(0,m.index)}
+    o.t=lab(s);return o};
+  for(const raw of ls.slice(1)){const l=raw.trim();let m;if(!l)continue;
+    if(m=l.match(/^title\s+(.+)$/i))C.t=lab(m[1]);
+    else if(m=l.match(/^([xy])-axis\b(.*)$/i))C[m[1].toLowerCase()]=ax(m[2]);
+    else if(m=l.match(/^(bar|line)\b([^\[]*)\[([^\]]*)\]?/i))C.S.push({k:m[1].toLowerCase(),n:lab(m[2]),d:items(m[3]).map(pn)})}
+  return C}
+function xychart(src,ft){
+  const C=xyParse(src);if(!C.t)C.t=ft||'';const S=C.S.filter(s=>s.d.some(v=>v!=null));if(!S.length)return null;
+  let n=Math.max(...S.map(s=>s.d.length)),cats;
+  if(C.x.c&&C.x.c.length){cats=C.x.c.slice();n=Math.max(n,cats.length)}
+  else if(C.x.r){const[a,b]=C.x.r;cats=Array.from({length:n},(_,i)=>vf(n>1?a+(b-a)*i/(n-1):a))}
+  else cats=Array.from({length:n},(_,i)=>String(i+1));
+  while(cats.length<n)cats.push('');
+  S.forEach((s,k)=>{s.c=PC(k);if(!s.n&&S.length>1)s.n='ряд '+(k+1)});
+  const B=S.filter(s=>s.k==='bar'),Ln=S.filter(s=>s.k==='line'),nb=B.length,vals=S.flatMap(s=>s.d.filter(v=>v!=null));
+  let lo=Math.min(...vals),hi=Math.max(...vals),sc;
+  const yr=C.y.r&&C.y.r[0]!==C.y.r[1]?[Math.min(...C.y.r),Math.max(...C.y.r)]:null;
+  if(yr){const fix=lo>=yr[0]&&hi<=yr[1];sc=axisScale(Math.min(lo,yr[0]),Math.max(hi,yr[1]),fix)}
+  else{if(nb||lo>0&&lo<hi/2||hi<0&&hi>lo/2){lo=Math.min(lo,0);hi=Math.max(hi,0)}sc=axisScale(lo,hi,false)}
+  const base=Math.min(Math.max(0,sc.lo),sc.hi),span=sc.hi-sc.lo,lg=legend(S.some(s=>s.n)?S.map(s=>[s.n||'',s.c,s.k==='line'?'ln':'']):[]);
+  const tick=sc.t.map(sc.f),tl=Math.max(...tick.map(tw));
+  let o='',lb='',gr='',ax='',W,H;
+  const bar=(s,i,v,x,y,w,h)=>'<g>'+tip(s.n,cats[i],v)+(w>=8&&h>=4?'<rect class="gsh" x="'+(x+3)+'" y="'+(y+3)+'" width="'+w+'" height="'+(h-3)+'"/>':'')+'<rect class="xbr" x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" style="fill:'+s.c+'"/></g>';
+  const dot=(s,i,v,x,y)=>'<g>'+tip(s.n,cats[i],v)+'<rect class="xpt" x="'+(x-4)+'" y="'+(y-4)+'" width="8" height="8" style="fill:'+s.c+'"/></g>';
+  const poly=(s,P)=>{let d='',pv=-2;P.forEach(p=>{d+=(p[3]===pv+1?'L':'M')+p[0]+' '+p[1];pv=p[3]});return '<path class="xlo" d="'+d+'"/><path class="xln" d="'+d+'" style="stroke:'+s.c+'"/>'};
+  if(!C.hz){
+    /* вертикально: категории внизу, значения слева */
+    const PH=196,lw0=Math.max(8,...cats.map(c=>Math.max(...wrap(c,14).map(tw))));
+    let bw=Math.max(nb?nb*26+(nb-1)*4+22:44,Math.min(lw0+12,128));
+    if(n*bw<300)bw=300/n;if(n*bw>640)bw=Math.max(640/n,nb?nb*4+(nb-1)*2+4:8);
+    const PW=q2(n*bw),gap=nb>1?(bw>60?4:2):0,bwd=nb?Math.max(2,Math.min(48,q2((bw*.72-(nb-1)*gap)/nb))):0,G=nb*bwd+(nb-1)*gap;
+    let XL=cats.map(c=>wrap(c,Math.max(1,Math.floor((bw-6)/FS))));
+    if(XL.some(L=>L.length>3||L.some(l=>tw(l)>bw-2))){const ev=Math.ceil((Math.min(lw0,112)+12)/bw);XL=cats.map((c,i)=>i%ev?[]:[fit(c,ev*bw-10)])}
+    const lbB=nb&&!Ln.length&&B.every(s=>s.d.every(v=>v==null||tw(vf(v))<=(nb>1?bwd+gap+2:bw-6))),lbL=!nb&&Ln.length===1&&n<=16&&Ln[0].d.every(v=>v==null||tw(vf(v))<=bw-4);
+    const yw=tl+14,tp=(C.y.t?22:0)+16,ox=yw,oy=tp,xh=Math.max(1,...XL.map(L=>L.length))*LH+12;
+    W=yw+PW+12;H=tp+PH+xh+(C.x.t?20:0)+4;
+    const Y=v=>q2(oy+PH-(v-sc.lo)/span*PH),cx=i=>q2(ox+i*bw+bw/2),y0=Y(base);
+    sc.t.forEach((v,k)=>{const y=Y(v);if(v!==sc.lo)gr+='<path class="xgr" d="M'+(ox+2)+' '+y+'h'+PW+'"/>';ax+='<path class="xax" d="M'+(ox-5)+' '+y+'h4"/>';lb+=TX(ox-9,y,[tick[k]],'tm','end')});
+    B.forEach((s,j)=>s.d.forEach((v,i)=>{if(v==null)return;const x=q2(cx(i)-G/2+j*(bwd+gap)),y=Y(v);let t=Math.min(y,y0),h=Math.abs(y-y0);
+      if(v!==base&&h<2){h=2;t=v<base?y0:y0-2}
+      if(h)o+=bar(s,i,v,x,t,bwd,h);
+      if(lbB)lb+=TX(x+bwd/2,v>=base?t-9:t+h+9,[vf(v)])}));
+    Ln.forEach(s=>{const P=[];s.d.forEach((v,i)=>{if(v!=null)P.push([cx(i),Y(v),v,i])});o+=poly(s,P);
+      if(bw>=12)P.forEach(p=>{o+=dot(s,p[3],p[2],p[0],p[1]);if(lbL)lb+=TX(p[0],p[1]-14,[vf(p[2])])})});
+    ax+='<path class="xax" d="M'+ox+' '+(oy-6)+'V'+(oy+PH)+'H'+(ox+PW+4)+'"/>';
+    if(sc.lo<0&&sc.hi>0)ax+='<path class="xax" d="M'+ox+' '+Y(0)+'h'+PW+'"/>';
+    XL.forEach((L,i)=>{if(!L.length)return;const x=cx(i);ax+='<path class="xax" d="M'+x+' '+(oy+PH)+'v5"/>';lb+=TX(x,oy+PH+15+(L.length-1)*LH/2,L)});
+    if(C.y.t)lb+=TX(2,8,[fit(C.y.t,W-4)],'tm','start');
+    if(C.x.t)lb+=TX(ox+PW/2,H-12,[fit(C.x.t,W-4)],'tm')}
+  else{
+    /* горизонтально: категории слева, значения внизу */
+    const XL=cats.map(c=>wrap(c,18)),LW=Math.min(160,Math.max(8,...XL.map(L=>Math.max(...L.map(tw)))))+14,XL2=XL.map(L=>L.slice(0,4).map(l=>fit(l,LW-14)));
+    const bh=Math.max(nb?nb*16+(nb-1)*2+14:30,Math.max(...XL2.map(L=>L.length))*LH+10),gap=nb>1?2:0,bt=nb?Math.max(4,Math.min(26,q2((bh*.72-(nb-1)*gap)/nb))):0,G=nb*bt+(nb-1)*gap;
+    const PW=320,PH=q2(n*bh),lbB=nb>0&&!Ln.length,rp=lbB?Math.max(...vals.map(v=>tw(vf(v))))+14:14,tp=(C.x.t?22:0)+8,ox=LW,oy=tp;
+    W=LW+PW+rp;H=tp+PH+28+(C.y.t?20:0);
+    const X=v=>q2(ox+(v-sc.lo)/span*PW),cy=i=>q2(oy+i*bh+bh/2),x0=X(base);
+    sc.t.forEach((v,k)=>{const x=X(v);if(v!==sc.lo)gr+='<path class="xgr" d="M'+x+' '+oy+'v'+(PH-2)+'"/>';ax+='<path class="xax" d="M'+x+' '+(oy+PH+1)+'v4"/>';lb+=TX(x,oy+PH+15,[tick[k]],'tm')});
+    B.forEach((s,j)=>s.d.forEach((v,i)=>{if(v==null)return;const y=q2(cy(i)-G/2+j*(bt+gap)),x=X(v);let l=Math.min(x,x0),w=Math.abs(x-x0);
+      if(v!==base&&w<2){w=2;l=v<base?x0-2:x0}
+      if(w)o+=bar(s,i,v,l,y,w,bt);
+      if(lbB)lb+=TX(v>=base?l+w+7:l-7,y+bt/2,[vf(v)],'',v>=base?'start':'end')}));
+    Ln.forEach(s=>{const P=[];s.d.forEach((v,i)=>{if(v!=null)P.push([X(v),cy(i),v,i])});o+=poly(s,P);P.forEach(p=>{o+=dot(s,p[3],p[2],p[0],p[1])})});
+    ax+='<path class="xax" d="M'+(ox-4)+' '+(oy+PH)+'H'+(ox+PW+4)+'"/>';
+    ax+='<path class="xax" d="M'+x0+' '+oy+'V'+(oy+PH)+'"/>';
+    XL2.forEach((L,i)=>{lb+=TX(ox-8,cy(i),L,'','end')});
+    if(C.x.t)lb+=TX(2,8,[fit(C.x.t,W-4)],'tm','start');
+    if(C.y.t)lb+=TX(ox+PW/2,H-10,[fit(C.y.t,W-4)],'tm')}
+  return chartCard(W,C.t,lg,psvg(W,H,gr+o+ax+lb,C.t||'график'))}
+
+/* разбор по запятым верхнего уровня: запятые внутри [..], {..}, (..) и "кавычек" не режут */
+const splitTop=(s,sep=',')=>{const r=[];let c='',d=0,q=0;for(const ch of String(s)){if(ch==='"')q^=1;else if(!q&&/[\[{(]/.test(ch))d++;else if(!q&&/[\]})]/.test(ch))d--;if(ch===sep&&!d&&!q){r.push(c.trim());c=''}else c+=ch}if(c.trim())r.push(c.trim());return r};
+const HEX=/^#[0-9a-f]{3,8}$/i;
+/* надписи поверх линий и заливок — с ореолом цвета карточки, чтобы читались */
+const THL=(x,y,L,c,a)=>TX(x,y,L,'hl'+(c?' '+c:''),a);
+/* жадная раскладка подписей: справа, слева, сверху, снизу — где не налезает на соседей */
+function placeLabel(used,x,y,w,h,r,box){
+  const C=[[x+r+5,y,'start'],[x-r-5,y,'end'],[x,y-r-10,'middle'],[x,y+r+10,'middle']];
+  const rect=c=>{const l=c[2]==='start'?c[0]:c[2]==='end'?c[0]-w:c[0]-w/2;return [l-2,c[1]-h/2-1,l+w+2,c[1]+h/2+1]};
+  const ok=b=>(!box||b[0]>=box[0]&&b[2]<=box[2]&&b[1]>=box[1]&&b[3]<=box[3])&&!used.some(u=>b[0]<u[2]&&b[2]>u[0]&&b[1]<u[3]&&b[3]>u[1]);
+  const c=C.find(c=>ok(rect(c)))||C[0];used.push(rect(c));return c}
+
+/* quadrantChart: четыре четверти, точки с подписями */
+function quadrant(src,ft){
+  let t=ft,xa=['',''],ya=['',''];const Q=['','','',''],P=[],cls={};
+  const sty=s=>{const o={};String(s||'').split(',').forEach(p=>{const m=p.match(/^\s*([\w-]+)\s*:\s*(\S+)\s*$/);if(m)o[m[1].toLowerCase()]=m[2]});return o};
+  for(const raw of src.split('\n').slice(1)){const l=raw.trim();let m;if(!l)continue;
+    if(m=l.match(/^title\s+(.+)$/i))t=lab(m[1]);
+    else if(m=l.match(/^([xy])-axis\s+(.*?)(?:\s*-->\s*(.*))?$/i)){const a=[lab(m[2]),lab(m[3]||'')];if(m[1].toLowerCase()==='x')xa=a;else ya=a}
+    else if(m=l.match(/^quadrant-([1-4])\s+(.+)$/i))Q[m[1]-1]=lab(m[2]);
+    else if(m=l.match(/^classDef\s+([\w-]+)\s+(.+)$/))cls[m[1]]=sty(m[2]);
+    else if(m=l.match(/^(.+?)(?::::([\w-]+))?\s*:\s*\[\s*([^,\]]+?)\s*,\s*([^\]]+?)\s*\]\s*(.*)$/)){const x=pn(m[3]),y=pn(m[4]);
+      if(x!=null&&y!=null)P.push({t:lab(m[1]),x:Math.min(1,Math.max(0,x)),y:Math.min(1,Math.max(0,y)),c:m[2],st:sty(m[5])})}}
+  if(!P.length&&!Q.some(Boolean))return null;
+  const S=320,h=S/2,ox=ya[0]||ya[1]?28:8,oy=8,W=ox+S+8,H=oy+S+(xa[0]||xa[1]?26:8);
+  const QC=[2,3,5,4],qi=(x,y)=>y>=.5?(x>=.5?0:1):(x>=.5?3:2),tint=(k,p)=>'color-mix(in srgb,var(--p'+QC[k]+') '+p+'%,var(--card))';
+  let o='',lb='';
+  [[ox+h,oy],[ox,oy],[ox,oy+h],[ox+h,oy+h]].forEach(([x,y],k)=>{o+='<rect x="'+x+'" y="'+y+'" width="'+h+'" height="'+h+'" style="fill:'+tint(k,18)+'"/>';
+    if(Q[k])lb+=THL(x+h/2,y+14+(wrap(Q[k],18).slice(0,3).length-1)*LH/2,wrap(Q[k],18).slice(0,3).map(l=>fit(l,h-12)))});
+  o+='<path class="xgr" d="M'+(ox+h)+' '+oy+'v'+S+'M'+ox+' '+(oy+h)+'h'+S+'"/><rect class="xax" x="'+ox+'" y="'+oy+'" width="'+S+'" height="'+S+'"/>';
+  if(xa[0])lb+=TX(ox+(xa[1]?h/2:h),oy+S+14,[fit(xa[0],(xa[1]?h:S)-8)],'tm');if(xa[1])lb+=TX(ox+h*1.5,oy+S+14,[fit(xa[1],h-8)],'tm');
+  const vt=(y,s)=>'<text class="gt tm" x="12" y="'+y+'" transform="rotate(-90 12 '+y+')" text-anchor="middle" dominant-baseline="central">'+E(s)+'</text>';
+  if(ya[0])lb+=vt(oy+(ya[1]?h*1.5:h),fit(ya[0],(ya[1]?h:S)-8));if(ya[1])lb+=vt(oy+h/2,fit(ya[1],h-8));
+  const used=[],box=[ox+2,oy+2,ox+S-2,oy+S-2],pts=P.map(p=>{const st=Object.assign({},cls[p.c]||{},p.st),r=Math.max(3,Math.min(12,Math.round(+String(st.radius||5).replace(/px$/,'')||5)));
+    const x=q2(ox+p.x*S),y=q2(oy+(1-p.y)*S),k=qi(p.x,p.y);used.push([x-r-1,y-r-1,x+r+1,y+r+1]);return {p,x,y,r,k,c:HEX.test(st.color)?st.color:'var(--p'+QC[k]+')'}});
+  pts.forEach(({p,x,y,r,c})=>{o+='<g>'+tip(p.t,vf(p.x)+', '+vf(p.y))+'<rect class="gsh" x="'+(x-r+2)+'" y="'+(y-r+2)+'" width="'+2*r+'" height="'+2*r+'"/><rect class="xpt" x="'+(x-r)+'" y="'+(y-r)+'" width="'+2*r+'" height="'+2*r+'" style="fill:'+c+'"/></g>'});
+  pts.forEach(({p,x,y,r})=>{if(!p.t)return;const s=fit(p.t,150),c=placeLabel(used,x,y,tw(s),LH,r,box);lb+=THL(c[0],c[1],[s],'',c[2])});
+  return chartCard(W,t,'',psvg(W,H,o+lb,t||'квадранты'))}
+
+/* radar: многоугольник по осям, сетка из колец */
+function radar(src,ft){
+  let t=ft,mx=null,mn=0,tk=5,circ=false,leg=true;const A=[],CV=[];
+  const idl=s=>{const m=String(s).match(/^([^\s\[{]+)\s*(?:\[\s*([\s\S]*?)\s*\])?/);return m?{id:m[1],t:lab(m[2]||m[1])}:null};
+  for(const raw of src.split('\n').slice(1)){const l=raw.trim();let m;if(!l)continue;
+    if(m=l.match(/^title\s+(.+)$/i))t=lab(m[1]);
+    else if(m=l.match(/^axis\s+(.+)$/i))splitTop(m[1]).forEach(x=>{const a=idl(x);if(a)A.push(a)});
+    else if(m=l.match(/^curve\s+(.+)$/i))splitTop(m[1]).forEach(x=>{const c=idl(x),b=x.match(/\{([^}]*)\}/);if(!c||!b)return;
+      const kv={},pos=[];items(b[1]).forEach(e=>{const q=e.match(/^([^:]+?)\s*:\s*(.+)$/);if(q)kv[q[1].trim()]=pn(q[2]);else pos.push(pn(e))});CV.push({t:c.t,kv,pos})});
+    else if(m=l.match(/^(max|min|ticks)\s+(\S+)/i)){const v=pn(m[2]);if(v!=null){const k=m[1].toLowerCase();if(k==='max')mx=v;else if(k==='min')mn=v;else tk=Math.max(1,Math.min(10,Math.round(v)))}}
+    else if(m=l.match(/^graticule\s+(\w+)/i))circ=m[1].toLowerCase()==='circle';
+    else if(m=l.match(/^showLegend\s+(\w+)/i))leg=m[1].toLowerCase()!=='false'}
+  if(!A.length){const n=Math.max(0,...CV.map(c=>c.pos.length));for(let k=0;k<n;k++)A.push({id:String(k+1),t:String(k+1)})}
+  const n=A.length;if(n<3||!CV.length)return null;
+  CV.forEach((c,k)=>{c.v=A.map((a,i)=>a.id in c.kv?c.kv[a.id]:c.pos[i]??null);c.c=PC(k)});
+  const all=CV.flatMap(c=>c.v.filter(v=>v!=null));if(!all.length)return null;
+  let sc;if(mx==null||mx<=mn){sc=axisScale(mn,Math.max(...all),false,tk);mx=sc.hi;tk=sc.t.length-1||1}
+  const R=112,AL=A.map(a=>wrap(a.t,14).slice(0,3).map(l=>fit(l,112))),ang=i=>-Math.PI/2+i*2*Math.PI/n;
+  /* рамка по факту: круг плюс подписи осей, где бы они ни оказались */
+  const LB=AL.map((L,i)=>{const c=Math.cos(ang(i)),s=Math.sin(ang(i)),x=c*(R+12),y=s*(R+12)+(s>.3?(L.length-1)*LH/2+4:s<-.3?-(L.length-1)*LH/2-4:0),w=Math.max(...L.map(tw)),a=c>.3?'start':c<-.3?'end':'middle';
+    return {x,y,L,a,b:[a==='start'?x:a==='end'?x-w:x-w/2,y-L.length*LH/2,a==='start'?x+w:a==='end'?x:x+w/2,y+L.length*LH/2]}});
+  const bx=[-R,-R,R,R];LB.forEach(l=>{bx[0]=Math.min(bx[0],l.b[0]);bx[1]=Math.min(bx[1],l.b[1]);bx[2]=Math.max(bx[2],l.b[2]);bx[3]=Math.max(bx[3],l.b[3])});
+  const cx=Math.ceil(6-bx[0]),cy=Math.ceil(6-bx[1]),W=Math.ceil(bx[2]-bx[0]+12),H=Math.ceil(bx[3]-bx[1]+12),pt=(i,r)=>[cx+Math.cos(ang(i))*r,cy+Math.sin(ang(i))*r];
+  const ring=r=>circ?'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'"':'<polygon points="'+A.map((a,i)=>pt(i,r).map(Math.round).join(',')).join(' ')+'"';
+  let o='',lb='';
+  const ha=-Math.PI/2+Math.PI/n;
+  for(let k=1;k<=tk;k++){const r=R*k/tk;o+=ring(r)+' class="'+(k===tk?'xax':'xgr')+'"/>';lb+=TX(Math.round(cx+Math.cos(ha)*r*(circ?1:Math.cos(Math.PI/n))),Math.round(cy+Math.sin(ha)*r*(circ?1:Math.cos(Math.PI/n))),[vf(mn+(mx-mn)*k/tk)],'tm hl')}
+  A.forEach((a,i)=>{const[x,y]=pt(i,R);o+='<path class="xgr" d="M'+cx+' '+cy+'L'+Math.round(x)+' '+Math.round(y)+'"/>';
+    const l=LB[i];lb+=TX(Math.round(cx+l.x),Math.round(cy+l.y),l.L,'',l.a)});
+  CV.forEach(cv=>{const P=cv.v.map((v,i)=>pt(i,v==null?0:Math.max(0,Math.min(1,(v-mn)/(mx-mn)))*R).map(Math.round)),d='M'+P.map(p=>p.join(' ')).join('L')+'Z';
+    o+='<path class="xrf" d="'+d+'" style="fill:'+cv.c+'"/><path class="xlo" d="'+d+'"/><path class="xln" d="'+d+'" style="stroke:'+cv.c+'"/>';
+    P.forEach((p,i)=>{if(cv.v[i]!=null)o+='<g>'+tip(cv.t,A[i].t,cv.v[i])+'<rect class="xpt" x="'+(p[0]-3)+'" y="'+(p[1]-3)+'" width="6" height="6" style="fill:'+cv.c+'"/></g>'})});
+  return chartCard(W,t,leg?legend(CV.map(c=>[c.t,c.c])):'',psvg(W,H,o+lb,t||'радар'))}
+
+/* sankey: потоки между узлами, ширина ленты — величина */
+function sankey(src,ft){
+  let t=ft;const N=new Map(),Lk=new Map();
+  const csv=l=>{const r=[];let c='',q=false;for(let i=0;i<l.length;i++){const ch=l[i];if(q){if(ch==='"'&&l[i+1]==='"'){c+='"';i++}else if(ch==='"')q=false;else c+=ch}else if(ch==='"')q=true;else if(ch===','){r.push(c.trim());c=''}else c+=ch}r.push(c.trim());return r};
+  const node=id=>{if(!N.has(id))N.set(id,{id,k:N.size,i:[],o:[]});return N.get(id)};
+  for(const raw of src.split('\n').slice(1)){const l=raw.trim();let m;if(!l)continue;
+    if(!l.includes(',')&&(m=l.match(/^title\s+(.+)$/i))){t=lab(m[1]);continue}
+    const f=csv(l),v=f.length>2?pn(f[2]):null;if(v==null||v<=0||!f[0]||!f[1]||f[0]===f[1])continue;
+    const k=f[0]+'\u0001'+f[1];if(Lk.has(k))Lk.get(k).v+=v;else Lk.set(k,{s:node(f[0]),t:node(f[1]),v})}
+  if(!Lk.size)return null;
+  /* петли рвём: обратная лента не нужна для картинки */
+  const st=new Map(),LS=[...Lk.values()],out=new Map([...N.values()].map(n=>[n,LS.filter(l=>l.s===n)]));
+  const dfs=v=>{st.set(v,1);for(const l of out.get(v)){const s=st.get(l.t);if(s===1)l.back=1;else if(!s)dfs(l.t)}st.set(v,2)};
+  N.forEach(n=>{if(!st.get(n))dfs(n)});
+  const L=LS.filter(l=>!l.back),NS=[...N.values()];if(!L.length)return null;
+  L.forEach(l=>{l.s.o.push(l);l.t.i.push(l)});
+  NS.forEach(n=>{n.v=Math.max(n.i.reduce((a,l)=>a+l.v,0),n.o.reduce((a,l)=>a+l.v,0));n.c=0});
+  let ch=true;for(let it=0;ch&&it<NS.length+1;it++){ch=false;L.forEach(l=>{if(l.t.c<l.s.c+1){l.t.c=l.s.c+1;ch=true}})}
+  const CN=Math.max(...NS.map(n=>n.c))+1;NS.forEach(n=>{if(!n.o.length)n.c=CN-1});
+  const cols=Array.from({length:CN},()=>[]);NS.forEach(n=>cols[n.c].push(n));
+  const mc=Math.max(...cols.map(c=>c.length)),pad=18,PH=Math.max(220,Math.min(520,mc*46)),NW=12,PW=Math.max(440,(CN-1)*190+NW);
+  const gapW=CN>1?(PW-NW)/(CN-1)-NW-14:200,lastW=Math.min(200,Math.max(0,...cols[CN-1].map(n=>tw(lab(n.id)+' '+vf(n.v)))));
+  const ky=Math.min(...cols.map(c=>(PH-(c.length-1)*pad)/c.reduce((a,n)=>a+n.v,0)));
+  NS.forEach(n=>{n.h=Math.max(2,n.v*ky);n.x=CN>1?n.c*(PW-NW)/(CN-1):PW/2-NW/2});
+  cols.forEach(c=>{let y=0;c.forEach(n=>{n.y=y;y+=n.h+pad})});
+  const fix=c=>{c.sort((a,b)=>a.y-b.y);let y=0;c.forEach(n=>{if(n.y<y)n.y=y;y=n.y+n.h+pad});let b=PH;for(let k=c.length-1;k>=0;k--){const n=c[k];if(n.y+n.h>b)n.y=b-n.h;b=n.y-pad}};
+  const ctr=(ls,end)=>{let s=0,w=0;ls.forEach(l=>{const m=end?l.s:l.t;s+=(m.y+m.h/2)*l.v;w+=l.v});return w?s/w:null};
+  for(let it=0,a=1;it<8;it++,a*=.8){
+    for(let k=1;k<CN;k++){cols[k].forEach(n=>{const c=ctr(n.i,1);if(c!=null)n.y+=(c-n.h/2-n.y)*a});fix(cols[k])}
+    for(let k=CN-2;k>=0;k--){cols[k].forEach(n=>{const c=ctr(n.o,0);if(c!=null)n.y+=(c-n.h/2-n.y)*a});fix(cols[k])}}
+  NS.forEach(n=>{n.o.sort((a,b)=>a.t.y-b.t.y);n.i.sort((a,b)=>a.s.y-b.s.y);let y=n.y;n.o.forEach(l=>{l.y0=y;y+=l.v*ky});y=n.y;n.i.forEach(l=>{l.y1=y;y+=l.v*ky})});
+  const ox=8,oy=8,W=PW+ox+lastW+20,H=PH+2*oy,r=Math.round;let o='',nd='',lb='';
+  L.sort((a,b)=>b.v-a.v).forEach(l=>{const w=Math.max(1,l.v*ky),x0=ox+l.s.x+NW,x1=ox+l.t.x,xm=(x0+x1)/2,a=oy+l.y0,b=oy+l.y1;
+    o+='<path class="xsk" style="fill:'+PC(l.s.k)+'" d="M'+x0+' '+r(a)+'C'+r(xm)+' '+r(a)+' '+r(xm)+' '+r(b)+' '+x1+' '+r(b)+'V'+r(b+w)+'C'+r(xm)+' '+r(b+w)+' '+r(xm)+' '+r(a+w)+' '+x0+' '+r(a+w)+'Z">'+tip(l.s.id+' → '+l.t.id,vf(l.v))+'</path>'});
+  NS.forEach(n=>{const x=r(ox+n.x),y=q2(oy+n.y),h=Math.max(2,q2(n.h));
+    nd+='<g>'+tip(n.id,vf(n.v))+'<rect class="xbr" x="'+x+'" y="'+y+'" width="'+NW+'" height="'+h+'" style="fill:'+PC(n.k)+'"/></g>';
+    const v=vf(n.v),s=fit(lab(n.id),(n.c===CN-1?200:gapW)-tw(v)-8);
+    lb+='<text class="gt hl" x="'+(x+NW+6)+'" y="'+(y+h/2)+'" text-anchor="start" dominant-baseline="central">'+E(s)+'<tspan class="tm"> '+E(v)+'</tspan></text>'});
+  return chartCard(W,t,'',psvg(W,H,o+nd+lb,t||'потоки'))}
+
+/* treemap: плитки, площадь — доля; разделы — рамки с заголовком */
+function treemap(src,ft){
+  let t=ft;const root={c:[],d:-1,t:''},st=[root];
+  for(const raw of src.split('\n').slice(1)){const l=raw.trim();let m;if(!l||/^classDef\b/.test(l))continue;
+    if(m=l.match(/^title\s+(.+)$/i)){t=lab(m[1]);continue}
+    m=l.replace(/:::[\w-]+\s*$/,'').match(/^(?:"([^"]*)"|'([^']*)'|([^:]+?))\s*(?::\s*([^\s:]+))?\s*$/);if(!m)continue;
+    const d=ind(raw),n={t:lab(m[1]??m[2]??m[3]),v:m[4]!=null?pn(m[4]):null,c:[],d};
+    while(st.length>1&&st[st.length-1].d>=d)st.pop();st[st.length-1].c.push(n);st.push(n)}
+  const sum=n=>n.s=n.c.length?n.c.reduce((a,c)=>a+sum(c),0):Math.max(0,n.v||0);
+  if(!sum(root))return null;
+  const cnt=n=>n.c.length?n.c.reduce((a,c)=>a+cnt(c),0):1,W=480,H=Math.max(240,Math.min(440,cnt(root)*26));
+  const sq=(ns,x,y,w,h)=>{ns=ns.filter(n=>n.s>0).sort((a,b)=>b.s-a.s);const tot=ns.reduce((a,n)=>a+n.s,0);if(!tot||w<=0||h<=0)return;const k=w*h/tot;let i=0;
+    while(i<ns.length){const sh=Math.min(w,h),row=[];let best=Infinity,rs=0;
+      for(let j=i;j<ns.length;j++){const a=ns[j].s*k,r2=rs+a,ar=row.map(n=>n.s*k).concat(a),wr=Math.max(sh*sh*Math.max(...ar)/(r2*r2),r2*r2/(sh*sh*Math.min(...ar)));if(wr>best)break;best=wr;row.push(ns[j]);rs=r2}
+      const th=rs/sh;let o=0;
+      row.forEach(n=>{const len=n.s*k/th;if(w>=h)Object.assign(n,{x:x,y:y+o,w:th,h:len});else Object.assign(n,{x:x+o,y:y,w:len,h:th});o+=len});
+      if(w>=h){x+=th;w-=th}else{y+=th;h-=th}i+=row.length}};
+  let o='',lb='';
+  const draw=(ns,col,dp)=>ns.forEach((n,k)=>{if(!(n.s>0)||n.x==null)return;const c=col??PC(k),x=q2(n.x),y=q2(n.y),w=q2(n.x+n.w)-x,h=q2(n.y+n.h)-y;if(w<2||h<2)return;
+    if(n.c.length){const hd=h>=34&&w>=40?18:0;
+      o+='<g>'+tip(n.t,vf(n.s))+'<rect class="xbr" x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" style="fill:color-mix(in srgb,'+c+' 12%,var(--card))"/>'+(hd?'<rect class="xbr" x="'+x+'" y="'+y+'" width="'+w+'" height="'+hd+'" style="fill:color-mix(in srgb,'+c+' 55%,var(--card))"/>':'')+'</g>';
+      if(hd)lb+=TX(x+6,y+hd/2+1,[fit(n.t,w-12)+(tw(n.t+' '+vf(n.s))<=w-12?' '+vf(n.s):'')],'','start');
+      sq(n.c,x+4,y+hd+4,w-8,h-hd-8);draw(n.c,c,dp+1)}
+    else{o+='<g>'+tip(n.t,vf(n.s))+'<rect class="xbr" x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" style="fill:color-mix(in srgb,'+c+' '+(col?[34,48,26,42][k%4]:44)+'%,var(--card))"/></g>';
+      /* имя (сколько влезет строк) и под ним величина; не влезает имя — только величина */
+      const ch=Math.floor((w-8)/FS),mxl=Math.floor((h-6)/LH),full=ch>=3?wrap(n.t,ch):[],sv=vf(n.s);let L=full.slice(0,mxl);
+      if(L.length&&full.length>L.length)L[L.length-1]=fit(full.slice(L.length-1).join(' '),w-6);
+      if(L.some(l=>tw(l)>w-6))L=[];
+      if(L.length){const v=mxl>L.length&&tw(sv)<=w-6,y0=y+h/2-(L.length+(v?1:0)-1)*LH/2;lb+=TX(x+w/2,y0+(L.length-1)*LH/2,L);if(v)lb+=TX(x+w/2,y0+L.length*LH,[sv],'tm')}
+      else if(h>=LH+2&&tw(sv)<=w-6)lb+=TX(x+w/2,y+h/2,[sv],'tm')}});
+  sq(root.c,2,2,W-4,H-4);draw(root.c,null,0);
+  return chartCard(W,t,'',psvg(W,H,o+lb,t||'доли'))}
+
+/* packet: поля пакета по битам, 32 бита в строке */
+function packet(src,ft){
+  let t=ft,nx=0;const F=[];
+  for(const raw of src.split('\n').slice(1)){const l=raw.trim();let m;if(!l)continue;
+    if(m=l.match(/^title\s+(.+)$/i))t=lab(m[1]);
+    else if(m=l.match(/^(\d+)(?:\s*-\s*(\d+))?\s*:\s*(.+)$/)){const a=+m[1],b=m[2]!=null?+m[2]:a;if(b>=a&&b-a<4096){F.push({a,b,t:lab(m[3])});nx=b+1}}
+    else if(m=l.match(/^\+(\d+)\s*:\s*(.+)$/)){const w=+m[1];if(w&&w<4096){F.push({a:nx,b:nx+w-1,t:lab(m[2])});nx+=w}}}
+  if(!F.length)return null;
+  const mb=Math.max(...F.map(f=>f.b))+1,bpr=mb<=8?8:mb<=16?16:32,BW=bpr===32?16:24,RH=36,RG=16,rows=Math.ceil(mb/bpr);if(rows>64)return null;
+  const W=bpr*BW+4,H=rows*(RH+RG)+4;let o='',lb='';
+  F.forEach((f,k)=>{for(let a=f.a;a<=f.b;){const r=Math.floor(a/bpr),e=Math.min(f.b,(r+1)*bpr-1),x=2+(a%bpr)*BW,y=2+RG+r*(RH+RG),w=(e-a+1)*BW;
+    o+='<g>'+tip(f.t,f.a===f.b?'бит '+f.a:'биты '+f.a+'–'+f.b)+'<rect class="xbr" x="'+x+'" y="'+y+'" width="'+w+'" height="'+RH+'" style="fill:color-mix(in srgb,'+PC(k)+' 30%,var(--card))"/></g>';
+    const ch=Math.floor((w-6)/FS),L=ch>=2?wrap(f.t,ch).slice(0,2):[];
+    if(L.length&&L.every(l=>tw(l)<=w-4))lb+=TX(x+w/2,y+RH/2,L);else if(ch>=2)lb+=TX(x+w/2,y+RH/2,[fit(f.t,w-6)]);
+    else if(tw(f.t)<=RH-6){const cx=x+w/2,cy=y+RH/2;lb+='<text class="gt" x="'+cx+'" y="'+cy+'" transform="rotate(-90 '+cx+' '+cy+')" text-anchor="middle" dominant-baseline="central">'+E(f.t)+'</text>'}
+    const sa=String(a),se=String(e);
+    if(a!==e&&tw(sa)+tw(se)+6<=w)lb+=TX(x+2,y-8,[sa],'tm','start')+TX(x+w-2,y-8,[se],'tm','end');else if(tw(sa)<=w)lb+=TX(x+w/2,y-8,[sa],'tm');
+    a=e+1}});
+  return chartCard(W,t,'',psvg(W,H,o+lb,t||'пакет'))}
+
+/* ===== gantt: даты в формате dateFormat, длительности, after/until, выходные ===== */
+const MON='янв фев мар апр май июн июл авг сен окт ноя дек'.split(' '),MONF='январь февраль март апрель май июнь июль август сентябрь октябрь ноябрь декабрь'.split(' ');
+const WD='вс пн вт ср чт пт сб'.split(' '),WDF='воскресенье понедельник вторник среда четверг пятница суббота'.split(' ');
+const DAY=864e5,p2=n=>String(n).padStart(2,'0');
+/* подписи шкалы — strftime как в d3 (axisFormat), месяцы по-русски */
+const strf=(f,d)=>f.replace(/%([-_0]?)([a-zA-Z%])/g,(m,fl,c)=>{let v;switch(c){
+  case 'Y':return d.getFullYear();case 'y':v=p2(d.getFullYear()%100);break;case 'm':v=p2(d.getMonth()+1);break;case 'd':v=p2(d.getDate());break;case 'e':return d.getDate();
+  case 'H':v=p2(d.getHours());break;case 'I':v=p2(d.getHours()%12||12);break;case 'M':v=p2(d.getMinutes());break;case 'S':v=p2(d.getSeconds());break;case 'L':return String(d.getMilliseconds()).padStart(3,'0');
+  case 'p':return d.getHours()<12?'AM':'PM';case 'b':case 'h':return MON[d.getMonth()];case 'B':return MONF[d.getMonth()];case 'a':return WD[d.getDay()];case 'A':return WDF[d.getDay()];
+  case 'j':return String(Math.round((new Date(d.getFullYear(),d.getMonth(),d.getDate())-new Date(d.getFullYear(),0,1))/DAY)+1).padStart(3,'0');case 'u':return d.getDay()||7;case 'w':return d.getDay();
+  case '%':return '%';default:return m}
+  return fl==='-'?String(+v):v});
+/* разбор даты по dateFormat (токены dayjs: YYYY MM DD HH mm ss, X — секунды Unix, x — миллисекунды) */
+const MNS=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+function dparse(s,fmt){
+  s=String(s||'').trim();if(!s)return null;
+  if(/^[Xx]$/.test(fmt)){const n=pn(s);return n==null?null:new Date(fmt==='X'?n*1e3:n)}
+  const T={YYYY:'(\\d{4})',YY:'(\\d{2})',MMMM:'([^\\d\\s,.]+)',MMM:'([^\\d\\s,.]+)',MM:'(\\d{1,2})',M:'(\\d{1,2})',DD:'(\\d{1,2})',Do:'(\\d{1,2})(?:st|nd|rd|th)?',D:'(\\d{1,2})',HH:'(\\d{1,2})',H:'(\\d{1,2})',hh:'(\\d{1,2})',h:'(\\d{1,2})',mm:'(\\d{2})',m:'(\\d{1,2})',ss:'(\\d{2})',s:'(\\d{1,2})',SSS:'(\\d{3})',SS:'(\\d{2})',S:'(\\d)',A:'(AM|PM)',a:'(am|pm)',ZZ:'(?:[+-]\\d{4})',Z:'(?:[+-]\\d{2}:?\\d{2}|Z)'};
+  const K=[],re=fmt.trim().replace(/\[([^\]]*)\]|YYYY|YY|MMMM|MMM|MM|M|DD|Do|D|HH|H|hh|h|mm|m|ss|s|SSS|SS|S|A|a|ZZ|Z|[.*+?^${}()|\\\/]/g,(t,lit)=>{if(lit!=null)return lit.replace(/[.*+?^${}()|[\]\\\/]/g,'\\$&');if(T[t]){if(!/^Z/.test(t))K.push(t);return T[t]}return '\\'+t});
+  const m=s.match(new RegExp('^'+re+'$','i'));
+  if(!m){if(/^\d{4}-\d{2}-\d{2}/.test(s)){const d=new Date(s.length===10?s+'T00:00':s);return isNaN(d)?null:d}return null}
+  let y=new Date().getFullYear(),M=0,D=1,h=0,mi=0,se=0,ms=0,pm=null;
+  K.forEach((k,i)=>{const v=m[i+1];switch(k){case 'YYYY':y=+v;break;case 'YY':y=2000+ +v;break;case 'MM':case 'M':M=v-1;break;case 'MMMM':case 'MMM':{const q=v.toLowerCase().slice(0,3);M=Math.max(MNS.indexOf(q),MON.indexOf(q));break}
+    case 'DD':case 'D':case 'Do':D=+v;break;case 'HH':case 'H':case 'hh':case 'h':h=+v;break;case 'mm':case 'm':mi=+v;break;case 'ss':case 's':se=+v;break;case 'SSS':ms=+v;break;case 'SS':ms=v*10;break;case 'S':ms=v*100;break;case 'A':case 'a':pm=/p/i.test(v)}});
+  if(pm!=null)h=h%12+(pm?12:0);
+  const d=new Date(y,M,D,h,mi,se,ms);return isNaN(d)||d.getMonth()!==((M%12)+12)%12?null:d}
+const addT=(d,n,u)=>{const r=new Date(d);switch(u){case 'ms':r.setTime(+r+n);break;case 's':r.setTime(+r+n*1e3);break;case 'm':r.setTime(+r+n*6e4);break;case 'h':r.setTime(+r+n*36e5);break;
+  case 'w':n*=7;case 'd':r.setDate(r.getDate()+Math.trunc(n));if(n%1)r.setTime(+r+(n%1)*DAY);break;case 'M':r.setMonth(r.getMonth()+Math.round(n));break;case 'y':r.setFullYear(r.getFullYear()+Math.round(n));break}return r};
+const DUR=/^(\d+(?:\.\d+)?)\s*(ms|s|m|h|d|w|M|y)$/;
+function gantt(src,ft){
+  let t=ft,df='YYYY-MM-DD',af='',ti='',inc=false,tm=true,sec='',wke=[6,0];const EX=[],IN=[],R=[],SC=[];
+  const WN={sunday:0,monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6};
+  for(const raw of src.split('\n').slice(1)){const l=raw.trim().replace(/\s*;\s*$/,'');let m;if(!l||/^(click|accTitle|accDescr|displayMode|topAxis)\b/i.test(l))continue;
+    if(m=l.match(/^title\s+(.+)$/i))t=lab(m[1]);
+    else if(m=l.match(/^dateFormat\s+(.+)$/i))df=m[1].trim();
+    else if(m=l.match(/^axisFormat\s+(.+)$/i))af=m[1].trim();
+    else if(m=l.match(/^tickInterval\s+(.+)$/i))ti=m[1].trim();
+    else if(m=l.match(/^excludes\s+(.+)$/i))EX.push(...m[1].split(/[,\s]+/).filter(Boolean).map(x=>x.toLowerCase()));
+    else if(m=l.match(/^includes\s+(.+)$/i))IN.push(...m[1].split(/[,\s]+/).filter(Boolean));
+    else if(m=l.match(/^weekend\s+(\w+)/i))wke=m[1].toLowerCase()==='friday'?[5,6]:[6,0];
+    else if(/^weekday\s/i.test(l))continue;
+    else if(m=l.match(/^todayMarker\s+(.+)$/i))tm=m[1].trim().toLowerCase()!=='off';
+    else if(/^inclusiveEndDates\b/i.test(l))inc=true;
+    else if(m=l.match(/^section\s+(.*)$/i)){sec=lab(m[1]);SC.push(sec)}
+    else if(m=l.match(/^([^:]+?)\s*:\s*(.*)$/)){
+      const d=m[2].split(',').map(x=>x.trim()),tg=new Set();while(d.length&&/^(active|done|crit|milestone|vert)$/i.test(d[0]))tg.add(d.shift().toLowerCase());
+      const tk={n:lab(m[1]),sec,tg,k:R.length};
+      if(d.length>=3){tk.id=d[0];tk.s=d[1];tk.e=d[2]}else if(d.length===2){tk.s=d[0];tk.e=d[1]}else tk.e=d[0]||'';
+      R.push(tk)}}
+  if(!R.length)return null;
+  const exDay=d=>{const key=d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
+    if(IN.some(x=>{const q=dparse(x,df);return q&&q.toDateString()===d.toDateString()}))return false;
+    return EX.some(x=>x==='weekends'?wke.includes(d.getDay()):x in WN?WN[x]===d.getDay():x===key||(()=>{const q=dparse(x,df);return q&&q.toDateString()===d.toDateString()})())};
+  const ids=new Map();R.forEach(x=>{if(x.id)ids.set(x.id,x)});
+  const now=new Date();now.setHours(0,0,0,0);
+  /* зависимости «after» могут ссылаться вперёд: решаем проходами */
+  const prevEnd=x=>x.k?R[x.k-1].E:now;
+  for(let pass=0;pass<=R.length;pass++){let left=0;
+    for(const x of R){if(x.E)continue;
+      let S=null,wait=false;const s=(x.s||'').trim();
+      if(!s){if(x.k&&!R[x.k-1].E)wait=true;else S=prevEnd(x)}
+      else if(/^after\s/i.test(s)){const dep=s.slice(6).trim().split(/\s+/).map(i=>ids.get(i)).filter(Boolean);
+        if(dep.some(q=>!q.E))wait=true;else S=dep.length?new Date(Math.max(...dep.map(q=>+q.E))):x.k&&R[x.k-1].E?R[x.k-1].E:x.k?(wait=true,null):now}
+      else{S=dparse(s,df);if(!S){if(x.k&&!R[x.k-1].E)wait=true;else S=prevEnd(x)}}
+      if(wait){left++;continue}
+      const e=x.e.trim();let E=null,man=false,mm;
+      if(mm=e.match(/^until\s+(.+)$/i)){const dep=mm[1].trim().split(/\s+/).map(i=>ids.get(i)).filter(Boolean);if(dep.some(q=>!q.E)){left++;continue}E=dep.length?new Date(Math.min(...dep.map(q=>+q.S))):S;man=true}
+      else if(E=dparse(e,df)){man=true;if(inc)E=addT(E,1,'d')}
+      else if(mm=e.match(DUR))E=addT(S,+mm[1],mm[2]);
+      else E=x.tg.has('milestone')||x.tg.has('vert')?S:addT(S,1,'d');
+      let RE=E;
+      if(EX.length&&!man){let c=addT(S,1,'d'),bad=false;RE=null;for(let g=0;c<=E&&g<3700;g++){if(!bad)RE=new Date(E);bad=exDay(c);if(bad)E=addT(E,1,'d');c=addT(c,1,'d')}RE=RE||E}
+      if(E<S)E=RE=S;
+      x.S=S;x.E=E;x.RE=RE}
+    if(!left)break}
+  const TK=R.filter(x=>x.S&&!x.tg.has('vert')),VT=R.filter(x=>x.S&&x.tg.has('vert'));if(!TK.length)return null;
+  let t0=Math.min(...R.filter(x=>x.S).map(x=>+x.S)),t1=Math.max(...R.filter(x=>x.S).map(x=>+x.E));
+  const timed=R.some(x=>x.S&&(x.S.getHours()||x.S.getMinutes()||x.E.getHours()||x.E.getMinutes()));
+  if(t1<=t0){const p=timed?18e5:DAY/2;t0-=p;t1+=p}
+  const span=t1-t0;
+  /* шкала: шаг такой, чтобы подписи не налезали */
+  const PW=560,IV=[[6e4,'m',1],[3e5,'m',5],[9e5,'m',15],[18e5,'m',30],[36e5,'h',1],[72e5,'h',2],[108e5,'h',3],[216e5,'h',6],[432e5,'h',12],[DAY,'d',1],[2*DAY,'d',2],[7*DAY,'w',1],[14*DAY,'w',2],[30*DAY,'M',1],[91*DAY,'M',3],[182*DAY,'M',6],[365*DAY,'y',1],[5*365*DAY,'y',5],[10*365*DAY,'y',10]];
+  const fmtOf=u=>af||(u==='m'||u==='h'?'%H:%M':u==='d'||u==='w'?'%e %b':u==='M'?'%b %Y':'%Y');
+  const lw=u=>tw(strf(fmtOf(u),new Date(2024,8,28,23,59)))+16;
+  let iv=IV.find(v=>span/v[0]<=PW/lw(v[1]))||IV[IV.length-1];
+  const tm2=ti.match(/^(\d+)\s*(millisecond|second|minute|hour|day|week|month)s?$/i);
+  if(tm2){const u={millisecond:'ms',second:'s',minute:'m',hour:'h',day:'d',week:'w',month:'M'}[tm2[2].toLowerCase()],n=+tm2[1],ms={ms:1,s:1e3,m:6e4,h:36e5,d:DAY,w:7*DAY,M:30*DAY}[u]*n;if(n&&span/ms<=PW/lw(u))iv=[ms,u,n]}
+  const flo=(d,u,n)=>{const r=new Date(d);if(u==='ms'||u==='s'){r.setMilliseconds(0);return r}r.setSeconds(0,0);if(u==='m'){r.setMinutes(Math.floor(r.getMinutes()/n)*n);return r}r.setMinutes(0);
+    if(u==='h'){r.setHours(Math.floor(r.getHours()/n)*n);return r}r.setHours(0);if(u==='d')return r;if(u==='w'){r.setDate(r.getDate()-((r.getDay()+6)%7));return r}
+    r.setDate(1);if(u==='M'){r.setMonth(Math.floor(r.getMonth()/n)*n);return r}r.setMonth(0);r.setFullYear(Math.floor(r.getFullYear()/n)*n);return r};
+  const ticks=[];for(let d=flo(new Date(t0),iv[1],iv[2]),g=0;+d<=t1&&g<200;d=addT(d,iv[2],iv[1]),g++)if(+d>=t0)ticks.push(d);
+  /* строки: заголовок раздела и задачи */
+  const NL=TK.map(x=>wrap(x.n,22).slice(0,2).map(l=>fit(l,180))),LW=Math.min(184,Math.max(64,...NL.map(L=>Math.max(...L.map(tw))),...SC.map(s=>tw(fit(s,184)))))+18;
+  const ox=LW,oy=26,X=d=>q2(ox+(d-t0)/span*PW),rows=[];let y=oy;const secs=[...new Set(TK.map(x=>x.sec))];
+  secs.forEach((s,si)=>{if(s){rows.push({s,si,y,h:22});y+=22}TK.filter(x=>x.sec===s).forEach(x=>{const h=Math.max(26,NL[TK.indexOf(x)].length*LH+10);rows.push({x,si,y,h,L:NL[TK.indexOf(x)]});y+=h})});
+  const W=ox+PW+14,H=y+(VT.length||tm?22:8);
+  const fd=d=>strf(timed?'%e %b %Y, %H:%M':'%e %b %Y',d),dur=x=>{const ms=x.E-x.S;return ms%DAY||ms<DAY?vf(ms/36e5)+' ч':vf(ms/DAY)+' дн.'};
+  let bg='',gr='',o='',lb='';
+  rows.forEach(r=>{const c=PC(r.si);if(r.s){bg+='<rect x="2" y="'+r.y+'" width="'+(W-4)+'" height="'+r.h+'" style="fill:color-mix(in srgb,'+c+' 20%,var(--card))"/><rect x="2" y="'+r.y+'" width="6" height="'+r.h+'" style="fill:'+c+'"/>';lb+=TX(14,r.y+r.h/2,[fit(r.s,LW+PW-24)],'','start');return}
+    const x=r.x,cy=r.y+r.h/2,cr=x.tg.has('crit'),bc=cr?'var(--err)':c,dn=x.tg.has('done');
+    lb+=TX(14,cy,r.L,dn?'tm':'','start');
+    if(x.tg.has('milestone')){const mx=X(+x.S+(x.E-x.S)/2),P=[[mx,cy-9],[mx+9,cy],[mx,cy+9],[mx-9,cy]];
+      o+='<g>'+tip(x.n,fd(x.S))+'<polygon class="gsh" points="'+P.map(p=>(p[0]+2)+','+(p[1]+2)).join(' ')+'"/><polygon class="xbr" points="'+P.map(p=>p.join(',')).join(' ')+'" style="fill:'+(dn?'color-mix(in srgb,'+bc+' 30%,var(--card))':bc)+'"/></g>';return}
+    const x0=X(x.S),w=Math.max(4,X(x.RE)-x0),fill=dn?'color-mix(in srgb,'+bc+' 24%,var(--card))':x.tg.has('active')?bc:'color-mix(in srgb,'+bc+' 58%,var(--card))';
+    o+='<g>'+tip(x.n,fd(x.S)+' – '+fd(x.E),dur(x))+(w>=8?'<rect class="gsh" x="'+(x0+3)+'" y="'+(cy-5)+'" width="'+w+'" height="14"/>':'')+'<rect class="xbr" x="'+x0+'" y="'+(cy-8)+'" width="'+w+'" height="16" style="fill:'+fill+'"/>'
+      +(dn&&w>=16?'<path class="gh" transform="translate('+(x0+4)+' '+(cy-4)+')" d="M0 3h2v2H0zM1 4h2v2H1zM2 5h2v2H2zM3 4h2v2H3zM4 3h2v2H4zM5 2h2v2H5zM6 1h2v2H6z"/>':'')+'</g>'});
+  /* выходные — штриховкой, если дни ещё различимы */
+  if(EX.length&&span<=200*DAY)for(let d=flo(new Date(t0),'d',1),g=0;+d<t1&&g<400;d=addT(d,1,'d'),g++)if(exDay(d)){const a=Math.max(ox,X(d)),b=Math.min(ox+PW,X(addT(d,1,'d')));if(b>a)gr+='<rect class="xgx" x="'+a+'" y="'+oy+'" width="'+(b-a)+'" height="'+(y-oy)+'"/>'}
+  ticks.forEach(d=>{const x=X(d);gr+='<path class="xgr" d="M'+x+' '+(oy-4)+'V'+y+'"/>';lb+=TX(x,oy-12,[strf(fmtOf(iv[1]),d)],'tm')});
+  gr+='<path class="xax" d="M'+ox+' '+oy+'h'+PW+'M'+ox+' '+(oy-4)+'V'+y+'"/>';
+  const mark=(d,s,c)=>{const x=X(d);o+='<path class="'+c+'" d="M'+x+' '+oy+'V'+(y+4)+'"/>';lb+=TX(x,y+12,[s],c==='xtd'?'xtdt':'tm')};
+  VT.forEach(x=>mark(x.S,fit(x.n,120),'xvt'));
+  if(tm&&+now>=t0&&+now<=t1)mark(now,'сегодня','xtd');
+  return chartCard(W,t,'',psvg(W,H,bg+gr+o+lb,t||'диаграмма Ганта'))}
+
+/* journey: шаги пути по разделам, настроение — пиксельные рожицы */
+function journey(src,ft){
+  let t=ft,sec='';const T=[],AC=[];
+  for(const raw of src.split('\n').slice(1)){const l=raw.trim();let m;if(!l||/^(accTitle|accDescr)\b/.test(l))continue;
+    if(m=l.match(/^title\s+(.+)$/i))t=lab(m[1]);
+    else if(m=l.match(/^section\s+(.*)$/i))sec=lab(m[1]);
+    else if(m=l.match(/^(.+?)\s*:\s*(-?\d+(?:\.\d+)?)\s*(?::\s*(.*))?$/)){const a=(m[3]||'').split(',').map(x=>lab(x)).filter(Boolean);a.forEach(x=>{if(!AC.includes(x))AC.push(x)});
+      T.push({n:lab(m[1]),v:Math.max(1,Math.min(5,Math.round(+m[2]))),sc:+m[2],a,sec})}}
+  if(!T.length)return null;
+  const CW=112,G=8,ox=4,secs=[...new Set(T.map(x=>x.sec))],NL=T.map(x=>wrap(x.n,12).slice(0,4).map(l=>fit(l,CW-12))),CH=Math.max(...NL.map(L=>L.length))*LH+14+(AC.length?14:0);
+  const hasS=secs.some(Boolean),sy=4,ty=sy+(hasS?28:0),fy=ty+CH+30,step=20,W=ox*2+T.length*CW+(T.length-1)*G,H=fy+4*step+22;
+  const cx=i=>ox+i*(CW+G)+CW/2,fyv=v=>fy+(5-v)*step;
+  let o='',lb='',ln='';
+  if(hasS)secs.forEach((s,si)=>{const ix=T.map((x,i)=>x.sec===s?i:-1).filter(i=>i>=0),a=ox+ix[0]*(CW+G),b=ox+ix[ix.length-1]*(CW+G)+CW;
+    o+='<rect class="xbr" x="'+a+'" y="'+sy+'" width="'+(b-a)+'" height="20" style="fill:'+PC(si)+'"/>';lb+=TX((a+b)/2,sy+10,[fit(s||'—',b-a-12)],'on')});
+  /* линия настроения: от рожицы к рожице */
+  const P=T.map((x,i)=>[q2(cx(i)),fyv(x.v)]);ln='<path class="xjl" d="M'+P.map(p=>p.join(' ')).join('L')+'"/>';
+  T.forEach((x,i)=>{const c=PC(secs.indexOf(x.sec)),l=ox+i*(CW+G),X0=q2(cx(i));
+    o+='<rect class="gsh" x="'+(l+3)+'" y="'+(ty+3)+'" width="'+CW+'" height="'+CH+'"/><rect class="xbr" x="'+l+'" y="'+ty+'" width="'+CW+'" height="'+CH+'" style="fill:color-mix(in srgb,'+c+' 22%,var(--card))"/>';
+    lb+=TX(X0,ty+7+NL[i].length*LH/2,NL[i]);
+    x.a.forEach((a,k)=>{const ax=l+8+k*12;if(ax+8<l+CW-4)o+='<g>'+tip(a)+'<rect class="xpt" x="'+ax+'" y="'+(ty+CH-14)+'" width="8" height="8" style="fill:'+PC(AC.indexOf(a)+1)+'"/></g>'});
+    o+='<path class="xgr" d="M'+X0+' '+(ty+CH+2)+'V'+(P[i][1]-12)+'"/>';
+    const fc=x.v>=4?'var(--p2)':x.v===3?'var(--p4)':'var(--err)',fx=X0,fy0=P[i][1];
+    /* рот: улыбка, черта или грусть — по пикселю */
+    const px=(x,y,w,h)=>'M'+(fx+x)+' '+(fy0+y)+'h'+w+'v'+h+'h'+(-w)+'z',mouth=x.v>=4?px(-5,1,2,2)+px(-3,3,6,2)+px(3,1,2,2):x.v===3?px(-4,3,8,2):px(-3,2,6,2)+px(-5,4,2,2)+px(3,4,2,2);
+    const face=(d)=>'M'+(fx-6+d)+' '+(fy0-9+d)+'h12l3 3v12l-3 3h-12l-3-3v-12z';
+    lb+='<g>'+tip(x.n,'оценка '+x.sc+' из 5',x.a.join(', '))+'<path class="gsh" d="'+face(2)+'"/><path class="xbr" style="fill:'+fc+'" d="'+face(0)+'"/><path class="xfc" d="'+px(-5,-4,2,3)+px(3,-4,2,3)+mouth+'"/></g>'});
+  return chartCard(W,t,legend(AC.map((a,k)=>[a,PC(k+1)])),psvg(W,H,o+ln+lb,t||'путь пользователя'))}
+
+/* kanban: колонки и карточки; @{ ticket, assigned, priority } — значками */
+function kanban(src,ft,fm){
+  const rows=src.split('\n').slice(1).filter(l=>l.trim()&&!/^\s*(accTitle|accDescr)\b/.test(l));if(!rows.length)return null;
+  const base=Math.min(...rows.map(l=>ind(l))),C=[];let t=ft;
+  const tb=((fm||'').match(/ticketBaseUrl\s*:\s*['"]?([^'"\s]+)/)||[])[1]||'';
+  const node=l=>{let s=l.trim(),meta={};const mm=s.match(/@\{([\s\S]*)\}\s*$/);if(mm){s=s.slice(0,mm.index).trim();splitTop(mm[1]).forEach(p=>{const q=p.match(/^\s*([\w-]+)\s*:\s*(.*)$/);if(q)meta[q[1].toLowerCase()]=q[2].trim().replace(/^['"]|['"]$/g,'')})}
+    const m=s.match(/^[^\s\[({]*\s*(?:\[\s*([\s\S]*?)\s*\]|\(\s*([\s\S]*?)\s*\)|\{\s*([\s\S]*?)\s*\})\s*$/);return {t:lab(m?m[1]??m[2]??m[3]:s),meta}};
+  for(const l of rows){const s=l.trim();let m;if(m=s.match(/^title\s+(.+)$/i)){t=lab(m[1]);continue}
+    if(ind(l)<=base||!C.length)C.push({...node(l),it:[]});else C[C.length-1].it.push(node(l))}
+  const PR={'very high':'var(--err)',high:'var(--p6)',medium:'var(--p4)',low:'var(--p2)','very low':'var(--mut)'};
+  const card=x=>{const m=x.meta,pr=(m.priority||'').toLowerCase(),tk=m.ticket?(tb&&okUrl(tb.replace('#TICKET#',m.ticket))?a(tb.replace('#TICKET#',encodeURIComponent(m.ticket)),E(m.ticket)):E(m.ticket)):'';
+    return '<div class="xki"'+(PR[pr]?' style="--pr:'+PR[pr]+'"':'')+'><span>'+E(x.t)+'</span>'+(tk||m.assigned||m.priority?'<div class="xkm">'+(tk?'<span>'+tk+'</span>':'')+(m.priority?'<span class="xkp">'+E(m.priority)+'</span>':'')+(m.assigned?'<span>@'+E(m.assigned)+'</span>':'')+'</div>':'')+'</div>'};
+  return (t?'<b class="xpt xkt">'+E(t)+'</b>':'')+'<div class="xkb">'+C.map((c,k)=>'<div class="xkc" style="--c:'+PC(k)+'"><div class="xkh"><span>'+E(c.t)+'</span><b>'+c.it.length+'</b></div>'+c.it.map(card).join('')+(c.it.length?'':'<div class="xke">пусто</div>')+'</div>').join('')+'</div>'}
+
+/* ===== gitGraph: ветки — дорожки, коммиты — пиксельные кружки ===== */
+function gitgraph(src){
+  const dir=(src.split('\n')[0].match(/\b(LR|TB|BT)\b/i)||[])[1]?.toUpperCase()||'LR',B=new Map(),C=[],byId=new Map();let cur='main',seq=0;
+  const br=(n,ord)=>{if(!B.has(n))B.set(n,{n,ord:ord??null,k:B.size,head:null,first:null,base:null});const b=B.get(n);if(ord!=null)b.ord=ord;return b};
+  const attrs=s=>{const o={};String(s).replace(/(\w+)\s*:\s*(?:"([^"]*)"|(\S+))/g,(m,k,q,v)=>{o[k.toLowerCase()]=q??v});return o};
+  const add=(b,o,par,kind)=>{const c={id:o.id||'',b,par:par.filter(Boolean),type:(o.type||'').toUpperCase(),tag:o.tag||'',msg:o.msg||'',kind,i:seq++};C.push(c);if(c.id)byId.set(c.id,c);b.head=c;if(!b.first)b.first=c;return c};
+  const nm=s=>s.replace(/^"|"$/g,'');br('main');
+  for(let l of src.split('\n').slice(1)){l=l.trim();let m;if(!l||/^(accTitle|accDescr)\b/.test(l))continue;if(seq>400)break;
+    if(m=l.match(/^commit\b(.*)$/i)){const b=br(cur);add(b,attrs(m[1]),[b.head||b.base],'c')}
+    else if(m=l.match(/^branch\s+("[^"]+"|\S+)(.*)$/i)){const o=attrs(m[2]),b=br(nm(m[1]),o.order!=null?+o.order:null),s=br(cur);if(!b.head)b.base=s.head||s.base;cur=b.n}
+    else if(m=l.match(/^(?:checkout|switch)\s+("[^"]+"|\S+)/i)){cur=nm(m[1]);br(cur)}
+    else if(m=l.match(/^merge\s+("[^"]+"|\S+)(.*)$/i)){const s=br(nm(m[1])),t=br(cur);if(!s.head||s.head===t.head)continue;add(t,attrs(m[2]),[t.head||t.base,s.head],'m')}
+    else if(m=l.match(/^cherry-pick\b(.*)$/i)){const o=attrs(m[1]),f=byId.get(o.id),b=br(cur);if(!f)continue;const c=add(b,{tag:o.tag},[b.head||b.base],'p');c.from=f;c.msg='cherry-pick '+f.id}}
+  if(!C.length)return null;
+  const BL=[...B.values()].sort((a,b)=>(a.ord??a.k)-(b.ord??b.k)||a.k-b.k);BL.forEach((b,i)=>b.ln=i);
+  const hz=dir==='LR',lbl=c=>c.id||'',mw=Math.max(0,...C.map(c=>tw(fit(lbl(c),112))));
+  const CS=hz?Math.max(40,Math.min(124,mw+14)):36,LS=hz?(mw?58:44)+(C.some(c=>c.tag)?14:0):Math.max(60,mw+44),bw=Math.max(...BL.map(b=>tw(fit(b.n,140))))+16;
+  /* u — вдоль времени, v — поперёк дорожек; TB/BT — те же координаты, повёрнутые */
+  const tg=C.some(c=>c.tag),tgw=tg?Math.max(...C.map(c=>tw(fit(c.tag,100))))+30:0,ou=hz?bw+24:40,ov=hz?(tg?36:22):Math.max(bw/2,mw?mw+22:0)+8,U=ou+(C.length-1)*CS;
+  const P=(u,v)=>hz?[u,v]:dir==='TB'?[v,u]:[v,U+ou-u];
+  const vy=b=>ov+b.ln*LS,uu=c=>ou+c.i*CS,pt=(u,v)=>P(u,v).join(' ');
+  let ln='',o='',lb='',lane='';
+  BL.forEach(b=>{const v=vy(b),[x,y]=P(hz?6:dir==='TB'?4:22,v);lane+='<path class="xgr" d="M'+pt(b.first?uu(b.first):ou,v)+'L'+pt(U+12,v)+'"/>';
+    const w=tw(fit(b.n,140))+12;o+=hz?'<rect class="xbr" x="'+x+'" y="'+(y-9)+'" width="'+w+'" height="18" style="fill:'+PC(b.k)+'"/>'+TX(x+6,y,[fit(b.n,140)],'on','start')
+      :'<rect class="xbr" x="'+(x-w/2)+'" y="'+y+'" width="'+w+'" height="18" style="fill:'+PC(b.k)+'"/>'+TX(x,y+9,[fit(b.n,140)],'on')});
+  C.forEach(c=>c.par.forEach((p,j)=>{const a=[uu(p),vy(p.b)],z=[uu(c),vy(c.b)];let d;
+    if(a[1]===z[1])d=[a,z];else if(j===0&&c===c.b.first)d=[a,[a[0],z[1]],z];else d=[a,[z[0],a[1]],z];
+    ln+='<path class="xgl" style="stroke:'+PC((j===0&&c===c.b.first?c.b:p.b).k)+'" d="M'+d.map(q=>pt(q[0],q[1])).join('L')+'"/>'}));
+  C.filter(c=>c.from).forEach(c=>{ln+='<path class="xgl dot" style="stroke:'+PC(c.from.b.k)+'" d="M'+pt(uu(c.from),vy(c.from.b))+'L'+pt(uu(c),vy(c.b))+'"/>'});
+  C.forEach(c=>{const[x,y]=P(uu(c),vy(c.b)),col=PC(c.b.k),r=c.type==='HIGHLIGHT'?9:7,sq=(r,cl,st)=>'<path class="'+cl+'"'+(st?' style="'+st+'"':'')+' d="M'+(x-r+3)+' '+(y-r)+'h'+(2*r-6)+'l3 3v'+(2*r-6)+'l-3 3h'+(6-2*r)+'l-3-3v'+(6-2*r)+'z"/>';
+    o+='<g>'+tip(c.id||'коммит '+(c.i+1),c.b.n,c.msg,c.tag&&'тег '+c.tag)+sq(r,'xbr','fill:'+(c.kind==='p'?'var(--card)':col))
+      +(c.kind==='m'?'<rect class="xpt" x="'+(x-3)+'" y="'+(y-3)+'" width="6" height="6" style="fill:var(--card)"/>':'')
+      +(c.type==='HIGHLIGHT'?'<rect x="'+(x-3)+'" y="'+(y-3)+'" width="6" height="6" style="fill:var(--card)"/>':'')
+      +(c.type==='REVERSE'?'<path class="ge" d="M'+(x-4)+' '+(y-4)+'l8 8m0-8l-8 8"/>':'')
+      +(c.kind==='p'?'<rect x="'+(x-3)+'" y="'+(y-3)+'" width="6" height="6" style="fill:'+col+'"/>':'')+'</g>';
+    if(lbl(c))lb+=hz?TX(x,y+r+11,[fit(lbl(c),112)],'gtl hlb'):TX(x-r-7,y,[fit(lbl(c),112)],'gtl hlb','end');
+    if(c.tag){const t=fit(c.tag,100),w=tw(t)+12,tx=hz?x-w/2:x+r+14,ty=hz?y-r-24:y-8;
+      o+='<polygon class="xbr" style="fill:color-mix(in srgb,var(--p4) 45%,var(--card))" points="'+(hz?[tx,ty,tx+w,ty,tx+w,ty+16,x+4,ty+16,x,ty+20,x-4,ty+16,tx,ty+16]:[tx,ty,tx+w,ty,tx+w,ty+16,tx,ty+16,tx-6,ty+8]).join(' ')+'"/>'+TX(tx+w/2,ty+8,[t])}});
+  const lastV=vy(BL[BL.length-1]);
+  return hz?psvg(U+20,lastV+(mw?32:18),lane+ln+o+lb,'ветки git'):psvg(lastV+Math.max(bw/2,tgw)+12,U+ou+(dir==='BT'?4:12),lane+ln+o+lb,'ветки git')}
+
+/* ===== block-beta: блоки по сетке колонок, вложенные блоки, стрелки ===== */
+function block(src){
+  const root={blk:1,id:'',t:'',span:1,cols:null,items:[]},st=[root],ED=[],N=new Map();
+  const add=it=>{st[st.length-1].items.push(it);if(it.id&&!it.sp&&!it.blk&&!N.has(it.id))N.set(it.id,it)};
+  const EDGE=/^([^\s\[\](){}<>":-]+(?:-[^\s\[\](){}<>":-]+)*)\s*(?:--\s*"([^"]*)"\s*)?(-->|---|-\.->|-\.-|==>|===|--x|--o)\s*(?:\|([^|]*)\|\s*)?([^\s\[\](){}<>":]+)\s*$/;
+  for(const raw of src.split('\n').slice(1)){const l=raw.trim();let m;if(!l||/^(classDef|class|style|accTitle|accDescr)\b/.test(l))continue;
+    if(m=l.match(/^columns\s+(\d+|auto)/i)){st[st.length-1].cols=m[1]==='auto'?null:Math.max(1,Math.min(24,+m[1]));continue}
+    if(l==='end'){if(st.length>1)st.pop();continue}
+    if(m=l.match(/^block(?::([^\s:\["]+))?(?:\[\s*"?([^"\]]*)"?\s*\])?(?::(\d+))?\s*$/)){const b={blk:1,id:m[1]||'',t:lab(m[2]||''),span:+(m[3]||1),cols:null,items:[]};add(b);st.push(b);continue}
+    if(m=l.match(EDGE)){ED.push({a:m[1],b:m[5],op:m[3],t:lab(m[2]||m[4]||'')});continue}
+    let p=0;
+    while(p<l.length){while(l[p]===' ')p++;if(p>=l.length)break;const r=l.slice(p);let mm;
+      if(mm=r.match(/^space(?::(\d+))?(?=\s|$)/)){add({sp:1,span:+(mm[1]||1)});p+=mm[0].length;continue}
+      if(mm=r.match(/^([^\s<\[({"]+)<\[\s*"?([^"\]]*?)"?\s*\]>\(\s*([\w\s,]+?)\s*\)(?::(\d+))?/)){add({id:mm[1],label:lab(mm[2]),shape:'barrow',dir:mm[3].toLowerCase(),span:+(mm[4]||1)});p+=mm[0].length;continue}
+      if(!(mm=r.match(/^[^\s\[\](){}<>":]+/))){p++;continue}
+      let q=mm[0].length,label=null,shape='rect';
+      for(const[o2,c,k]of SHP){if(!r.startsWith(o2,q))continue;let z=q+o2.length;while(r[z]===' ')z++;let t2;
+        if(r[z]==='"'){const e=r.indexOf('"',z+1);if(e<0)continue;t2=r.slice(z+1,e);z=e+1;while(r[z]===' ')z++;if(!r.startsWith(c,z))continue;z+=c.length}
+        else{const e=r.indexOf(c,z);if(e<0)continue;t2=r.slice(z,e);z=e+c.length}
+        label=t2;shape=k;q=z;break}
+      const sp=r.slice(q).match(/^:(\d+)/);if(sp)q+=sp[0].length;
+      add({id:mm[0],label:lab(label==null?mm[0]:label),shape,span:sp?+sp[1]:1});p+=q}}
+  if(!N.size||N.size>200)return null;
+  const GAP=ED.length?26:14;
+  const lay=b=>{const its=b.items,n=b.cols||Math.max(1,its.reduce((s,i)=>s+Math.min(i.span||1,24),0));
+    its.forEach(i=>{if(i.blk)lay(i);else if(i.sp){i.w=0;i.h=0}else{i.L=wrap(i.label,18);const w=Math.max(...i.L.map(tw)),h=i.L.length*LH;
+      i.w=Math.max(w+28,56)+(i.shape==='barrow'?28:/dia|hex|para|trap|flag/.test(i.shape)?24:0);i.h=Math.max(h+20,36)+(i.shape==='dia'?18:i.shape==='circle'||i.shape==='dc'?Math.max(0,w-h):0)}});
+    let c=0,r=0;its.forEach(i=>{const s=Math.min(i.span||1,n);if(c+s>n){r++;c=0}i.c=c;i.r=r;i.s=s;c+=s});
+    b.n=n;b.pad=b===root?0:12;b.tt=b.t?18:0;b.cw=Math.max(24,...its.map(i=>(i.w-(i.s-1)*GAP)/i.s));b.rh=Array(r+1).fill(0);its.forEach(i=>b.rh[i.r]=Math.max(b.rh[i.r],i.h));
+    b.w=b.n*b.cw+(b.n-1)*GAP+2*b.pad;b.h=b.rh.reduce((s,h)=>s+h,0)+r*GAP+2*b.pad+b.tt};
+  const pos=(b,x,y,w)=>{b.x=x;b.y=y;b.W=w;const cw=(w-2*b.pad-(b.n-1)*GAP)/b.n,ry=[];let yy=y+b.pad+b.tt;b.rh.forEach((h,r)=>{ry[r]=yy;yy+=h+GAP});
+    b.items.forEach(i=>{const ix=x+b.pad+i.c*(cw+GAP),iw=i.s*cw+(i.s-1)*GAP;if(i.blk)pos(i,ix,ry[i.r],iw);else{i.x=ix;i.W=iw;i.cy=ry[i.r]+b.rh[i.r]/2}})};
+  lay(root);pos(root,10,10,root.w);
+  let fr='',o='',lb='',ed='';
+  const draw=b=>b.items.forEach(i=>{if(i.blk){fr+='<rect class="gsg" x="'+q2(i.x)+'" y="'+q2(i.y)+'" width="'+q2(i.W)+'" height="'+q2(i.h)+'"/>'+(i.t?TX(q2(i.x)+8,q2(i.y)+10,[fit(i.t,i.W-16)],'tmu','start'):'');draw(i);return}
+    if(i.sp)return;const cx=q2(i.x+i.W/2),cy=q2(i.cy),n={shape:i.shape,w:q2(i.shape==='circle'||i.shape==='dc'?Math.min(i.W,i.h):i.W),h:q2(i.h)};i.n=n;i.X=cx;i.Y=cy;
+    if(i.shape==='barrow'){const l=cx-n.w/2,r=cx+n.w/2,t=cy-n.h/2,bt=cy+n.h/2,k=Math.min(n.h/2,n.w/3),d=i.dir;let P;
+      const R=[[l,t+n.h/4],[r-k,t+n.h/4],[r-k,t],[r,cy],[r-k,bt],[r-k,bt-n.h/4],[l,bt-n.h/4]];
+      P=/left/.test(d)?R.map(([x,y])=>[2*cx-x,y]):/up/.test(d)?R.map(([x,y])=>[cx+(y-cy)*n.w/n.h,cy-(x-cx)*n.h/n.w]):/down/.test(d)?R.map(([x,y])=>[cx-(y-cy)*n.w/n.h,cy+(x-cx)*n.h/n.w]):R;
+      if(/^(x|y)$/.test(d))P=d==='x'?[[l,cy],[l+k,t],[l+k,t+n.h/4],[r-k,t+n.h/4],[r-k,t],[r,cy],[r-k,bt],[r-k,bt-n.h/4],[l+k,bt-n.h/4],[l+k,bt]]:[[cx,t],[cx+n.w/2,t+k],[cx+n.w/4,t+k],[cx+n.w/4,bt-k],[cx+n.w/2,bt-k],[cx,bt],[cx-n.w/2,bt-k],[cx-n.w/4,bt-k],[cx-n.w/4,t+k],[cx-n.w/2,t+k]];
+      const pp=P.map(q=>q.map(Math.round).join(',')).join(' ');o+='<polygon class="gsh" transform="translate(3 3)" points="'+pp+'"/><polygon class="gn k-flag" points="'+pp+'"/>'}
+    else o+=shape(n,cx+3,cy+3,'gsh')+shape(n,cx,cy,'gn k-'+n.shape);
+    lb+=TX(cx,cy,i.L,n.shape==='circle'||n.shape==='dc'?'on':'')});
+  draw(root);
+  ED.forEach(e=>{const A=N.get(e.a),Bn=N.get(e.b);if(!A||!Bn||!A.n||!Bn.n||A===Bn)return;
+    const ra={l:A.X-A.n.w/2,r:A.X+A.n.w/2,t:A.Y-A.n.h/2,b:A.Y+A.n.h/2},rb={l:Bn.X-Bn.n.w/2,r:Bn.X+Bn.n.w/2,t:Bn.Y-Bn.n.h/2,b:Bn.Y+Bn.n.h/2};let p;
+    if(ra.l<rb.r-8&&rb.l<ra.r-8){const x=q2((Math.max(ra.l,rb.l)+Math.min(ra.r,rb.r))/2);p=ra.b<=rb.t?[[x,ra.b],[x,rb.t]]:[[x,ra.t],[x,rb.b]]}
+    else if(ra.t<rb.b-8&&rb.t<ra.b-8){const y=q2((Math.max(ra.t,rb.t)+Math.min(ra.b,rb.b))/2);p=ra.r<=rb.l?[[ra.r,y],[rb.l,y]]:[[ra.l,y],[rb.r,y]]}
+    else if(rb.t>=ra.b){const gy=q2(rb.t-GAP/2);p=[[A.X,ra.b],[A.X,gy],[Bn.X,gy],[Bn.X,rb.t]]}
+    else if(rb.b<=ra.t){const gy=q2(rb.b+GAP/2);p=[[A.X,ra.t],[A.X,gy],[Bn.X,gy],[Bn.X,rb.b]]}
+    else{const sx=rb.l>ra.r?ra.r:ra.l;p=[[sx,A.Y],[Bn.X,A.Y],[Bn.X,rb.t>ra.b?rb.t:rb.b]]}
+    const st=e.op.includes('.')?' dot':e.op.includes('=')?' thk':'';ed+='<path class="ge'+st+'" d="M'+p.map(q=>q.join(' ')).join('L')+'"/>';
+    if(/>$/.test(e.op))ed+=head(p,'>',1);else if(/[xo]$/.test(e.op))ed+=head(p,e.op.slice(-1),1);
+    if(e.t){const L=wrap(e.t,16),k=p.length>2?1:0,c=[(p[k][0]+p[k+1][0])/2,(p[k][1]+p[k+1][1])/2].map(Math.round),vt=p[k][0]===p[k+1][0];
+      lb+=vt?TX(c[0]+7,c[1],L,'gtl hlb','start'):TX(c[0],c[1]-6-(L.length-1)*LH/2,L,'gtl hlb')}});
+  return svg(Math.ceil(root.w+24),Math.ceil(root.h+24),fr+ed+o+lb,'блоки')}
+
+/* ===== architecture-beta: сервисы-значки по сторонам света, группы рамками ===== */
+/* значки 12×12: k — контур, c — цвет, w — блик; рисуются пикселями ×3 */
+const AIC={
+  server:['kkkkkkkkkkkk','kcccccccccck','kcwcwcckkcck','kcccccccccck','kkkkkkkkkkkk','kcccccccccck','kcwcwcckkcck','kcccccccccck','kkkkkkkkkkkk','.....kk.....','..kkkkkkkk..','............'],
+  database:['..kkkkkkkk..','.kwwwwwwwwk.','kkkwwwwwwkkk','kcckkkkkkcck','kcccccccccck','kkcccccccckk','kcckkkkkkcck','kcccccccccck','kkcccccccckk','kcckkkkkkcck','.kcccccccck.','..kkkkkkkk..'],
+  disk:['............','.kkkkkkkkkk.','.kcccccccck.','.kcckkkkcck.','.kckwwwwkck.','.kckwkkwkck.','.kckwwwwkck.','.kcckkkkcck.','.kcccccccck.','.kcwcccccck.','.kkkkkkkkkk.','............'],
+  cloud:['............','............','....kkkk....','...kwwwwk...','..kwcccckkk.','.kkcccccwwk.','kwccccccccck','kcccccccccck','kcccccccccck','.kkkkkkkkkk.','............','............'],
+  internet:['...kkkkkk...','.kkcckkcckk.','.kcckcckcck.','kccckcckccck','kkkkkkkkkkkk','kccckcckccck','kccckcckccck','kkkkkkkkkkkk','kccckcckccck','.kcckcckcck.','.kkcckkcckk.','...kkkkkk...'],
+  box:['....kkkk....','..kkwwwwkk..','kkwwwwwwwwkk','kckkwwwwkkck','kccckkkkccck','kcccckkcccck','kcccckkcccck','kcccckkcccck','kcccckkcccck','kkkcckkcckkk','...kkkkkk...','............']};
+const AICC={server:'var(--p5)',database:'var(--p3)',disk:'var(--p6)',cloud:'var(--p3)',internet:'var(--p2)',box:'var(--p1)'};
+function pix(rows,x,y,s,col,sh){const P={k:'',c:'',w:''};
+  rows.forEach((r,j)=>{if(sh)r=r.replace(/[cw]/g,'k');let i=0;while(i<r.length){const ch=r[i];let k=i;while(k<r.length&&r[k]===ch)k++;if(P[ch]!=null)P[ch]+='M'+(x+i*s)+' '+(y+j*s)+'h'+(k-i)*s+'v'+s+'h'+(i-k)*s+'z';i=k}});
+  if(sh)return '<path class="gsh" style="opacity:.35" d="'+P.k+'"/>';
+  return (P.c?'<path style="fill:'+col+'" d="'+P.c+'"/>':'')+(P.w?'<path style="fill:var(--card)" d="'+P.w+'"/>':'')+(P.k?'<path class="gh" d="'+P.k+'"/>':'')}
+function arch(src){
+  const S=new Map(),GR=new Map(),ED=[];
+  const ico=s=>{s=String(s||'').toLowerCase();return AIC[s]?s:/db|sql|data/.test(s)?'database':/disk|storage|s3|bucket/.test(s)?'disk':/cloud/.test(s)?'cloud':/internet|web|globe|net/.test(s)?'internet':/server|compute|vm|ec2/.test(s)?'server':'box'};
+  for(const raw of src.split('\n').slice(1)){const l=raw.trim();let m;if(!l||/^(accTitle|accDescr|title)\b/.test(l))continue;
+    if(m=l.match(/^(group|service)\s+([\w-]+)\s*(?:\(([^)]*)\))?\s*(?:\[\s*"?([^\]"]*)"?\s*\])?\s*(?:in\s+([\w-]+))?\s*$/i)){const o={id:m[2],ic:ico(m[3]),t:lab(m[4]||m[2]),g:m[5]||null};(m[1].toLowerCase()==='group'?GR:S).set(o.id,o);continue}
+    if(m=l.match(/^junction\s+([\w-]+)\s*(?:in\s+([\w-]+))?$/i)){S.set(m[1],{id:m[1],j:1,g:m[2]||null,t:''});continue}
+    if(m=l.match(/^([\w-]+)(\{group\})?\s*:\s*([LRTB])\s*(<)?-(?:\[([^\]]*)\])?-(>)?\s*([LRTB])\s*:\s*([\w-]+)(\{group\})?$/i))
+      ED.push({a:m[1],ag:!!m[2],sa:m[3].toUpperCase(),tl:!!m[4],t:lab(m[5]||''),hd:!!m[6],sb:m[7].toUpperCase(),b:m[8],bg:!!m[9]})}
+  if(!S.size||S.size>120)return null;
+  /* раскладка по сетке: «a:R -- L:b» значит b справа от a */
+  const H={L:[-1,0],R:[1,0],T:[0,-1],B:[0,1]},off=(s1,s2)=>{const d=[Math.sign(H[s1][0]-H[s2][0]),Math.sign(H[s1][1]-H[s2][1])];return d[0]||d[1]?d:[1,0]};
+  /* клетка занята — сначала соседние поперёк, потом дальше по направлению: так линия не идёт сквозь чужой сервис */
+  const occ=new Set(),k=(x,y)=>x+','+y,put=(n,x,y,d)=>{const pr=[d[1],d[0]];
+    for(let t=0;t<90;t++){const s=Math.floor(t/3),o=[0,1,-1][t%3],cx=x+d[0]*s+pr[0]*o,cy=y+d[1]*s+pr[1]*o;if(!occ.has(k(cx,cy))){x=cx;y=cy;break}}
+    n.x=x;n.y=y;occ.add(k(x,y))};
+  const nodeOf=(id,g)=>g&&GR.has(id)?[...S.values()].find(s=>s.g===id):S.get(id);
+  const EE=ED.map(e=>({...e,A:nodeOf(e.a,e.ag),B:nodeOf(e.b,e.bg)})).filter(e=>e.A&&e.B&&e.A!==e.B);
+  let mx=-2;
+  for(const s0 of S.values()){if(s0.x!=null)continue;put(s0,mx+2,0,[1,0]);const q=[s0];
+    while(q.length){const u=q.shift();EE.forEach(e=>{let v,d;if(e.A===u&&e.B.x==null){v=e.B;d=off(e.sa,e.sb)}else if(e.B===u&&e.A.x==null){v=e.A;d=off(e.sb,e.sa)}else return;put(v,u.x+d[0],u.y+d[1],d);q.push(v)})}
+    mx=Math.max(...[...S.values()].filter(s=>s.x!=null).map(s=>s.x))}
+  const xs=[...new Set([...S.values()].map(s=>s.x))].sort((a,b)=>a-b),ys=[...new Set([...S.values()].map(s=>s.y))].sort((a,b)=>a-b);
+  const depth=g=>{let d=0;for(let c=GR.get(g);c&&c.g&&d<9;c=GR.get(c.g))d++;return d},gd=Math.max(0,...[...GR.keys()].map(g=>depth(g)+1));
+  const CW=148,CH=118+gd*8,ox=16+gd*14,oy=18+gd*26;
+  S.forEach(s=>{s.cx=ox+xs.indexOf(s.x)*CW+CW/2;s.cy=oy+ys.indexOf(s.y)*CH+30;s.L=s.j?[]:wrap(s.t,16).slice(0,2).map(l=>fit(l,CW-16));
+    const lw=s.L.length?Math.max(...s.L.map(tw)):0;s.bb=s.j?[s.cx-5,s.cy-5,s.cx+5,s.cy+5]:[s.cx-Math.max(18,lw/2),s.cy-18,s.cx+Math.max(18,lw/2),s.cy+26+s.L.length*LH]});
+  /* рамки групп: по своим сервисам и вложенным группам */
+  const fb=new Map(),frame=g=>{if(fb.has(g))return fb.get(g);fb.set(g,null);const bs=[...S.values()].filter(s=>s.g===g).map(s=>s.bb).concat([...GR.values()].filter(c=>c.g===g).map(c=>frame(c.id)).filter(Boolean));
+    if(!bs.length)return null;const b=[Math.min(...bs.map(x=>x[0]))-12,Math.min(...bs.map(x=>x[1]))-34,Math.max(...bs.map(x=>x[2]))+12,Math.max(...bs.map(x=>x[3]))+10];fb.set(g,b);return b};
+  let fr='',o='',lb='',ed='';
+  [...GR.values()].sort((a,b)=>depth(a.id)-depth(b.id)).forEach(g=>{const b=frame(g.id);if(!b)return;const[x1,y1,x2,y2]=b.map(q2);
+    fr+='<rect class="gsg" x="'+x1+'" y="'+y1+'" width="'+(x2-x1)+'" height="'+(y2-y1)+'"/>'+pix(AIC[g.ic]||AIC.box,x1+6,y1+5,1,AICC[g.ic]||AICC.box)+TX(x1+24,y1+11,[fit(g.t,x2-x1-32)],'tmu','start')});
+  S.forEach(s=>{if(s.j){o+='<rect class="xpt" x="'+(s.cx-5)+'" y="'+(s.cy-5)+'" width="10" height="10" style="fill:var(--ink)"/>';return}
+    o+='<g>'+tip(s.t)+pix(AIC[s.ic],s.cx-15,s.cy-15,3,'',1)+pix(AIC[s.ic],s.cx-18,s.cy-18,3,AICC[s.ic])+'</g>';lb+=TX(s.cx,s.cy+26+(s.L.length-1)*LH/2,s.L,'gtl hlb')});
+  /* несколько связей с одной стороны — расходятся по ней, а не сливаются в одну точку */
+  const pk=new Map();EE.forEach(e=>[[e.A,e.sa,e.ag,e.B,'a'],[e.B,e.sb,e.bg,e.A,'b']].forEach(([n,sd,g,ot,w])=>{const key=(g?'g:'+n.g:n.id)+':'+sd;if(!pk.has(key))pk.set(key,[]);pk.get(key).push({e,w,ot,sd})}));
+  pk.forEach(l=>{l.sort((p,q)=>/[LR]/.test(p.sd)?p.ot.cy-q.ot.cy||p.ot.cx-q.ot.cx:p.ot.cx-q.ot.cx||p.ot.cy-q.ot.cy);l.forEach((x,i)=>{x.e['o'+x.w]=Math.round((i-(l.length-1)/2)*(l.length>3?8:12))})});
+  const side=(n,sd,g,f)=>{let p;if(g&&GR.has(n.g)&&frame(n.g)){const b=frame(n.g);p=sd==='L'?[b[0],(b[1]+b[3])/2]:sd==='R'?[b[2],(b[1]+b[3])/2]:sd==='T'?[(b[0]+b[2])/2,b[1]]:[(b[0]+b[2])/2,b[3]]}
+    else{const r=n.j?5:20;p=sd==='L'?[n.cx-r,n.cy]:sd==='R'?[n.cx+r,n.cy]:sd==='T'?[n.cx,n.cy-r]:[n.cx,n.j?n.cy+5:n.bb[3]+2]}
+    if(/[LR]/.test(sd))p[1]+=f||0;else p[0]+=f||0;return p};
+  EE.forEach(e=>{const a=side(e.A,e.sa,e.ag,e.oa).map(q2),b=side(e.B,e.sb,e.bg,e.ob).map(q2),ha=/[LR]/.test(e.sa),hb=/[LR]/.test(e.sb);let p;
+    if(ha&&hb){const mx2=q2((a[0]+b[0])/2);p=[a,[mx2,a[1]],[mx2,b[1]],b]}else if(!ha&&!hb){const my=q2((a[1]+b[1])/2);p=[a,[a[0],my],[b[0],my],b]}else p=ha?[a,[b[0],a[1]],b]:[a,[a[0],b[1]],b];
+    p=p.filter((q,i)=>!i||q[0]!==p[i-1][0]||q[1]!==p[i-1][1]);
+    ed+='<path class="ge" d="M'+p.map(q=>q.join(' ')).join('L')+'"/>'+(e.hd?head(p,'>',1):'')+(e.tl?head(p,'>',0):'');
+    if(e.t){const k=Math.floor((p.length-1)/2),c=[(p[k][0]+p[k+1][0])/2,(p[k][1]+p[k+1][1])/2],w=tw(e.t)+12;lb+='<rect class="gl" x="'+Math.round(c[0]-w/2)+'" y="'+Math.round(c[1]-10)+'" width="'+w+'" height="20"/>'+TX(Math.round(c[0]),Math.round(c[1]),[e.t],'gtl')}});
+  const all=[...S.values()].map(s=>s.bb).concat([...fb.values()].filter(Boolean)),W=Math.ceil(Math.max(...all.map(b=>b[2])))+16,Hh=Math.ceil(Math.max(...all.map(b=>b[3])))+14;
+  return svg(W,Hh,fr+ed+o+lb,'архитектура')}
 
 /* ===== всё вместе ===== */
 function md(src){

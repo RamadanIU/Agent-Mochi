@@ -251,7 +251,9 @@ sudo personalcomputer root on       # полный доступ агента (ro
 | Цитаты и врезки `> [!NOTE]`, `> [!TIP]`, `> [!WARNING]`, `> [!CAUTION]` | окошки с цветной полосой |
 | Код с языком | экранчик с подсветкой цветами старого монитора, `diff` — зелёным и красным |
 | Формулы LaTeX: `$…$`, `$$…$$`, `\(…\)`, `\[…\]` | дроби, корни, суммы, матрицы, `cases` — на листке в клетку |
-| Схемы ` ```mermaid `: flowchart, sequenceDiagram, stateDiagram, pie, mindmap, timeline, а также ` ```dot ` | пиксельный SVG на миллиметровке, кнопка «код» показывает исходник |
+| Схемы ` ```mermaid `: flowchart, sequenceDiagram, classDiagram, stateDiagram, erDiagram, requirementDiagram, C4 (Context, Container, Component, Dynamic, Deployment), gitGraph, block-beta, architecture-beta, mindmap, timeline, а также ` ```dot ` | пиксельный SVG на миллиметровке: UML-стрелки (наследование, композиция, агрегация), «вороньи лапки» ER, значки сервисов; кнопка «код» показывает исходник |
+| Графики ` ```mermaid `: xychart-beta (столбики и линии, `horizontal`), pie, quadrantChart, radar-beta, sankey-beta, treemap-beta, packet-beta | карточка с заголовком и легендой; несколько столбиков в категории — рядом, подписи значений, подсказка при наведении |
+| Планы ` ```mermaid `: gantt (`dateFormat`, `after`/`until`, `excludes weekends`, `done`/`active`/`crit`/`milestone`), journey, kanban (`@{ ticket, assigned, priority }`) | шкала дат по-русски, выходные штриховкой, отметка «сегодня»; рожицы настроения; колонки-стопки карточек |
 | Сноски `[^1]`, источники `[1]: https://…`, `<details>`, картинки | значки-номера, раскрывашки, картинка или ссылка, если её не пускает CSP |
 
 Модель знает об этих возможностях из системной подсказки и пользуется ими, когда это уместно: сравнение показывает таблицей, процесс — схемой. Ответ перерисовывается по мере печати, недописанная схема видна как код с подписью «рисую…».
