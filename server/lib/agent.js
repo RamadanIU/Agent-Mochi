@@ -367,10 +367,16 @@ export class Chat extends EventEmitter {
   }
   get away() { return this.clients.size === 0; }
   settings() { const s = { ...DEF_SETTINGS, ...this.set.v }; if (OLD_SYS.has(s.sys)) s.sys = DEF_SYS; return s; }
-  /* rc — в каком чате работает агент (rt — его название) */
+  /* rc — в каком чате работает агент (rt — его название), ctx — сколько токенов занимает его разговор (цвет экрана компьютера) */
   runState() {
     const r = this.doc.v.run;
-    return { running: this.running, rc: this.cid, rt: this.meta()?.title || '', ...(r ? { origin: r.origin, t: r.t, steps: r.steps } : {}) };
+    return { running: this.running, rc: this.cid, rt: this.meta()?.title || '', ctx: this.ctxSize(), ...(r ? { origin: r.origin, t: r.t, steps: r.steps } : {}) };
+  }
+  /* заполненность контекста: что модель видела в последнем запросе (по её usage или по оценке), а у чата без запросов — оценка истории */
+  ctxSize() {
+    const v = this.doc.v;
+    if (typeof v.ctx === 'number') return v.ctx;
+    return v.hist.length ? tokens(v.hist.map(({ _pf, _vi, _mid, ...m }) => m)) : 0;
   }
   /* c — какой чат показываем (не обязательно тот, где работает агент) */
   snapshot(id = this.cid) {
@@ -531,7 +537,7 @@ export class Chat extends EventEmitter {
     this.seen.clear(); this.phKey = null;
     this.dropParts(this.doc.v.hist);
     this.dropParts((this.doc.v.queue || []).map(q => q.msg));
-    Object.assign(this.doc.v, { hist: [], log: [], run: null, sess: rid(16), act: [], queue: [] });
+    Object.assign(this.doc.v, { hist: [], log: [], run: null, sess: rid(16), act: [], queue: [], ctx: 0 });
     this.doc.save();
     this.emit('reset', this.cid);
     this.emit('run', this.runState());
@@ -636,8 +642,11 @@ export class Chat extends EventEmitter {
     const { tools, said } = withAction([...builtins().filter(on), ...X.defs]), names = new Set(tools.map(t => t.function.name));
     const ctx = { X, names };
     const sys = await until(this.system(names, X.prompt, offB), sig); chk();
-    const { text, calls } = await until(this.callModel(sys, tools, sig), sig); chk();
+    const { text, calls, used } = await until(this.callModel(sys, tools, sig), sig); chk();
     H.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}) });
+    /* контекст: модель назвала usage — верим ей, нет — оценка по запросу и ответу */
+    this.doc.v.ctx = used || tokens([sys, tools, this.wire(), H.at(-1)]);
+    this.emit('ctx', this.doc.v.ctx);
     this.partial = '';
     if (text) this.push({ kind: 'assistant', text });
     this.doc.save();
@@ -810,7 +819,7 @@ export class Chat extends EventEmitter {
   }
 
   async readReply(r, poke) {
-    let text = '', calls = [];
+    let text = '', calls = [], usage = null;
     const apiErr = e => Object.assign(new Error(typeof e === 'string' ? e : (e && e.message) || 'ошибка модели'), { detail: e && typeof e === 'object' ? JSON.stringify(e).slice(0, 300) : '' });
     /* части вызовов инструментов: по index, а если его нет — по id */
     const merge = t => {
@@ -826,6 +835,7 @@ export class Chat extends EventEmitter {
     if (!(r.headers.get('content-type') || '').includes('event-stream')) {
       const j = await r.json();
       if (j && j.error) throw apiErr(j.error);
+      usage = j?.usage || null;
       const m = j?.choices?.[0]?.message;
       if (!m) throw new Error('пустой ответ модели');
       if (typeof m.content === 'string' && m.content) delta(m.content);
@@ -838,6 +848,7 @@ export class Chat extends EventEmitter {
           const p = l.slice(5).trim(); if (!p || p === '[DONE]') continue;
           let j; try { j = JSON.parse(p); } catch { continue; }
           if (j && j.error) throw apiErr(j.error);
+          if (j?.usage) usage = j.usage;
           const d = j?.choices?.[0]?.delta; if (!d) continue;
           if (typeof d.content === 'string' && d.content) delta(d.content);
           for (const t of d.tool_calls || []) if (t) merge(t);
@@ -855,7 +866,8 @@ export class Chat extends EventEmitter {
       return { ...c, type: 'function', id: c.id || 'call_' + Date.now().toString(36) + '_' + i, function: { name: fn.name, arguments: typeof ar === 'string' ? ar : JSON.stringify(ar ?? {}) } };
     });
     if (!text && !calls.length) throw new Error('Модель вернула пустой ответ. Нажми «Повторить» или выбери другую модель в настройках.');
-    return { text, calls };
+    const used = (+usage?.prompt_tokens || 0) + (+usage?.completion_tokens || 0);
+    return { text, calls, used: used > 0 ? used : 0 };
   }
 
   /* убрать секрет (токен бота) из истории и журнала — он уже сохранён в защищённом месте */

@@ -22,6 +22,7 @@ before(async () => {
     if (ut.startsWith(MID)) return { text: 'учла «' + ut.slice(MID.length) + '» после: ' + String(body.messages[body.messages.lastIndexOf(u) - 1].content).split('\n')[0] };
     if (ut.startsWith('работай ')) return last.role === 'user' ? { tools: [{ name: 'run_command', args: { action: 'Работаю', command: `while [ ! -f '${ut.slice(8)}' ]; do sleep 0.05; done; echo шаг1` } }] } : { text: 'без дополнения' };
     if (ut.startsWith('упрямо')) return last.role === 'user' ? { tools: [{ name: 'run_command', args: { action: 'Упрямлюсь', command: "trap '' TERM; sleep 30" } }] } : { text: 'упрямо готово' };
+    if (ut.startsWith('голова')) return { text: 'полна голова', usage: { prompt_tokens: 250000, completion_tokens: 5 } };
     if (ut.startsWith('думай ')) { await flagged(ut.slice(6)); return { text: 'первый ответ' }; }
     if (ut.startsWith('посмотри')) return { tools: [{ name: 'view_image', args: { path: 'pic.png' } }, { name: 'view_image', args: { path: 'note.txt' } }] };
     if (ut.startsWith('[Картинки из view_image')) {
@@ -140,6 +141,25 @@ test('live-поток: дельты текста, шаги и окончание
   assert.ok(evs.some(e => e.ev === 'delta'));
   assert.ok(evs.some(e => e.ev === 'log' && e.d.kind === 'tool' && e.d.state === 'run'));
   assert.ok(evs.some(e => e.ev === 'run' && e.d.running === true));
+});
+
+test('контекст: оценка по запросу, usage модели главнее; новый чат — с нуля', async () => {
+  const c = await registered(m, 'ctxer');
+  await c.json('/api/settings', { base: model.url, model: 'fake-1' }, 'PUT');
+  assert.equal((await snapLog(c)).ctx, 0);
+  let p = c.events(doneRun);
+  await sleep(200);
+  await c.json('/api/chat', { text: 'ещё раз' });
+  const est = (await p).filter(e => e.ev === 'ctx').map(e => e.d.ctx);
+  assert.ok(est.length >= 2 && est[0] > 100 && est.at(-1) > est[0], 'оценка растёт с каждым шагом: ' + est);
+  p = c.events(doneRun);
+  await sleep(200);
+  await c.json('/api/chat', { text: 'голова' });
+  assert.ok((await p).some(e => e.ev === 'ctx' && e.d.ctx === 250005));
+  assert.equal((await snapLog(c)).ctx, 250005);
+  const r = await c.json('/api/chat/clear');
+  assert.equal(r.status, 200);
+  assert.equal((await snapLog(c)).ctx, 0);
 });
 
 test('лимит шагов: из настроек, выключается', async () => {

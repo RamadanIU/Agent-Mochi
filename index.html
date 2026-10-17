@@ -1536,7 +1536,7 @@ const tick=setInterval(paint,100);paint();
     <div class="f">Тема<div class="tg" role="radiogroup" aria-label="Тема"><button type="button" role="radio" data-t="girl"><i></i>Для девочек</button><button type="button" role="radio" data-t="boy"><i></i>Для мальчиков</button><button type="button" role="radio" data-t="lamp"><i></i>Ламповая</button></div></div>
     <div class="f">Шрифт сообщений<div class="seg" id="c-cf" role="radiogroup" aria-label="Шрифт сообщений"><button type="button" role="radio" data-v="pf">Пиксели</button><button type="button" role="radio" data-v="hj">Тонкий</button></div></div>
     <div class="f">Размер текста<div class="seg" id="c-cs" role="radiogroup" aria-label="Размер текста"><button type="button" role="radio" data-v="1">Мелкий</button><button type="button" role="radio" data-v="2">Средний</button><button type="button" role="radio" data-v="3">Крупный</button></div></div>
-    <label class="f">Свечение экрана<select id="c-crt"><option value="">Как у темы</option><option value="amber">Янтарное</option><option value="green">Зелёное</option><option value="blue">Голубое</option><option value="pink">Розовое</option><option value="white">Белое</option></select></label>
+    <label class="f">Свечение экрана<select id="c-crt"><option value="">По заполненности контекста</option><option value="theme">Как у темы</option><option value="amber">Янтарное</option><option value="green">Зелёное</option><option value="blue">Голубое</option><option value="pink">Розовое</option><option value="white">Белое</option></select></label>
     <div class="m a prev" aria-hidden="true"><div class="mh"><b>Personal Computer</b><time>12:00</time></div><div class="mb">Привет! Вот так я буду тебе писать ^_^</div></div>
     </div>
     <div class="grp" data-i="voice"><h3 class="gh">Звук и голос</h3>
@@ -1671,7 +1671,7 @@ const cv=$('#room-cv');cv.width=CW;cv.height=CH;
 const ctx=cv.getContext('2d');ctx.imageSmoothingEnabled=false;
 const[sa,sax]=mk(96,80),[sb,sbx]=mk(96,80),[scr,scx]=mk(SW,SH),[scr2,scx2]=mk(SW,SH);
 const BAYER=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5].map(v=>(v+.5)/16);
-const THEMES={amber:['#1a0e04','#5c3409','#c27415','#ffb238','#fff1c9'],green:['#03130a','#145128','#2fae57','#72ff9b','#e3ffe9'],blue:['#040d1a','#123f6b','#2a86c9','#7cd0ff','#e6f7ff'],white:['#0e0e10','#3a3a44','#8f8fa0','#d8d8e6','#ffffff'],red:['#1c0505','#5e1313','#c22a2a','#ff6a5a','#ffe1dc'],pink:['#1a0414','#5e1350','#c22aa0','#ff7ad8','#ffe1f6'],bsod:['#0a1aa0','#2536b8','#8a96e0','#e6eaff','#ffffff']};
+const THEMES={amber:['#1a0e04','#5c3409','#c27415','#ffb238','#fff1c9'],green:['#03130a','#145128','#2fae57','#72ff9b','#e3ffe9'],blue:['#040d1a','#123f6b','#2a86c9','#7cd0ff','#e6f7ff'],white:['#0e0e10','#3a3a44','#8f8fa0','#d8d8e6','#ffffff'],red:['#1c0505','#5e1313','#c22a2a','#ff6a5a','#ffe1dc'],black:['#000000','#0b0b0c','#222225','#45454b','#77777f'],pink:['#1a0414','#5e1350','#c22aa0','#ff7ad8','#ffe1f6'],bsod:['#0a1aa0','#2536b8','#8a96e0','#e6eaff','#ffffff']};
 function hsl2hex(h,s,l){s/=100;l/=100;const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));return'#'+[f(0),f(8),f(4)].map(v=>Math.round(v*255).toString(16).padStart(2,'0')).join('')}
 const hueTheme=h=>[hsl2hex(h,60,6),hsl2hex(h,70,22),hsl2hex(h,80,45),hsl2hex(h,100,65),hsl2hex(h,100,90)];
 const R=(c,x,y,w,h,col)=>{c.fillStyle=col;c.fillRect(Math.round(x),Math.round(y),w,h)};
@@ -1966,6 +1966,9 @@ const FULL={
 };
 
 /* ================= СОСТОЯНИЯ ================= */
+/* заполненность контекста (токены разговора с сервера): экран зелёный до 100k, жёлтый до 200k, красный до 300k, дальше гаснет до чёрного
+   (если в настройках «Свечение экрана» — «По заполненности контекста»). С уровнем растёт и частота жалоб «голова забита» — и в покое, и во время работы */
+const CTX={n:0,lvl:0,theme:'green',next:0,on:false,STEPS:[100e3,200e3,300e3],THEMES:['green','amber','red','black'],GAP:[0,150,70,35]};
 let T=0,dt=0.016,cur='idle',stT=0,prevSnap=null,blendStart=-9,phosphor='amber',screenPower=1,shake=0,staticT=0,lastScreenKey='',konamiOn=false;
 let blinkNext=2,blinkStart=-9;const look={x:0,y:0,tx:0,ty:0,next:0};let pointer=null;
 const EV={};const tick=(id,rate)=>{EV[id]=(EV[id]||0)+dt;if(EV[id]>=rate){EV[id]%=rate;return true}return false};
@@ -2101,7 +2104,7 @@ const DMAP=new Int32Array(SW*SH),DVIG=new Float32Array(SW*SH);
 for(let y=0;y<SH;y++)for(let x=0;x<SW;x++){const u=(x+0.5)/SW*2-1,v=(y+0.5)/SH*2-1,r2=u*u+v*v,f=1+0.075*r2,su=u*f,sv=v*f;const i=y*SW+x;if(Math.abs(su)>1||Math.abs(sv)>1){DMAP[i]=-1;continue}DMAP[i]=Math.floor((sv+1)/2*SH)*SW+Math.floor((su+1)/2*SW);DVIG[i]=1-0.3*Math.pow(r2/2,1.3)}
 const dstImg=scx2.createImageData(SW,SH);
 function renderScreen(d,st,t){
- TH=(d.theme==='hue'||konamiOn)?hueTheme((T*70)%360):THEMES[d.theme||phosphor]||THEMES.amber;
+ TH=(d.theme==='hue'||konamiOn)?hueTheme((T*70)%360):THEMES[d.theme||(C().crt?'':CTX.theme)||phosphor]||THEMES.amber;
  const mode=d.mode||st.mode||'face';const at=st.loop?t%st.loop:t;
  const key=cur+'|'+mode;if(key!==lastScreenKey){staticT=RM.matches?0:cur==='error'?0.1:0.2;lastScreenKey=key}
  scx.globalAlpha=0.62;scx.fillStyle=TH[0];scx.fillRect(0,0,SW,SH);scx.globalAlpha=1;
@@ -2176,7 +2179,12 @@ const PH={
  girl:['Розовенько!','Ой, как мило!','Розовый — мой любимый!'],boy:['Вау, синий цвет!','Синий, как небо!','Синенький — тоже красиво!'],
  lamp:['Ламповенько~','Тёпленько, как у торшера!','Как дома под пледом~'],
  wait:['Ещё чуть-чуть…','Linux пыхтит, я жду…','Долго… но я терпеливый!','Работаем, работаем…','Почти-почти…','Я тут, всё идёт!'],
- model:['Модель думает… жду','Жду ответ модели…','Модель сегодня задумчивая…']};
+ model:['Модель думает… жду','Жду ответ модели…','Модель сегодня задумчивая…'],
+ /* заполненный контекст: чем больше, тем чаще и жалобнее (по уровню CTX.lvl) */
+ full1:['Голова потихоньку наполняется…','Многовато уже запомнил~','Память пухнет, но я держусь!','Столько всего в голове…'],
+ full2:['Голова забита…','Ох, сколько всего помнить…','Мысли путаются — может, новый чат?','Байтики уже не влезают…','Кажется, я начинаю забывать начало…','Процессор кипит от воспоминаний…'],
+ full3:['Голова лопается…','Всё, я переполнен! Новый чат спасёт~','Не помню, что было в начале…','Мозги в тумане…','Пожалуйста, новый чат…','Я… о чём мы говорили?','Перегруз памяти!'],
+ fresh:['Голова свежая!','Ух, как легко думается~','Чистая память — красота!']};
 const dayPart=()=>{const h=new Date().getHours();return h<5?'night':h<12?'morning':h<18?'day':h<23?'evening':'night'};
 function idleLine(){const r=Math.random(),d=new Date().getDay();
  if(r<.06&&d===5)return'Пятница! Ура-ура~';if(r<.06&&d===1)return'Понедельник… держимся вместе!';
@@ -2274,6 +2282,14 @@ function setState(name,o={}){
 function want(name,o={}){const need=(MIN[cur]||600)/1000-(T-stT);
  if(need<=0||o.now){pend=null;setState(name,o);return}pend={name,o};pendT=T+need}
 let nextChat=12,patT=0;
+function setCtx(n,quiet){n=Math.max(0,+n||0);if(!Number.isFinite(n))return;const was=CTX.lvl;CTX.n=n;
+ CTX.lvl=CTX.STEPS.filter(x=>n>=x).length;CTX.theme=CTX.THEMES[CTX.lvl];
+ cv.title='Контекст: '+(n>=1000?Math.round(n/1000)+'k':n)+' токенов';
+ if(quiet||!CTX.on){CTX.on=true;CTX.next=T+(CTX.GAP[CTX.lvl]||0)*rand(.4,1);return}
+ if(CTX.lvl>was){speak(bag(PH['full'+CTX.lvl]));CTX.next=T+CTX.GAP[CTX.lvl]*rand(.6,1.2);if(CTX.lvl===3)SND.play('crash')}
+ else if(CTX.lvl<was&&!CTX.lvl)speak(bag(PH.fresh))}
+function ctxChatter(){if(!CTX.lvl||T<CTX.next||(work.running?aside.text:say.text)||cur==='sleeping'||cur==='screensaver')return;
+ CTX.next=T+CTX.GAP[CTX.lvl]*rand(.6,1.4);speak(bag(PH['full'+CTX.lvl]))}
 function director(){
  if(pend){if(T>=pendT){const p=pend;pend=null;setState(p.name,p.o)}return}
  const u=T-stT;
@@ -2283,11 +2299,11 @@ function director(){
   if(cur==='thinking'&&u>10&&!work.tool)setState('waiting',{say:bag(PH.model)});
   /* долгий шаг — подбодрить строчкой ниже, объяснение шага остаётся на месте */
   if(work.tool&&u>9&&T>patT){patT=T+14;speak(bag(PH.wait))}
-  return}
+  ctxChatter();return}
  /* покой: болтовня, заставка, сон */
  const idle=T-lastActive;
  if(cur==='idle'){if(idle>75&&!speaking){setState('screensaver',{quiet:1});return}
-  if(T>nextChat){nextChat=T+rand(18,34);if(!say.text&&Math.random()<.45)speak(idleLine())}}
+  if(T>nextChat){nextChat=T+rand(18,34);if(!say.text&&Math.random()<.45)speak(idleLine())}ctxChatter()}
  else if(cur==='screensaver'&&idle>180)setState('sleeping',{say:bag(PH.sleep)});
 }
 /* куда вернуться после реакций и секретов */
@@ -2302,7 +2318,7 @@ const room=window.personalComputerRoom={
   /* сообщение из очереди дошло до модели (или вернулось в переписку при «Стопе») — фраза была, когда оно встало в очередь */
   if(e.mid||work.running)return;
   work.err=false;work.stopped=false;want('listening',{say:bag(PH.got),now:1});heart(3)},
- run(r){const was=work.running;work.running=!!r.running;work.steps=r.steps||0;if(r.t)work.t=r.t;J.run(r);hudRun();
+ run(r){const was=work.running;work.running=!!r.running;work.steps=r.steps||0;if(r.t)work.t=r.t;J.run(r);hudRun();if(r.ctx!=null)setCtx(r.ctx);
   if(work.running&&!was){work.fails=0;work.ans='';work.thinkT=T;toolRes.clear();if(cur!=='listening')want('thinking',{say:bag(PH.think)})}
   if(!work.running&&was){work.tool=null;const ans=work.ans;work.ans='';lastActive=T;
    if(work.stopped)want('stopped',{say:bag(PH.stop),kind:'evt'});
@@ -2333,13 +2349,14 @@ const room=window.personalComputerRoom={
  note(e,rp){J.note(e);if(rp)return;if(/^Остановлено/.test(e.text||'')){work.stopped=true;if(!work.running)want('stopped',{say:bag(PH.stop),kind:'evt'})}else speak(e.text,{kind:'evt'})},
  queue(q){const n=Array.isArray(q)?q.length:0;if(n>(room._q||0)&&work.running)speak(bag(PH.queued));room._q=n},
  reset(){J.reset();work.seen.clear();work.tool=null;toolRes.clear();hudRun()},
- snap(s){/* после перерисовки истории: показать, чем компьютер занят сейчас */work.running=!!s.running;work.steps=s.steps||0;if(s.t)work.t=s.t;
+ snap(s){/* после перерисовки истории: показать, чем компьютер занят сейчас */work.running=!!s.running;work.steps=s.steps||0;if(s.t)work.t=s.t;if(s.ctx!=null)setCtx(s.ctx,1);
   const last=J.cur(),run=last&&J.steps(last).filter(x=>x.state==='run').pop();work.tool=work.running&&run?{seq:run.seq,name:run.name}:null;
   if(work.tool){if(run.name==='run_command')live.cmd=String(run.hint||run.label||'');work.seen.add(run.seq)}
   hudRun();J.render();
   /* задача кончилась, пока связи не было, — не застревать в «думаю» */
   if(work.running){resume();if(work.tool)speak(run.label||run.name,{kind:'act',tool:run.name,seq:run.seq,now:1});else if(!say.text)speak(bag(PH.think))}
   else if(['thinking','waiting','answer','shell','searching','browsing','reading','coding','writing','drawing','memory','processing','uploading','update','sending'].includes(cur))setState('idle',{quiet:1})},
+ ctx(n){setCtx(n)},
  poke(){SND.play('pet');heart(3);if(!work.running)want('happy',{say:bag(PH.pet)});else speak(bag(PH.pet))},
  /* компьютер для экрана загрузки и окна обновления: весь кадр, без сглаживания */
  mirror(g,w,h){if(!cv.width)return;g.imageSmoothingEnabled=false;g.clearRect(0,0,w,h);const k=Math.min(w/CW,h/CH),dw=Math.round(CW*k),dh=Math.round(CH*k);g.drawImage(cv,0,0,CW,CH,Math.round((w-dw)/2),h-dh,dw,dh)},
