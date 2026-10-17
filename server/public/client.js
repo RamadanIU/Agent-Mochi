@@ -448,6 +448,8 @@ function connect() {
   es.addEventListener('log', e => onLog(JSON.parse(e.data)));
   es.addEventListener('delta', e => onDelta(JSON.parse(e.data).d));
   es.addEventListener('run', e => setRun(JSON.parse(e.data)));
+  /* контекст агента вырос за шаг — цвет экрана и жалобы компьютера */
+  es.addEventListener('ctx', e => { try { window.personalComputerRoom && personalComputerRoom.ctx(JSON.parse(e.data).ctx); } catch (x) {} });
   es.addEventListener('queue', e => onQueue(JSON.parse(e.data).queue));
   es.addEventListener('chats', () => hist.changed());
   /* этот чат удалили (в другой вкладке или в Telegram) — переходим в новый */

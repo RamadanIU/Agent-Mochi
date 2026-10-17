@@ -149,7 +149,7 @@ function stream(req, res, u, url) {
   const send = (ev, d) => res.write(`event: ${ev}\ndata: ${JSON.stringify(d)}\n\n`);
   send('snap', { ...chat.snapshot(c), user: A.publicUser(u), build: U.buildId() });
   const on = {
-    log: (e, id) => id === c && send('log', e), delta: (d, id) => id === c && send('delta', { d }), run: r => send('run', r),
+    log: (e, id) => id === c && send('log', e), delta: (d, id) => id === c && send('delta', { d }), run: r => send('run', r), ctx: n => send('ctx', { ctx: n }),
     queue: (q, id) => id === c && send('queue', { queue: q }), reset: id => id === c && send('snap', chat.snapshot(c)),
     chats: () => send('chats', {}), gone: id => id === c && send('gone', { c }),
   };

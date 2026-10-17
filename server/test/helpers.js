@@ -33,6 +33,7 @@ export async function fakeModel(script) {
     const ev = d => res.write('data: ' + JSON.stringify({ choices: [{ delta: d }] }) + '\n\n');
     if (step.text) for (const w of step.text.match(/.{1,5}/gs)) { ev({ content: w }); await sleep(5); }
     (step.tools || []).forEach((t, i) => ev({ tool_calls: [{ index: i, id: 'c' + calls.length + i, function: { name: t.name, arguments: t.raw ?? JSON.stringify(t.args) } }] }));
+    if (step.usage) res.write('data: ' + JSON.stringify({ choices: [], usage: step.usage }) + '\n\n');
     res.end('data: [DONE]\n\n');
   });
   const port = await freePort();
