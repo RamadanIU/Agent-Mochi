@@ -247,13 +247,15 @@ function render(e) {
       bubble = null;
       const d = add('u', esc(e.text || '') + (e.origin === 'tg' ? '<span class="tgm">TG</span>' : '') + (e.files || []).map(f => '<div class="uf">' + (f.fid && isImgN(f.name) ? '<img src="api/files/' + f.fid + '" alt="" loading="lazy">' : '') + '+ ' + esc(f.name) + ' <small>' + sz(f.size) + '</small></div>').join(''));
       stamp(d, e); room('user', e); if (!replaying) hist.sent();
+      /* прежние ответы и развёрнутое сворачиваются, твоё длинное — тоже (на экране — плавно) */
+      foldPrev(!replaying); foldUser(d, !replaying);
       /* сообщение из очереди ушло модели посреди задачи — она уже думает над ним */
       if (e.mid && running && !replaying) think(true);
       break;
     }
     case 'assistant': {
       const el = bubble || add('a', ''); bubble = null;
-      aText(el, e.text || ''); stamp(el, e); pin(); room('answer', e);
+      aText(el, e.text || ''); stamp(el, e); foldKeep(el); pin(); room('answer', e);
       if (!replaying) { window.personalComputerSpeak && personalComputerSpeak(e.text); window.sfx && sfx('recv'); }
       break;
     }
@@ -275,7 +277,7 @@ function quietly(fn, keep) {
   replaying = true; window.personalComputerReplay = true; const sfxOn = cfg.sfx, u0 = unread, pin0 = pin; cfg.sfx = false; pin = () => {};
   /* и без анимации появления: перерисованное (.np) не «выпрыгивает» заново при каждом переподключении */
   const box = $('#msgs'); box.classList.add('rp');
-  try { fn(); } finally {
+  try { fn(); foldFlush(); } finally {
     box.querySelectorAll(':scope>:not(.empty)').forEach(n => n.classList.add('np')); box.classList.remove('rp');
     pin = pin0; replaying = false; unread = u0; badge(); if (!keep) pin(true);
     setTimeout(() => { cfg.sfx = sfxOn; window.personalComputerReplay = false; }, 0);
@@ -316,7 +318,9 @@ function showOlder() {
   const head = box.firstElementChild, start = document.createElement('i'); box.append(start); box._day = start;
   const bubble0 = bubble, cont0 = cont; cont = null;
   olderNow = true;
-  try { quietly(() => { bubble = null; for (const e of part) render(e); }, true); } finally { olderNow = false; }
+  /* открытые сейчас — не трогаем; среди дорисованных старых открытым не остаётся ничего */
+  const open0 = [...openF]; openF.clear();
+  try { quietly(() => { bubble = null; for (const e of part) render(e); foldPrev(false); }, true); } finally { olderNow = false; open0.forEach(m => openF.add(m)); }
   if (cont) cont.remove(); /* старая отметка: после неё уже что-то было */
   bubble = bubble0; cont = cont0;
   const fresh = []; for (let n = start.nextSibling; n; n = n.nextSibling) fresh.push(n);
@@ -339,7 +343,7 @@ function onSnap(s) {
   if (s.c) view = s.c;
   hist.shown(s);
   quietly(() => {
-    const box = $('#msgs'); box.innerHTML = ''; bubble = null; cont = null; think(false); room('reset');
+    const box = $('#msgs'); box.innerHTML = ''; bubble = null; cont = null; think(false); room('reset'); openF.clear(); fq.length = 0;
     const cut = cutAt(s.log, HIST);
     older = s.log.slice(0, cut); seq0 = cut < s.log.length ? s.log[cut].seq : 0;
     for (const e of s.log.slice(cut)) render(e);
