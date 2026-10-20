@@ -583,6 +583,20 @@ body{background:var(--bg) conic-gradient(var(--chk) 25%,transparent 0 50%,var(--
 .mf .cp{transition:background-color .2s,color .2s}
 .mf .cp:hover .pi,.mf .cp:focus-visible .pi{transform:translateY(-1px)}
 .mf .cp.ok .pi{animation:ipop .4s var(--ezb)}
+/* длинное сообщение свёрнуто до начала: текст плавно тает книзу, стрелка внизу пузыря разворачивает (.fz — сворачиваемое,
+   .fd — свёрнуто, .fa — идёт анимация) */
+@property --fade{syntax:'<length>';inherits:false;initial-value:0px}
+.m.fz .mb{--fade:0px;-webkit-mask:linear-gradient(#000 calc(100% - var(--fade)),transparent);mask:linear-gradient(#000 calc(100% - var(--fade)),transparent)}
+.m.fd .mb{max-height:124px;--fade:64px}
+.m.fd .mb,.m.fa .mb{overflow:hidden}
+.m.fa .mb{transition:max-height .55s cubic-bezier(.65,0,.25,1),--fade .55s cubic-bezier(.65,0,.25,1)}
+.fold{display:flex;align-items:center;justify-content:center;width:36px;height:18px;margin:6px auto -8px;padding:0;background:none;border:0;color:inherit;opacity:.6;cursor:pointer;transition:opacity .2s}
+.fold svg{width:14px;height:8px;transform:rotate(180deg);transition:transform .45s var(--ezb)}
+.m.fd .fold svg{transform:none}
+.fold:hover,.fold:focus-visible{opacity:1}
+.fold:hover svg{translate:0 1px}
+.m.fz:not(.np) .fold{animation:ipop .4s var(--ezb)}
+@media(prefers-reduced-motion:reduce){.m.fa .mb,.fold svg{transition:none}}
 .snote{box-shadow:var(--sh2),4px 4px 0 0 var(--dsh)}
 .day span{box-shadow:var(--sh2),3px 3px 0 0 var(--dsh)}
 .fc{box-shadow:var(--sh4),8px 8px 0 0 var(--dsh)}
@@ -4202,6 +4216,37 @@ function add(cls,html){
   d._b=d.querySelector('.mb');d._b.innerHTML=html;box.append(d);pin(cls==='u');
   if(cls!=='u'&&!$('#v-chat').classList.contains('on')){unread++;badge()}
   return d}
+/* ---------- длинные сообщения сворачиваются ----------
+   Твоё длинное сообщение после отправки плавно сворачивается до начала — ты его и так знаешь. Ответ остаётся целиком,
+   пока он последний, и сворачивается, когда ты пишешь следующее. Стрелка внизу пузыря разворачивает и сворачивает обратно.
+   openF — сворачиваемые, но сейчас открытые (последний ответ, развёрнутые вручную); fq — свернуть разом без анимации
+   (перерисовка истории: сначала все замеры, потом все правки — без раскладки ленты на каждое сообщение) */
+const FH=124,FMIN=FH+40,openF=new Set(),fq=[];
+const FSVG='<svg viewBox="0 0 7 4" shape-rendering="crispEdges" aria-hidden="true"><path fill="currentColor" d="M0 0h2v1H0zM5 0h2v1H5zM1 1h2v1H1zM4 1h2v1H4zM2 2h3v1H2zM3 3h1v1H3z"/></svg>';
+/* в скрытой ленте замерить нечего: свернём, а короткое развернём, когда лента покажется */
+const foldRO='ResizeObserver' in window?new ResizeObserver(es=>{for(const x of es){const b=x.target,m=b.parentNode;if(!b.clientHeight)continue;foldRO.unobserve(b);
+  if(b.scrollHeight<=FMIN&&m){openF.delete(m);m.classList.remove('fz','fd','fa');m._fb&&m._fb.remove();m._fb=null}}}):null;
+function fold(m,on,anim,h){const b=m&&m._b;if(!b)return;
+  if(on)openF.delete(m);else openF.add(m);
+  if(on===m.classList.contains('fd'))return;
+  if(h==null)h=m.isConnected?b.scrollHeight:0;
+  if(on&&!m.classList.contains('fz')&&(h?h<=FMIN:!m.isConnected))return;
+  m.classList.add('fz');
+  if(!m._fb){const fb=document.createElement('button');fb.type='button';fb.className='fold';fb.innerHTML=FSVG;m.append(fb);m._fb=fb}
+  m._fb.setAttribute('aria-expanded',String(!on));m._fb.setAttribute('aria-label',on?'Развернуть':'Свернуть');
+  clearTimeout(m._ft);
+  if(anim&&h&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
+    b.style.maxHeight=(on?h:FH)+'px';m.classList.add('fa');b.offsetHeight;
+    m.classList.toggle('fd',on);b.style.maxHeight=on?'':h+'px';
+    m._ft=setTimeout(()=>{m.classList.remove('fa');b.style.maxHeight='';if(on&&pinned)pin()},600)}
+  else{m.classList.remove('fa');m.classList.toggle('fd',on);b.style.maxHeight=''}
+  if(on&&!h&&foldRO)foldRO.observe(b)}
+/* для client.js: ответ — пока открыт; новое твоё сообщение — сворачивает открытые и (длинное) само себя */
+function foldKeep(m){openF.add(m)}
+function foldPrev(anim){for(const m of openF)anim?fold(m,true,true):fq.push(m);openF.clear()}
+function foldUser(m,anim){if(anim)m._ft=setTimeout(()=>fold(m,true,true),650);else fq.push(m)}
+function foldFlush(){const l=fq.splice(0),hs=l.map(m=>m.isConnected?m._b.scrollHeight:0);l.forEach((m,k)=>fold(m,true,false,hs[k]))}
+$('#msgs').addEventListener('click',e=>{const fb=e.target.closest('.fold');if(!fb)return;const m=fb.closest('.m');fold(m,!m.classList.contains('fd'),true)});
 /* приветствие — как титульный экран старой игры */
 const QUICK=[['Версия ядра и память','Какая версия ядра Linux и сколько свободной памяти?'],['Посчитай 2 в степени 100','Посчитай в Linux 2 в степени 100'],['Файл с сегодняшней датой','Создай файл date.txt с сегодняшней датой и пришли его мне'],['Что нового в мире?','Какие главные новости сегодня?']];
 function welcome(cleared){const box=$('#msgs'),d=document.createElement('div');d.className='empty';if(cleared)d.dataset.cleared=1;
