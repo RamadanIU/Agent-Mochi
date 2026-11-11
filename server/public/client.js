@@ -1405,9 +1405,14 @@ const fit = () => { const t = xterm(); try { t && t.fit && t.fit(); } catch (e) 
    все цвета — люминофор темы; «чёрный» — фон, «ярко-чёрный» — приглушённый люминофор (подсказки, строка tmux) */
 const hex = c => { c = String(c || '').trim().replace('#', ''); if (c.length === 3) c = c.replace(/./g, '$&$&'); const n = parseInt(c, 16); return /^[0-9a-f]{6}$/i.test(c) ? [n >> 16, n >> 8 & 255, n & 255] : null; };
 const mix = (a, b, k) => { const x = hex(a), y = hex(b); if (!x || !y) return a || b; return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, '0')).join(''); };
+/* современная тема — обычный тёмный терминал: настоящие цвета ANSI, без свечения */
+const modern = () => de.dataset.theme === 'modern';
+const ANSI = { black: '#3a3a40', red: '#ff6b6b', green: '#5fd38d', yellow: '#f2c55c', blue: '#6aa6ff', magenta: '#c792ea', cyan: '#5ccfe6', white: '#d9d9de',
+  brightBlack: '#6e6e76', brightRed: '#ff8787', brightGreen: '#7ee2a3', brightYellow: '#ffd77a', brightBlue: '#8cbcff', brightMagenta: '#d7a8f5', brightCyan: '#80dcef', brightWhite: '#ffffff' };
 function ttyTheme() {
   const cs = getComputedStyle(de), v = n => cs.getPropertyValue(n).trim();
   const bg = v('--tbg') || '#1b1230', fg = v('--tfg') || '#7dffb0';
+  if (modern()) return { ...ANSI, background: bg, foreground: fg, cursor: fg, cursorAccent: bg, selectionBackground: mix(bg, fg, .25), selectionForeground: fg };
   const th = { background: bg, foreground: fg, cursor: fg, cursorAccent: bg, selectionBackground: mix(bg, fg, .3), selectionForeground: fg, black: bg, brightBlack: mix(bg, fg, .55) };
   for (const c of ['red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white']) th[c] = th['bright' + c[0].toUpperCase() + c.slice(1)] = fg;
   return th;
@@ -1441,15 +1446,18 @@ html,body{background:transparent!important}
   }
   const th = ttyTheme();
   tty.style.visibility = '';
-  d.documentElement.style.setProperty('--glow', th.foreground + '8c');
+  const md = modern();
+  d.documentElement.style.setProperty('--glow', md ? 'transparent' : th.foreground + '8c');
   const mono = getComputedStyle(de).getPropertyValue('--mono').trim() || 'VT323, monospace';
-  Object.assign(t.options, { theme: th, fontFamily: mono, fontSize: cfg.tfs || 18, lineHeight: 1.1, cursorBlink: true, cursorStyle: 'block', fontWeight: 'normal', fontWeightBold: 'normal' });
+  Object.assign(t.options, md
+    ? { theme: th, fontFamily: mono, fontSize: tfsNow(), lineHeight: 1.3, cursorBlink: true, cursorStyle: 'bar', fontWeight: 'normal', fontWeightBold: 'bold' }
+    : { theme: th, fontFamily: mono, fontSize: tfsNow(), lineHeight: 1.1, cursorBlink: true, cursorStyle: 'block', fontWeight: 'normal', fontWeightBold: 'normal' });
   /* метрики шрифта меряются при смене fontFamily — дождёмся загрузки VT323, потом подгоним размер */
-  (d.fonts && d.fonts.load ? d.fonts.load(`${cfg.tfs || 18}px VT323`).catch(() => {}) : Promise.resolve()).then(() => {
+  (d.fonts && d.fonts.load && !md ? d.fonts.load(`${tfsNow()}px VT323`).catch(() => {}) : Promise.resolve()).then(() => {
     t.options.fontFamily = mono + ', monospace'; t.options.fontFamily = mono; fit();
   });
 }
-new MutationObserver(() => tty && ttyLook()).observe(de, { attributes: true, attributeFilter: ['data-theme'] });
+new MutationObserver(() => tty && ttyLook()).observe(de, { attributes: true, attributeFilter: ['data-theme', 'data-scheme'] });
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => tty && ttyLook());
 
 function tx(s) {
@@ -1472,7 +1480,10 @@ window.personalComputerTermCd = dir => {
 };
 document.querySelectorAll('.keys button[data-k]').forEach(b => b.onclick = () => { tx(keyStr(b.dataset.k)); window.sfx && sfx('key'); });
 $('#tcls').onclick = () => { tx('\x0c'); window.sfx && sfx('key'); };
-const tfs = d => { cfg.tfs = Math.min(30, Math.max(12, (cfg.tfs || 18) + d)); save(); const t = xterm(); if (t && t.options) { t.options.fontSize = cfg.tfs; fit(); } };
+/* размер шрифта терминала: у пиксельного VT323 и у обычного моноширинного шрифта (современная тема) — свой */
+function tfsKey() { return modern() ? 'tfsM' : 'tfs'; }
+function tfsNow() { return cfg[tfsKey()] || (modern() ? 14 : 18); }
+const tfs = d => { const k = tfsKey(), lo = modern() ? 10 : 12; cfg[k] = Math.min(30, Math.max(lo, tfsNow() + d)); save(); const t = xterm(); if (t && t.options) { t.options.fontSize = cfg[k]; fit(); } };
 $('#tfm').onclick = () => tfs(-2); $('#tfp').onclick = () => tfs(2);
 $('#tin').placeholder = 'команда и Enter (или печатай прямо в терминале)';
 $('#tsend').onclick = () => { const i = $('#tin'); if (tx(i.value + '\r')) i.value = ''; window.sfx && sfx('key'); };
