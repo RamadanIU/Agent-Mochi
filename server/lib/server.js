@@ -119,6 +119,7 @@ const STATIC = {
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'],
   '/srv/client.js': [path.join('server', 'public', 'client.js'), 'text/javascript; charset=utf-8'],
   '/theme-modern.css': [path.join('server', 'public', 'theme-modern.css'), 'text/css; charset=utf-8'],
+  '/pet-modern.js': [path.join('server', 'public', 'pet-modern.js'), 'text/javascript; charset=utf-8'],
 };
 for (const f of ['icon-192.png', 'icon-512.png', 'maskable-192.png', 'maskable-512.png', 'apple-touch-icon.png']) STATIC['/icons/' + f] = [path.join('icons', f), 'image/png'];
 const statCache = new Map();

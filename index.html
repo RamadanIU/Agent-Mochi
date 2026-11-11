@@ -1353,6 +1353,7 @@ background:var(--bg) conic-gradient(var(--chk,var(--line)) 25%,transparent 0 50%
 @media(max-width:400px){.bb{padding:14px 12px 16px}#boot-pet{width:80px;height:80px;margin:-4px -4px -4px -6px}.bh .ht{left:30px;bottom:56px}.bcrt{padding:9px 10px 11px;font-size:17px}}
 </style>
 <link rel="stylesheet" href="theme-modern.css">
+<script src="pet-modern.js"></script>
 <script>/* значки современной темы: линейные, 24×24, рисуются маской currentColor — как пиксельные, только другой рисунок.
    --m-имя — сами значки; ниже ими подменяются пиксельные переменные (--j-*, --i-*, у проводника --fi-*) — только в современной теме */
 (()=>{const P={
@@ -1768,7 +1769,9 @@ window.sfx=SND.play;window.personalComputerLevel=()=>SND.level();
    Координаты сцены прежние (компьютер стоит в CX,DESK), но на холст попадает только кадр вокруг него: сам компьютер,
    клавиатура, мышь и немного места сверху для прыжков. Фона нет — компьютер стоит прямо на панели */
 const DESK=156,SW=68,SH=44,CX=128,OC=0;
-const X0=CX-50,Y0=66,CW=106,CH=106; /* кадр: x от X0 до X0+CW, y от Y0 до Y0+CH */
+let X0=CX-50,Y0=66,CW=106,CH=106; /* кадр: x от X0 до X0+CW, y от Y0 до Y0+CH (у ноутбука современной темы — свой) */
+/* современная тема: векторный ноутбук (pet-modern.js) — ему кадр отдаётся целиком, состояния и экраны считаются здесь */
+const MD=()=>skin==='modern'&&window.PCModern;
 /* mk — холст для чтения пикселей (экран), mkG — для рисования и наложения */
 const mk=(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingEnabled=false;return[c,x]};
 const mkG=(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.imageSmoothingEnabled=false;return[c,x]};
@@ -2239,6 +2242,7 @@ function frame(){
  if(cur!=='browsing'){mouseOff[0]*=0.9;mouseOff[1]*=0.9}
  renderScreen(d,st,t);
  const sx=shake>0?Math.round(rand(-shake,shake)):0,sy=shake>0?Math.round(rand(-shake,shake)):0;shake=Math.max(0,shake-dt*6);
+ const md=MD();if(md)return md.draw(ctx,{d,st,t,T,dt,cur,TH,THEMES,live,PS,keys,look,bl:blinkVal(),term,snake:snake.s,tetris:tetris.s,pong:APPS.pong.s,power:screenPower,shake,note:note.a});
  ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,CW,CH);ctx.setTransform(1,0,0,1,sx-X0,sy-Y0);
  drawShadow(ctx,d);drawMouse(ctx,d);blit(ctx,sa,d);blit(ctx,sb,d);drawNote(ctx,d);drawKeyboard(ctx);drawSeasonal(ctx,d);
  if(d.thought!==undefined)drawThought(ctx,d.thought,d);if(d.rainCloud)drawRainCloud(ctx,d);
@@ -2465,7 +2469,7 @@ const room=window.personalComputerRoom={
  ctx(n){setCtx(n)},
  poke(){SND.play('pet');heart(3);if(!work.running)want('happy',{say:bag(PH.pet)});else speak(bag(PH.pet))},
  /* компьютер для экрана загрузки и окна обновления: весь кадр, без сглаживания */
- mirror(g,w,h){if(!cv.width)return;g.imageSmoothingEnabled=false;g.clearRect(0,0,w,h);const k=Math.min(w/CW,h/CH),dw=Math.round(CW*k),dh=Math.round(CH*k);g.drawImage(cv,0,0,CW,CH,Math.round((w-dw)/2),h-dh,dw,dh)},
+ mirror(g,w,h){const md=MD();if(md)return md.mirror(g);if(!cv.width)return;g.imageSmoothingEnabled=false;g.clearRect(0,0,w,h);const k=Math.min(w/CW,h/CH),dw=Math.round(CW*k),dh=Math.round(CH*k);g.drawImage(cv,0,0,CW,CH,Math.round((w-dw)/2),h-dh,dw,dh)},
  update(p){live.pct=Math.round(clamp(+p||0,0,100));if(!work.running&&cur!=='update')want('update',{quiet:1})},
  set:(s,o)=>want(s,o||{}),say:(t,o)=>speak(t,o)};
 /* старые вызовы питомца: настроения → состояния компьютера; пока он работает, чужие настроения не сбивают показ работы.
@@ -2487,12 +2491,14 @@ let sc=1,lastPW=0;
 /* Панель постоянной высоты: компьютер около 70 пикселей CSS (на широком экране — около 78). Масштаб кратен пикселям экрана —
    картинка чёткая (на экранах ×2 — шаг в полпикселя, иначе компьютер вышел бы либо крошечным, либо огромным) */
 const ibs=bar.querySelector('.ibs'),navEl=document.querySelector('body>nav');
-function layout(){const pw=bar.clientWidth;if(!pw)return;lastPW=pw;
+function layout(){const pw=bar.clientWidth;if(!pw)return;lastPW=pw;const md=MD();[X0,Y0,CW,CH]=md?md.box:[CX-50,66,106,106];
  const wide=pw>=720,dpr=window.devicePixelRatio||1,slim=document.documentElement.dataset.theme==='modern',target=slim?(wide?50:46):wide?78:70,step=dpr>=1.5&&dpr<2.5?0.5:1;
  let best=1,bd=1e9;for(let k=1;k<=6;k+=step){const d=Math.abs(k/dpr*CH-target);if(d<bd){bd=d;best=k}}
  sc=best/dpr;
  /* современной теме нужен маленький компьютер: если чёткий масштаб слишком далёк от нужного — плавный (и сглаженный) */
- const soft=slim&&Math.abs(sc*CH-target)>target*.15;if(soft)sc=target/CH;cv.style.imageRendering=soft?'auto':'';
+ const soft=md||slim&&Math.abs(sc*CH-target)>target*.15;if(soft)sc=target/CH;cv.style.imageRendering=soft?'auto':'';
+ /* ноутбук рисуется в пикселях экрана, пиксельный компьютер — в своих 106×106 */
+ const W=md?Math.round(CW*sc*dpr):CW,H=md?Math.round(CH*sc*dpr):CH;if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;ctx.imageSmoothingEnabled=!md}
  cv.style.width=CW*sc+'px';cv.style.height=CH*sc+'px';
  bar.classList.toggle('wide',wide);bar.classList.toggle('roomy',pw>=1100);
  /* облачку — место до кнопок (и вкладок на широком экране), вкладкам — место рядом с кнопками */
@@ -2620,7 +2626,7 @@ room.sndUI=()=>{};
 const inR=(x,y,a,b,c,d)=>x>=a&&x<=c&&y>=b&&y<=d;let pokes=[],pokeReturn='idle';
 function toScene(e){const r=cv.getBoundingClientRect();return[X0+(e.clientX-r.left)/r.width*CW,Y0+(e.clientY-r.top)/r.height*CH]}
 /* компьютер маленький, поэтому всё, кроме клавиатуры и радуги на корпусе, — погладить его */
-function hitTest(x,y){const d=disp||{bx:0,by:0};
+function hitTest(x,y){const d=disp||{bx:0,by:0},md=MD();if(md)return md.hit(x,y,d);
  if(inR(x,y,CX+d.bx+28,DESK+d.by-9,CX+d.bx+40,DESK+d.by-1))return'badge';
  if(inR(x,y,CX-28,159,CX+28,171))return'keyboard';
  return'pc'}
@@ -2695,12 +2701,12 @@ new MutationObserver(()=>{const t=$('#st').textContent,d=$('#dot').className;
  else if(/обновляюсь/.test(t))want('update',{say:'Обновляюсь… минутку',kind:'evt'})}).observe($('#stsrc'),{subtree:true,childList:true,characterData:true,attributes:true});
 
 /* ================= ЦИКЛ =================
-   Кадров в секунду — сколько нужно: в работе и играх 24, в покое 12, во сне, на заставке и за диалогом 8.
+   Кадров в секунду — сколько нужно: в работе и играх 24, в покое 12, во сне, на заставке и за диалогом 8. Ноутбуку современной темы — в 2,5 раза больше: его пружины и лицо плавные, а не пиксельные.
    Вкладка скрыта — не рисуем вовсе. Если кадр тяжёл для устройства, частота снижается сама */
 let lastT=0,raf=0,cost=6,metT=0,hudT=0;
 let dlgOpen=false;setInterval(()=>{dlgOpen=!!document.querySelector('dialog[open]')},500);
-const fps=()=>{if(RM.matches)return 10;if(dlgOpen)return 8;if(cur==='sleeping'||cur==='screensaver')return 8;
- const busyNow=work.running||PS.length>8||['game','pong','dance','party','demo','matrix','cheat','reboot','success','error'].includes(cur)||say.shown<say.text.length||aside.shown<aside.text.length;let f=busyNow?24:12;if(cost>22)f=Math.min(f,10);else if(cost>13)f=Math.min(f,15);return f};
+const fps=()=>{if(RM.matches)return 10;if(dlgOpen)return 8;const m=MD()?2.5:1;if(cur==='sleeping'||cur==='screensaver')return 8*m;
+ const busyNow=work.running||PS.length>8||['game','pong','dance','party','demo','matrix','cheat','reboot','success','error'].includes(cur)||say.shown<say.text.length||aside.shown<aside.text.length;let f=(busyNow?24:12)*m;if(cost>22)f=Math.min(f,10);else if(cost>13)f=Math.min(f,15);return f};
 function loop(now){raf=requestAnimationFrame(loop);if(document.hidden)return;
  const gap=now-lastT;if(gap<1000/fps()-3)return;dt=Math.min(0.2,gap/1000);lastT=now;T+=dt;
  const t0=performance.now();

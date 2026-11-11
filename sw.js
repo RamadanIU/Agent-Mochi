@@ -1,7 +1,7 @@
 /* Personal Computer: офлайн-кэш страницы — «сначала сеть» (обновления приходят сразу), из кэша — только если сервер
    не ответил. /api/, /term/ и /srv/ не кэшируются вовсе. */
-const V = 'personalcomputer-v6';
-const CORE = ['./', './index.html', './theme-modern.css', './manifest.webmanifest',
+const V = 'personalcomputer-v7';
+const CORE = ['./', './index.html', './theme-modern.css', './pet-modern.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-192.png', './icons/maskable-512.png'];
 
 self.addEventListener('install', e => {
