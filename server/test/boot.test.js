@@ -84,6 +84,68 @@ test('тема «Современная»: стили отдаёт сервер,
   assert.match(src, /\['boy','lamp','modern'\]\.includes\(t\)/);
 });
 
+test('тема «Современная»: компьютер — векторный ноутбук (pet-modern.js), в остальных темах — прежний пиксельный', async () => {
+  const r = await fetch(m.base + '/pet-modern.js');
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /^text\/javascript/);
+  const js = await r.text();
+  const src = fs.readFileSync(path.join(here, '..', '..', 'index.html'), 'utf8');
+  /* подключён до скрипта компьютера, движок отдаёт ему кадр только в современной теме; офлайн-кэш его хранит */
+  assert.ok(src.indexOf('<script src="pet-modern.js"></script>') > 0 && src.indexOf('<script src="pet-modern.js"></script>') < src.indexOf('const room=window.personalComputerRoom='));
+  assert.match(src, /const MD=\(\)=>skin==='modern'&&window\.PCModern;/);
+  assert.match(src, /const md=MD\(\);if\(md\)return md\.draw\(ctx,\{/);
+  assert.match(fs.readFileSync(path.join(here, '..', '..', 'sw.js'), 'utf8'), /'\.\/pet-modern\.js'/);
+
+  /* каждый экран, лицо и картинка рисуются без ошибок (холст — заглушка, которая принимает любые вызовы) */
+  const errors = [];
+  const ctx2d = cv => new Proxy({ canvas: cv }, {
+    get(t, k) {
+      if (k in t) return t[k];
+      if (k === 'measureText') return s => ({ width: String(s).length * 4 });
+      if (k === 'createImageData') return (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) });
+      if (typeof k === 'string' && k.startsWith('create')) return () => ({ addColorStop() {} });
+      return () => {};
+    },
+    set(t, k, v) { t[k] = v; return true; },
+  });
+  const canvas = () => { const c = { width: 300, height: 150, getBoundingClientRect: () => ({ width: 76, height: 76 }) }; const x = ctx2d(c); c.getContext = () => x; return c; };
+  const sb = { matchMedia: () => ({ matches: false }), document: { createElement: canvas, documentElement: { dataset: { theme: 'modern' } } }, performance, console: { error: (...a) => errors.push(a.join(' ')) } };
+  sb.window = sb;
+  vm.runInNewContext(js, sb);
+  const P = sb.PCModern;
+  assert.deepEqual([...P.box], [75, 68, 106, 92]);
+  const main = canvas(), g = main.getContext(); main.width = 115; main.height = 100;
+  const pal = ['#03130a', '#145128', '#2fae57', '#72ff9b', '#e3ffe9'];
+  let T = 0;
+  const frame = (st, d = {}, t = 1, extra = {}) => {
+    T += 0.05;
+    P.draw(g, { d: { bx: 0, by: -3, sx: 1, sy: 1, rot: 0.03, face: {}, ...d }, st, t, T, dt: 0.05, cur: extra.cur || 'idle', TH: pal, THEMES: { white: [], black: [] }, keys: new Float32Array(64).fill(0.1),
+      live: { cmd: 'ls -la /var/log', res: extra.res ?? null, bar: 'NOTES.MD', q: 'ПОГОДА', ans: 'Готово! Вот **ответ**.', pct: extra.pct ?? null }, PS: [{ type: 'heart', x: 120, y: 90, life: 0.5, max: 1 }, { type: 'confetti', x: 110, y: 100, life: 0.5, max: 1, col: '#fff', seed: 0.3 }, { type: 'z', x: 150, y: 80, life: 1, max: 2 }],
+      look: { x: 1, y: -1 }, bl: 0.4, term: { lines: ['PC TERM V2', '>help'], buf: 'snake' },
+      snake: { b: [[3, 3], [2, 3], [1, 3], [31, 3]], d: [1, 0], a: [9, 9], score: 2, dead: extra.dead || 0 },
+      tetris: { g: Array.from({ length: 11 }, (_, j) => Array(10).fill(j > 8 ? 2 : 0)), p: { sh: [[1, 1], [1, 1]], x: 3, y: 2, v: 3 }, flash: 0.1, lines: 4 },
+      pong: { x: 30, y: 25, a: 25, b: 30, sa: 1, sb: 2 }, power: 1, shake: 1, note: 0.2, ...extra.o });
+  };
+  for (const app of ['shell', 'answer', 'listen', 'wait', 'plan', 'search', 'browse', 'read', 'process', 'analyze', 'code', 'write', 'build', 'test', 'debug',
+    'download', 'upload', 'send', 'memory', 'translate', 'draw', 'calc', 'calendar', 'music', 'update', 'game', 'pong', 'terminal'])
+    for (const t of [0.05, 1.2, 3.3, 7.9]) frame({ mode: 'app', app, label: 'Окно', loop: app === 'write' ? 10 : 0 }, { face: { l: 'h' } }, t, { res: t > 3 ? 'ok' : null, dead: app === 'game' && t > 3 ? 1 : 0 });
+  for (const t of [1, 12, 20, 30]) frame({ mode: 'app', app: 'saver' }, { mode: 'raw' }, t);
+  for (const full of ['check', 'err', 'off', 'boot', 'bsod', 'matrix', 'demo', 'credits', 'answer', 'rmrf', 'sudo', 'cheat'])
+    for (const t of [0.1, 1.2, 2.2, 3.5]) frame({ mode: 'full', full }, {}, t);
+  const eyes = ['n', 'up', 'd', 'w', 'scared', 'o', 'f', 't', 'ang', 'h', 'c', 'line', 'blink', 'heart', 'star', 'x', 'sp', '$', 'sq'];
+  const mouths = ['smile', 'grin', 'flat', 'o', 'O', 'wavy', 'frown', 'cat', 'tongue', 'small', 'smirk', 'whistle', 'teeth', 'talk', 'pant'];
+  eyes.forEach((l, i) => frame({}, { face: { l, r: eyes[(i + 3) % eyes.length], m: mouths[i % mouths.length], mo: 0.7, brow: ['up', 'ang', 'sad', 'flat', 'skep'][i % 5], blush: 1, sweat: 1, tear: 1, anger: 1, hand: 1, zz: 1, mug: 0.95, glasses: 0.5, text: 'DEAL WITH IT' }, thought: 1, rainCloud: 1, led: 3 }, 2, { cur: ['sleeping', 'listening', 'scared', 'hello'][i % 4] }));
+  /* экран загрузки: тот же ноутбук в своём холсте */
+  const boot = canvas(); P.mirror(boot.getContext());
+  assert.equal(boot.width, 76);
+  assert.deepEqual(errors, []);
+  assert.ok(P.dbg().lid > 0, 'крышка не открылась');
+  /* попадания: наклейка-радуга (титры), клавиатура (печатать), остальное — погладить */
+  assert.equal(P.hit(128 + 35, 156 - 6, { bx: 0, by: 0 }), 'badge');
+  assert.equal(P.hit(128, 156 - 13, { bx: 0, by: 0 }), 'keyboard');
+  assert.equal(P.hit(128, 156 - 45, { bx: 0, by: 0 }), 'pc');
+});
+
 test('в index.html нет браузерного агента: модель зовёт только сервер', () => {
   const src = fs.readFileSync(path.join(here, '..', '..', 'index.html'), 'utf8');
   assert.ok(src.length < 700 * 1024, 'index.html весит ' + src.length);
