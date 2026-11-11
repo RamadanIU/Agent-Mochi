@@ -73,6 +73,17 @@ test('страница — без встроенного Linux, скрипты �
   }
 });
 
+test('тема «Современная»: стили отдаёт сервер, страница их подключает, тема есть в настройках', async () => {
+  const r = await fetch(m.base + '/theme-modern.css');
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /^text\/css/);
+  assert.match(await r.text(), /:root\[data-theme=modern\]\{/);
+  const src = fs.readFileSync(path.join(here, '..', '..', 'index.html'), 'utf8');
+  assert.match(src, /<link rel="stylesheet" href="theme-modern\.css">/);
+  assert.match(src, /role="radio" data-t="modern"/);
+  assert.match(src, /\['boy','lamp','modern'\]\.includes\(t\)/);
+});
+
 test('в index.html нет браузерного агента: модель зовёт только сервер', () => {
   const src = fs.readFileSync(path.join(here, '..', '..', 'index.html'), 'utf8');
   assert.ok(src.length < 700 * 1024, 'index.html весит ' + src.length);

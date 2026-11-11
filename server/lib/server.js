@@ -118,6 +118,7 @@ const STATIC = {
   '/sw.js': ['sw.js', 'text/javascript; charset=utf-8'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'],
   '/srv/client.js': [path.join('server', 'public', 'client.js'), 'text/javascript; charset=utf-8'],
+  '/theme-modern.css': [path.join('server', 'public', 'theme-modern.css'), 'text/css; charset=utf-8'],
 };
 for (const f of ['icon-192.png', 'icon-512.png', 'maskable-192.png', 'maskable-512.png', 'apple-touch-icon.png']) STATIC['/icons/' + f] = [path.join('icons', f), 'image/png'];
 const statCache = new Map();
@@ -126,7 +127,7 @@ async function serveStatic(req, res, p) {
   let c = statCache.get(p);
   if (!c || CFG.dev) {
     const raw = await fsp.readFile(path.join(CFG.web, file));
-    c = { raw, gz: /javascript|json|manifest/.test(type) ? zlib.gzipSync(raw) : null, etag: '"' + crypto.createHash('sha1').update(raw).digest('hex').slice(0, 20) + '"' };
+    c = { raw, gz: /javascript|json|manifest|css/.test(type) ? zlib.gzipSync(raw) : null, etag: '"' + crypto.createHash('sha1').update(raw).digest('hex').slice(0, 20) + '"' };
     statCache.set(p, c);
   }
   sendBuf(req, res, c, { 'content-type': type, 'cache-control': p.startsWith('/icons/') ? 'public, max-age=86400' : 'no-cache', ...(p === '/sw.js' ? { 'service-worker-allowed': '/' } : {}) });
