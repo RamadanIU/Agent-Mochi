@@ -873,13 +873,37 @@ dialog .note{box-shadow:var(--sh2),var(--sunk)}
 #dlg .fold:is([data-k=pw],[data-k=tok])>summary::before{content:"";flex:none;width:20px;height:20px;background:var(--acc);-webkit-mask:var(--ico) center/contain no-repeat;mask:var(--ico) center/contain no-repeat}
 #dlg .fold[data-k=pw]{--ico:var(--j-lock)}#dlg .fold[data-k=tok]{--ico:var(--j-key)}
 #c-qlogin .pi{--ico:var(--j-enter)}
-.wa-g{display:flex;align-items:center;gap:12px;margin-top:14px}
+.wa-g{display:flex;align-items:center;gap:12px;margin-top:14px}.wa-g[hidden],.wa-kr[hidden]{display:none}
 .wa-g .gbtn{flex:1;width:auto}
 .gi{flex:none;width:20px;height:20px;background:var(--gpix) center/contain no-repeat;image-rendering:pixelated}
 :root{--gpix:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23ea4335' d='M2 0h6v1H2zM1 1h8v1H1zM0 2h2v1H0z'/%3E%3Cpath fill='%23fbbc05' d='M0 3h2v1H0zM0 4h2v1H0zM0 5h2v1H0zM0 6h2v1H0z'/%3E%3Cpath fill='%234285f4' d='M5 4h5v1H5zM5 5h5v1H5zM8 6h2v1H8zM8 7h2v1H8zM8 8h1v1H8z'/%3E%3Cpath fill='%2334a853' d='M0 7h2v1H0zM1 8h7v1H1zM2 9h6v1H2z'/%3E%3C/svg%3E")}
 .wst{display:block;margin:10px 2px 0;font:7px/1.7 var(--pf);color:var(--mut)}.wst:empty{display:none}
 .wst[data-s=ok]{color:var(--ok)}.wst[data-s=err]{color:color-mix(in srgb,var(--err) 75%,var(--fg))}
 .wst[data-s=wait]::before{content:"";display:inline-block;width:6px;height:6px;margin-right:8px;background:var(--acc);animation:blk .5s steps(1) infinite}
+/* Kiro: вход окошком Kiro в своём браузере (Google, GitHub, AWS Builder ID), код для сверки и кредиты месяца */
+.wa-kb{display:flex;gap:12px;margin-top:12px}.wa-kb .gbtn{flex:1;width:auto;min-width:0}
+.ghi,.awi{flex:none;width:20px;height:20px;background:var(--fg);-webkit-mask:var(--ghpix) center/contain no-repeat;mask:var(--ghpix) center/contain no-repeat}
+.awi{background:#ff9900;-webkit-mask-image:var(--j-user);mask-image:var(--j-user)}
+:root{--ghpix:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23000' d='M1 0h1v1H1zM8 0h1v1H8zM1 1h2v1H1zM7 1h2v1H7zM1 2h8v1H1zM0 3h10v1H0zM0 4h2v1H0zM4 4h2v1H4zM8 4h2v1H8zM0 5h10v1H0zM1 6h8v1H1zM2 7h6v1H2zM2 8h1v1H2zM4 8h2v1H4zM7 8h1v1H7zM1 9h1v1H1zM4 9h2v1H4zM8 9h1v1H8z'/%3E%3C/svg%3E")}
+.wa-kw{margin:14px 0 0;padding:12px;background:var(--card);box-shadow:var(--sh2);animation:inP .3s var(--ez)}.wa-kw[hidden]{display:none}
+.wa-kt{margin:0;font:7px/1.8 var(--pf);color:var(--fg)}
+.wa-kc{display:flex;align-items:center;gap:12px;margin:10px 0 0;font:7px/1.4 var(--pf);color:var(--mut)}
+.wa-kc b{padding:7px 10px;background:var(--bg);color:var(--fg);font:11px/1 var(--pf);font-weight:400;letter-spacing:2px;box-shadow:var(--sunk)}
+.wa-ka{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;margin-top:12px}.wa-ka .pbtn{margin:2px}.wa-ka .pbtn .pi{--ico:var(--j-link)}
+.kr-imp textarea{width:100%;min-height:76px;resize:vertical;font:7px/1.6 var(--pf)}
+#f-key.kr-off{display:none}
+#c-kimp .pi{--ico:var(--j-enter)}
+.wa-gs{margin:0;padding:0 0 0 18px;font:7px/1.9 var(--pf);color:var(--fg)}.wa-gs li+li{margin-top:6px}
+.wa-gw .wa-kt{margin-top:10px;color:var(--mut)}.wa-gb{margin:10px 0 0}
+#wa-gcp .pi{--ico:var(--j-copy)}
+.wa-win{display:block;margin:12px 2px 0;text-align:left}.wa-win[hidden]{display:none}
+.wa-cr{margin:12px 0 0;padding:12px 0 0;border-top:2px dashed var(--line)}.wa-cr[hidden]{display:none}
+.wa-crt{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font:7px/1.4 var(--pf);color:var(--mut)}
+.wa-crt b{font-weight:400;color:var(--fg)}
+.wa-bar{display:block;height:8px;margin:9px 0 0;background:var(--bg);box-shadow:var(--sunk)}
+.wa-bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .5s var(--ez)}
+.wa-cr[data-low] .wa-bar i{background:color-mix(in srgb,var(--err) 80%,var(--acc))}
+.wa-cr small{display:block;margin:9px 0 0;font:7px/1.7 var(--pf);color:var(--mut)}.wa-cr small:empty{display:none}
 #f-model[hidden],#mh[hidden],.sw[hidden]{display:none}
 .gh+.sw[hidden]+.sw{border-top:0}
 /* мягче: ссылки «Забыть» и «Сбросить всё» не кричат красным, ошибка проверки ключа — не красным текстом */
@@ -1763,6 +1787,7 @@ const tick=setInterval(paint,100);paint();
         <span class="wa-who"><b id="wa-who"></b><small id="wa-sub"></small></span>
         <span class="wa-act"><button class="wl" id="wa-swap" type="button" aria-expanded="false">Другой аккаунт</button><button class="wl wd" id="wa-out" type="button">Отключить</button></span>
       </div>
+      <div class="wa-cr" id="wa-cr" hidden><div class="wa-crt"><span id="wa-crl">Кредиты Kiro</span><b id="wa-crn"></b></div><i class="wa-bar" aria-hidden="true"><i id="wa-crb"></i></i><small id="wa-crs"></small></div>
       <p class="wa-msg" id="wa-msg" hidden></p><div class="wa-do" id="wa-do" hidden></div></div>
       <div class="wa-ways" id="wa-ways">
         <details class="fold" data-k="pw" id="wa-pw"><summary><span class="ft">Вход по email и паролю</span><button class="qm" type="button" data-help="pw" aria-label="Как это работает">?</button></summary><div class="fb">
@@ -1771,9 +1796,28 @@ const tick=setInterval(paint,100);paint();
           <button class="pbtn" id="c-qlogin" type="button"><i class="pi"></i><span>Войти</span></button>
           <small class="wst" id="c-qst"></small><div class="wa-do" id="c-qdo" hidden></div>
         </div></details>
+        <!-- Kiro: вход окошком Kiro в своём браузере; сервер сам забирает доступ -->
+        <div class="wa-kr" id="wa-kr" hidden>
+          <div class="wa-g"><button class="pbtn gbtn" data-kr="google" type="button"><i class="gi" aria-hidden="true"></i><span>Войти через Google</span></button><button class="qm" type="button" data-help="krin" aria-label="Как это работает">?</button></div>
+          <div class="wa-kb"><button class="pbtn gbtn" data-kr="github" type="button"><i class="ghi" aria-hidden="true"></i><span>GitHub</span></button><button class="pbtn gbtn" data-kr="builder" type="button"><i class="awi" aria-hidden="true"></i><span>AWS Builder ID</span></button></div>
+          <div class="wa-kw" id="wa-kw" role="status" hidden>
+            <p class="wa-kt" id="wa-kt"></p>
+            <div class="wa-kc"><span>Код на странице</span><b id="wa-kc"></b></div>
+            <div class="wa-ka"><a class="pbtn sm" id="wa-kopen" href="#" target="_blank" rel="noopener noreferrer"><i class="pi"></i><span>Открыть окно входа</span></a><button class="wl" id="wa-kx" type="button">Отмена</button></div>
+          </div>
+          <small class="wst" id="c-kst"></small>
+        </div>
         <div class="wa-g"><button class="pbtn gbtn" id="c-gin" type="button"><i class="gi" aria-hidden="true"></i><span>Войти через Google</span></button><button class="qm" type="button" data-help="google" aria-label="Как войти через Google">?</button></div>
+        <!-- DeepSeek, Qwen: окно сайта открыто приложением — после входа закладка вернёт токен сюда сама -->
+        <div class="wa-kw wa-gw" id="wa-gw" role="status" hidden>
+          <ol class="wa-gs"><li id="wa-g1"></li><li id="wa-g2"></li></ol>
+          <p class="wa-kt" id="wa-g3"></p>
+          <p class="wa-gb"><a class="hbm" id="wa-gbm" draggable="true" href="#"></a></p>
+          <div class="wa-ka"><button class="pbtn sm" id="wa-gcp" type="button"><i class="pi"></i><span>Скопировать команду</span></button><button class="wl" id="wa-gre" type="button">Открыть сайт снова</button><button class="wl" id="wa-gx" type="button">Скрыть</button></div>
+        </div>
         <small class="wst" id="c-gst"></small>
-        <details class="fold" data-k="tok" id="wa-tok"><summary><span class="ft">Токен вручную</span><button class="qm" type="button" data-help="tok" aria-label="Где взять токен">?</button></summary><div class="fb" id="wa-tokb"></div></details>
+        <button class="wl wa-win" id="c-win" type="button">Войти в окне приложения — по email, телефону или GitHub</button>
+        <details class="fold" data-k="tok" id="wa-tok"><summary><span class="ft">Токен вручную</span><button class="qm" type="button" data-help="tok" aria-label="Где взять токен">?</button></summary><div class="fb" id="wa-tokb"><div class="kr-imp" id="kr-imp" hidden><label class="f">refreshToken или kiro-auth-token.json<textarea id="c-kimpt" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder='{"accessToken": "…", "refreshToken": "aor…", …}'></textarea></label><button class="pbtn" id="c-kimp" type="button"><i class="pi"></i><span>Подключить</span></button><small class="wst" id="c-kist"></small></div></div></details>
       </div>
     </div>
     <label class="f" id="f-base" hidden>Адрес API<input id="c-base" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="https://…/v1"></label>
@@ -4341,7 +4385,7 @@ $('#ask-ok').onclick=()=>$('#ask').close('ok');$('#ask-no').onclick=()=>$('#ask'
 $('#ask-i').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#ask').close('ok')}};
 $('#ask').addEventListener('click',e=>{if(e.target===$('#ask'))$('#ask').close('')});
 /* свой Ollama и другие OpenAI-совместимые серверы — через «Другой» */
-const PRESETS={OpenAI:'https://api.openai.com/v1',Coarena:'https://coarena.ai/api/v1','Qwen (chat.qwen.ai)':'https://chat.qwen.ai','DeepSeek (chat.deepseek.com)':'https://chat.deepseek.com',OpenRouter:'https://openrouter.ai/api/v1','Ollama Cloud':'https://ollama.com/v1',JustWoker:'https://api.justwoker.icu/v1','LM Studio':'http://localhost:1234/v1'};
+const PRESETS={OpenAI:'https://api.openai.com/v1',Coarena:'https://coarena.ai/api/v1','Qwen (chat.qwen.ai)':'https://chat.qwen.ai','DeepSeek (chat.deepseek.com)':'https://chat.deepseek.com','Kiro (kiro.dev)':'https://kiro.dev',OpenRouter:'https://openrouter.ai/api/v1','Ollama Cloud':'https://ollama.com/v1',JustWoker:'https://api.justwoker.icu/v1','LM Studio':'http://localhost:1234/v1'};
 const LOCAL=['LM Studio'],CUSTOM='Другой';
 const prov=$('#c-prov');
 /* сохранённые на сервере провайдеры: адрес API → {model, hasKey} (заполняет client.js; сами ключи в браузер не приходят).
@@ -4363,15 +4407,24 @@ const isQw=b=>{try{return new URL(nb(b)).hostname==='chat.qwen.ai'}catch(e){retu
 const isDs=b=>{try{return new URL(nb(b)).hostname==='chat.deepseek.com'}catch(e){return false}};
 /* Coarena (coarena.ai): обычный ключ coa_…, но у каждой модели свои уровни размышления — выбор под моделью */
 const isCo=b=>{try{return /(^|\.)coarena\.ai$/i.test(new URL(nb(b)).hostname)}catch(e){return false}};
+/* Kiro (kiro.dev, Amazon): аккаунт Kiro (вход окошком Kiro в своём браузере), модели и кредиты — с сервера */
+const isKr=b=>{try{return /^(app\.)?kiro\.dev$/i.test(new URL(nb(b)).hostname)}catch(e){return false}};
 /* что экран знает о веб-чате: имя, сайт, где на сайте лежит токен, ручная команда, есть ли вход по паролю */
-const WEB={qw:{k:'qw',name:'Qwen',site:'chat.qwen.ai',url:'https://chat.qwen.ai',hash:'qwen-token',take:'localStorage.token',manual:'copy(localStorage.token)',pw:true},
-  ds:{k:'ds',name:'DeepSeek',site:'chat.deepseek.com',url:'https://chat.deepseek.com',hash:'deepseek-token',take:'(()=>{try{return JSON.parse(localStorage.userToken).value}catch(e){return localStorage.userToken}})()',manual:'copy(JSON.parse(localStorage.userToken).value)',pw:true,
+const WEB={qw:{k:'qw',name:'Qwen',site:'chat.qwen.ai',url:'https://chat.qwen.ai',login:'https://chat.qwen.ai/auth?action=signin',hash:'qwen-token',take:'localStorage.token',manual:'copy(localStorage.token)',pw:true},
+  ds:{k:'ds',name:'DeepSeek',site:'chat.deepseek.com',url:'https://chat.deepseek.com',login:'https://chat.deepseek.com/sign_in',hash:'deepseek-token',take:'(()=>{try{return JSON.parse(localStorage.userToken).value}catch(e){return localStorage.userToken}})()',manual:'copy(JSON.parse(localStorage.userToken).value)',pw:true,
     /* вместе с токеном — отпечаток устройства (SDK защиты сайта) и User-Agent: по ним сайт узнаёт «твой» браузер при входе по паролю */
-    more:"+'&deepseek-device='+encodeURIComponent((()=>{try{const d=window.SMSdk&&SMSdk.getDeviceId&&SMSdk.getDeviceId();return typeof d==='string'?d:''}catch(e){return ''}})())+'&deepseek-ua='+encodeURIComponent(navigator.userAgent)"}};
-const webOf=b=>isQw(b)?WEB.qw:isDs(b)?WEB.ds:null;
+    more:"+'&deepseek-device='+encodeURIComponent((()=>{try{const d=window.SMSdk&&SMSdk.getDeviceId&&SMSdk.getDeviceId();return typeof d==='string'?d:''}catch(e){return ''}})())+'&deepseek-ua='+encodeURIComponent(navigator.userAgent)",
+    msg:",dev:(()=>{try{const d=window.SMSdk&&SMSdk.getDeviceId&&SMSdk.getDeviceId();return typeof d==='string'?d:''}catch(e){return ''}})(),ua:navigator.userAgent"}};
+WEB.kr={k:'kr',name:'Kiro',site:'kiro.dev',url:'https://app.kiro.dev',pw:false,kiro:true};
+const webOf=b=>isQw(b)?WEB.qw:isDs(b)?WEB.ds:isKr(b)?WEB.kr:null;
 /* «Войти через Google»: команда в консоли сайта открывает это приложение с токеном после # (на сервер не уходит),
    client.js его подхватывает и сохраняет с подтверждением. Закладка — тот же код как javascript:-ссылка */
-const webCmd=w=>"(t=>t?location.href='"+location.origin+location.pathname+"#"+w.hash+"='+encodeURIComponent(t)"+(w.more||'')+":alert('Сначала войди в "+w.site+"'))("+w.take+")";
+/* Окно сайта открыло само приложение — токен уходит ему напрямую (postMessage только на адрес приложения), а оно
+   отвечает «принято»: тогда окно закрывается. Ответа нет (сайт открыт не отсюда) — как раньше, через адрес с # */
+const webCmd=w=>{const O=JSON.stringify(location.origin),go="location.href='"+location.origin+location.pathname+"#"+w.hash+"='+encodeURIComponent(t)"+(w.more||'');
+  return "(t=>{if(!t)return alert('Сначала войди в "+w.site+"');var o=window.opener,ok=0,go=function(){"+go+"};if(!o||o.closed)return go();"
+    +"addEventListener('message',function(e){if(e.origin==="+O+"&&e.data&&e.data.pc==='ok'){ok=1;window.close()}});"
+    +"try{o.postMessage({pc:'"+w.hash+"',t:t"+(w.msg||'')+"},"+O+")}catch(e){}setTimeout(function(){if(!ok)go()},1500)})("+w.take+")"};
 const bmHref=w=>'javascript:void('+encodeURIComponent(webCmd(w))+')';
 /* подпись под «Размышлением» — коротко, подробности под «?» (client.js уточняет её по выбранной модели) */
 const THINK_SUB='Думает перед ответом: умнее, но медленнее';
@@ -4380,13 +4433,16 @@ function keyHint(){const b=nb($('#c-base').value),sv=provSaved[b],w=webOf(b),wa=
   $('#f-key').firstChild.nodeValue=w?'Токен '+w.name:'API ключ';$('#c-forget').hidden=!sv||!!w;
   /* у веб-чата поле токена живёт в папке «Токен вручную», у остальных провайдеров — на своём месте */
   const fk=$('#f-key');if(w){if(fk.parentNode!==$('#wa-tokb'))$('#wa-tokb').append(fk)}else if(fk.previousElementSibling!==$('#f-key-home'))$('#f-key-home').after(fk);
-  if(wa.dataset.p!==(w?w.k:'')){wa.dataset.p=w?w.k:'';wa.classList.remove('swap');$('#wa-swap').setAttribute('aria-expanded','false');$('#c-gst').textContent='';$('#c-qst').textContent='';$('#c-qdo').hidden=true}
-  wa.hidden=!w;$('#mh').hidden=!!w;$('#f-model').hidden=isDs(b);
+  /* Kiro: вместо поля токена — вход окошком Kiro и «Токен вручную» (refreshToken или файл из Kiro IDE) */
+  const kr=!!w&&!!w.kiro;fk.classList.toggle('kr-off',kr);$('#wa-kr').hidden=!kr;$('#kr-imp').hidden=!kr;$('#c-gin').parentNode.hidden=kr;$('#c-gst').hidden=kr;$('#c-win').hidden=kr;if(kr)$('#wa-gw').hidden=true;if(!kr)$('#wa-cr').hidden=true;
+  if(wa.dataset.p!==(w?w.k:'')){wa.dataset.p=w?w.k:'';wa.classList.remove('swap');$('#wa-swap').setAttribute('aria-expanded','false');$('#c-gst').textContent='';$('#c-qst').textContent='';$('#c-qdo').hidden=true;$('#wa-gw').hidden=true;window.krReset&&krReset()}
+  wa.hidden=!w;$('#mh').hidden=!!w&&!kr;$('#f-model').hidden=isDs(b);
   if(w){$('#wa-n').textContent='Аккаунт '+w.name;$('#wa-pw').hidden=!w.pw;
     /* DeepSeek пускает и по телефону */
     const ds=w===WEB.ds,q=$('#c-qmail');$('#f-qmail').firstChild.nodeValue=ds?'Email или телефон':'Email';q.type=ds?'text':'email';q.inputMode=ds?'email':'';q.placeholder=ds?'you@mail.com или +7 900 000-00-00':'you@mail.com'}
-  $('#f-think').hidden=!w;$('#f-vis').hidden=!!w;$('#f-effort').hidden=!isCo(b);
-  $('#f-think').querySelector('span').firstChild.nodeValue=isDs(b)?'DeepThink':'Размышление'}
+  $('#f-think').hidden=!w;$('#f-vis').hidden=!!w&&!kr;$('#f-effort').hidden=!isCo(b);
+  $('#f-think').querySelector('span').firstChild.nodeValue=isDs(b)?'DeepThink':'Размышление';
+  $('#f-effort').querySelector('.fl').firstChild.nodeValue=kr?'Глубина размышления':'Уровень размышления';if(kr&&window.coEffort)coEffort()}
 function syncSet(){const p=prov.value;$('#f-steps').hidden=!$('#c-lim').checked;$('#sh').hidden=true;$('#f-base').hidden=!!PRESETS[p];$('#f-key').hidden=LOCAL.includes(p);keyHint()}
 function fill(s){
   for(const k in F)$(F[k]).value=s[k]||'';
@@ -4405,12 +4461,26 @@ $('#c-lim').onchange=syncSet;
 /* карточка аккаунта: «Другой аккаунт» показывает способы входа и у подключённого */
 $('#wa-swap').onclick=()=>{const on=$('#wa').classList.toggle('swap');$('#wa-swap').setAttribute('aria-expanded',on)};
 /* «Войти через Google»: копируем команду и открываем сайт; с телефона консоли нет — объясняем, как сделать с компьютера */
-$('#c-gin').onclick=async()=>{const w=webOf($('#c-base').value),st=$('#c-gst');if(!w)return;
+/* Google не пускает вход в браузере на сервере (так он защищает аккаунты от программ), поэтому вход — в ТВОЁМ браузере:
+   приложение открывает окно сайта, ты входишь через Google, а закладка (или команда в консоли) возвращает токен сюда сама */
+window.webWin=null;
+function gwShow(w){const p=$('#wa-gw');p.hidden=false;$('#c-gst').textContent='';
+  $('#wa-g1').textContent='В открывшемся окне '+w.site+' войди через Google (если ещё не вошёл).';
+  $('#wa-g2').textContent='Там же нажми закладку «Токен '+w.name+'» — токен вернётся сюда сам, а окно закроется.';
+  $('#wa-g3').textContent='Закладки ещё нет? Один раз перетащи эту кнопку на панель закладок (Ctrl+Shift+B). Или без закладки: «Скопировать команду», затем в окне сайта F12, вкладка Console, вставить и Enter.';
+  const a=$('#wa-gbm');a.href=bmHref(w);a.textContent='Токен '+w.name}
+const gwOpen=w=>{try{window.webWin=window.open(w.login||w.url,'pc-web-login','popup,width=560,height=820')}catch(e){window.webWin=null}return window.webWin};
+$('#c-gin').onclick=()=>{const w=webOf($('#c-base').value);if(!w||w.kiro)return;
   if(touchUI()){openHelp('google',$('#c-gin'));return}
-  const c=webCmd(w);
-  try{await navigator.clipboard.writeText(c);st.textContent='Команда скопирована — вставь её в консоль на '+w.site+' (F12, вкладка Console)';st.dataset.s='ok'}
-  catch(e){st.textContent='';await ask('Войти через Google','Скопируй команду и вставь её в консоль на '+w.site+' (F12, вкладка Console):',c,'Готово')}
-  window.open(w.url,'_blank','noopener')};
+  gwShow(w);if(!gwOpen(w)){const st=$('#c-gst');st.textContent='Браузер не дал открыть окно — нажми «Открыть сайт снова»';st.dataset.s='err'}};
+$('#wa-gre').onclick=()=>{const w=webOf($('#c-base').value);if(w&&!w.kiro)gwOpen(w)};
+$('#wa-gx').onclick=()=>{$('#wa-gw').hidden=true};
+$('#wa-gcp').onclick=async()=>{const w=webOf($('#c-base').value),b=$('#wa-gcp');if(!w)return;const c=webCmd(w);
+  try{await navigator.clipboard.writeText(c);b.lastChild.textContent='Скопировано'}catch(e){await ask('Команда для консоли','Вставь её в консоль на '+w.site+' (F12, вкладка Console):',c,'Готово')}
+  setTimeout(()=>{b.lastChild.textContent='Скопировать команду'},2000)};
+$('#wa-gbm').onclick=e=>{e.preventDefault();const a=e.currentTarget;a.classList.add('nope');a.dataset.t='Не нажимай здесь — перетащи на панель закладок (Ctrl+Shift+B)';setTimeout(()=>a.classList.remove('nope'),2600)};
+/* вход в окне приложения: настоящая страница сайта в браузере на сервере (email, телефон, GitHub) — токен заберётся сам */
+$('#c-win').onclick=()=>{const w=webOf($('#c-base').value);if(!w||w.kiro||!window.openCheck)return;openCheck('login',()=>window.webLogged&&webLogged(),w===WEB.qw?'qwen':'deepseek')};
 
 /* ---------- справка под «?» ----------
    Объяснения не лежат полотном в настройках: на ПК — облачко у знака вопроса, на телефоне — шторка снизу,
@@ -4420,7 +4490,8 @@ const touchUI=()=>matchMedia('(hover:none) and (pointer:coarse)').matches;
 let waNote='';
 const cmdBox=c=>'<div class="hcmd"><code>'+esc(c)+'</code><button type="button" class="hcp" data-copy="'+esc(c).replace(/"/g,'&quot;')+'">Копировать</button></div>';
 function helpOf(k){const w=webOf($('#c-base').value)||WEB.qw,n=w.name,s=w.site,ds=w===WEB.ds;
-  const steps='<ol><li>Нажми «Войти через Google» — откроется '+s+' (войди там, если нужно), а команда уже скопирована.</li><li>На '+s+' нажми F12, открой вкладку «Console», вставь команду (Ctrl+V) и нажми Enter. Chrome при первой вставке попросит набрать <code>allow pasting</code> — набери и вставь ещё раз.</li><li>Вкладка сама вернётся сюда — нажми «Подключить».</li></ol>';
+  if(w.kiro){const K=krHelp(k);if(K)return K}
+  const steps='<ol><li>Один раз перетащи на панель закладок кнопку «Токен '+n+'» (она ниже и в окошке после нажатия).</li><li>Нажми «Войти через Google» — приложение откроет окно '+s+'. Войди там через Google.</li><li>Нажми закладку в этом окне — токен сам вернётся сюда и сохранится, окно закроется.</li></ol><p>Без закладки: «Скопировать команду», затем в окне сайта F12, вкладка «Console», вставить и Enter (Chrome при первой вставке попросит набрать <code>allow pasting</code>).</p>';
   if(k==='wa')return{t:'Аккаунт '+n,h:(waNote?'<p class="hbad">'+esc(waNote)+'</p>':'')
     +'<p>Personal Computer говорит с '+s+' от имени твоего аккаунта: модели бесплатно, запросы идут с твоего сервера прямо на сайт — без сторонних прокси.</p>'
     +(ds?'<p>Подключить можно по email (или телефону) и паролю — тогда токен обновляется сам, — через «Войти через Google» (для входа через Google) или токеном вручную.</p><p>Запросы идут так же, как из одной вкладки браузера: тот же «браузер», cookies сайта, без спешки. Если защита сайта всё же попросит подтвердить, что ты не робот, в чате появится «Пройти проверку»: откроется окно с настоящей страницей сайта, ты пройдёшь проверку — и работа продолжится сама.</p>'
@@ -4429,9 +4500,10 @@ function helpOf(k){const w=webOf($('#c-base').value)||WEB.qw,n=w.name,s=w.site,d
     :{t:'Вход по email и паролю',h:'<p>Сервер сам войдёт на '+s+', получит токен и будет обновлять его до истечения — вставлять токен не придётся.</p><p>Пароль не хранится: на твоём сервере лежит только его хеш SHA-256 — именно его и принимает '+s+'. «Отключить» стирает и его.</p><p>Входишь через Google или GitHub? Пароля у такого аккаунта нет — нажми «Войти через Google».</p>'};
   if(k==='check')return{t:'Проверка «я не робот»',h:'<p>Защита '+s+' иногда просит доказать, что запросы шлёт человек. Personal Computer её не обходит: он открывает сайт в браузере на твоём сервере — с тем же адресом и cookies, что у запросов модели, — и показывает его экран в окне. Проверку проходишь ты сам, а сайт выдаёт отметку, с которой пускает дальше.</p><p>Пока проверка не пройдена, задача ждёт и сама пробует снова через 5, 15 и 30 минут. После проверки запросы ещё какое-то время идут реже — чтобы защита успокоилась.</p><p>Если проверка нужна постоянно, дело обычно в адресе сервера: включи прокси с «домашним» адресом в настройках → Сервер → «Прокси».</p>'};
   if(k==='google')return{t:'Войти через Google',h:'<p>'+(ds?'Подходит для любого входа на '+s+' — через Google, почту или телефон.':'Для аккаунтов, которые входят на '+s+' через Google или GitHub.')+' С компьютера:</p>'+steps
+    +'<p>Почему не в окне приложения: Google нарочно не пускает вход в браузере, которым управляет программа (а окно приложения — это браузер на сервере). Поэтому вход через Google идёт в твоём собственном браузере, а Personal Computer только забирает готовый токен.</p>'
     +'<p>Без консоли: один раз перетащи эту ссылку на панель закладок, а потом просто нажимай её на '+s+':</p><p><a class="hbm" draggable="true" href="'+bmHref(w)+'">Токен '+n+' в Personal Computer</a></p>'
     +(ds?'<p>Вместе с токеном придёт отпечаток этого браузера — после этого '+s+' пустит и вход по паролю отсюда.</p>':'')
-    +(touchUI()?'<p class="hnote">С телефона консоли нет — подключи аккаунт с компьютера: токен сохранится на сервере и будет работать отовсюду.</p>':'<p class="hnote">Токен приходит после # в адресе и в логи сервера не попадает; сохранится только после твоего подтверждения.</p>')};
+    +(touchUI()?'<p class="hnote">С телефона закладок и консоли нет — подключи аккаунт с компьютера (токен сохранится на сервере и будет работать отовсюду) или войди «в окне приложения» по email или телефону.</p>':'<p class="hnote">Токен приходит после # в адресе и в логи сервера не попадает; сохранится только после твоего подтверждения.</p>')};
   if(k==='tok')return{t:'Токен вручную',h:'<p>На '+s+' нажми F12, открой вкладку «Console» и выполни команду — токен окажется в буфере обмена:</p>'+cmdBox(w.manual)
     +'<p>Вставь его в поле «Токен '+n+'» и нажми «Сохранить». Подойдёт и с «Bearer»'+(ds?', и целиком JSON из localStorage.userToken.':', и строкой cookie.')+'</p>'};
   if(k==='think'){const m=window.qwInfoOf?qwInfoOf():null;
@@ -4444,6 +4516,22 @@ function helpOf(k){const w=webOf($('#c-base').value)||WEB.qw,n=w.name,s=w.site,d
       +'<p>«Как решит модель» — уровень по умолчанию у самой модели. Если выбранного уровня у модели нет, берётся ближайший.</p><p>В чате размышлений не видно. Если интересно, о чём думала модель, зажми компьютер — откроется окно с размышлениями по шагам. Если модель потратит на размышления весь ответ, Personal Computer сам повторит запрос уровнем ниже.</p>'}}
   if(k==='vis')return{t:'Показывать файлы модели',h:'<p>Картинки и PDF из твоих сообщений уходят прямо в модель — она видит их сама.</p><p>Выключи, если модель не умеет их читать: файлы всё равно лягут на сервер в inbox/, и Personal Computer откроет их своими инструментами.</p>'};
   if(k==='lim')return{t:'Ограничение шагов',h:'<p>Personal Computer останавливается после стольких шагов подряд, чтобы не зациклиться, — продолжить можно кнопкой «Повторить».</p><p>Выключи — будет работать до конца задачи или до «Стоп».</p>'};
+  return null}
+/* справка Kiro: вход окошком Kiro, кредиты, токен из Kiro IDE, размышление */
+function krHelp(k){
+  if(k==='wa')return{t:'Аккаунт Kiro',h:(waNote?'<p class="hbad">'+esc(waNote)+'</p>':'')
+    +'<p>Kiro — среда разработки от Amazon (AWS). У аккаунта каждый месяц есть бесплатные кредиты (новичкам — ещё и бонус на первые недели), а модели — Claude и другие, список зависит от плана.</p>'
+    +'<p>Personal Computer говорит с Kiro от имени твоего аккаунта тем же API, что и сама Kiro IDE, — прямо со своего сервера, без сторонних шлюзов. Инструменты (команды, файлы, MCP) модель вызывает по-настоящему, а не текстом.</p>'
+    +'<p>Сколько кредитов осталось и когда они обновятся — в карточке. У каждой модели свой расход: «×1,3» — в 1,3 раза больше обычного, «бесплатно» — не тратит кредиты.</p>'};
+  if(k==='krin')return{t:'Вход в Kiro',h:'<ol><li>Нажми «Войти через Google» (или GitHub, или AWS Builder ID) — откроется окошко Kiro в твоём браузере.</li><li>Войди там как обычно и подтверди вход. Код на странице должен совпасть с кодом здесь.</li><li>Всё — Personal Computer сам получит доступ и выберет модель. Окошко можно закрыть.</li></ol>'
+    +'<p>Пароль от Google или GitHub вводится только на их страницах — Personal Computer его не видит. Сервер получает лишь доступ к Kiro: он живёт час и обновляется сам, а ключ обновления хранится на твоём сервере зашифрованным.</p>'
+    +'<p>Нет Google и GitHub? «AWS Builder ID» — вход по email на сайте AWS, там же и регистрация.</p>'
+    +'<p class="hnote">Работает и с телефона: окошко откроется новой вкладкой — войди там и вернись сюда.</p>'};
+  if(k==='tok')return{t:'Токен вручную',h:'<p>Если на компьютере стоит Kiro IDE и ты в ней вошёл: открой файл <code>~/.aws/sso/cache/kiro-auth-token.json</code> и вставь его содержимое целиком (или только значение refreshToken — оно начинается с <code>aor</code>).</p><p>Вход через AWS Builder ID в Kiro IDE хранит ещё и файл клиента рядом (с clientId и clientSecret) — вставь оба файла подряд. Проще — нажать «AWS Builder ID».</p>'};
+  if(k==='think'){const m=window.qwInfoOf?qwInfoOf():null;
+    return{t:'Размышление',h:(m&&m.must?'<p>Эта модель всегда сначала думает — выключить нельзя.</p>':m&&!m.think?'<p>Эта модель не умеет размышлять — отвечает сразу.</p>':'')
+      +'<p>Модель сначала думает, потом отвечает: умнее, но медленнее и тратит больше кредитов. Глубину выбирают ниже.</p><p>В чате размышлений не видно — зажми компьютер, и откроется окно с размышлениями по шагам.</p>'}}
+  if(k==='effort')return{t:'Глубина размышления',h:'<p>Сколько модель думает перед ответом. Чем глубже, тем лучше она решает сложное — и тем дольше отвечает и больше тратит кредитов.</p><p>У Claude 5-го поколения уровень передаётся самой модели, у остальных Claude — как подсказка длины размышления, у моделей GPT — их собственная настройка.</p>'};
   return null}
 /* облачко на ПК */
 const hpop=document.createElement('div');hpop.className='hpop';hpop.hidden=true;hpop.setAttribute('role','dialog');
@@ -4510,7 +4598,7 @@ let mdl=[],mt=0,md_t;
 const mi=()=>$('#c-model');
 function showModels(){const q=mi().value.trim().toLowerCase(),box=$('#ml');
   const l=mdl.filter(x=>x.toLowerCase().includes(q)).slice(0,60);box.innerHTML='';
-  for(const x of l){const d=document.createElement('div');d.textContent=x;d.onclick=()=>{mi().value=x;box.hidden=true};box.append(d)}
+  for(const x of l){const d=document.createElement('div');d.textContent=(window.mdlLabel&&mdlLabel(x))||x;d.onclick=()=>{mi().value=x;box.hidden=true;mi().dispatchEvent(new Event('change'))};box.append(d)}
   box.hidden=!l.length}
 /* OpenRouter: ключ без купленных кредитов (is_free_tier) пускает только к моделям «…:free», остальные отвечают 402 */
 const isFree=x=>/:free$/i.test(x);

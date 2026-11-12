@@ -112,7 +112,7 @@ export class Browser extends EventEmitter {
     this.p = p; this.err = '';
     p.stdio[2].on('data', d => { this.err = (this.err + d).slice(-4000); });
     const cdp = this.cdp = new Pipe(p.stdio[3], p.stdio[4]);
-    cdp.on('event', m => this.emit('cdp', m));
+    cdp.on('event', m => { this.emit('cdp', m); if (m.method === 'Target.targetCreated') this.popup(m.params?.targetInfo); });
     p.on('exit', () => { cdp.close(); this.cdp = null; for (const pg of this.pages) pg.gone(); this.pages.clear(); this.emit('exit'); });
     p.on('error', e => { this.err += '\n' + e.message; });
     try {
@@ -120,6 +120,8 @@ export class Browser extends EventEmitter {
       this.version = v.product || '';
       /* настоящий User-Agent этого браузера (у headless в нём «HeadlessChrome» — показываем сайту обычный, как у запросов) */
       this.realUA = v.userAgent || '';
+      /* узнавать о новых вкладках: всплывающие окна сайта закрываем (см. popup) */
+      await cdp.send('Target.setDiscoverTargets', { discover: true }).catch(() => {});
     } catch (e) { this.kill(); throw Object.assign(new Error('Браузер не запустился: ' + (lastLine(this.err) || e.message)), { nobrowser: true }); }
     return this;
   }
@@ -133,6 +135,15 @@ export class Browser extends EventEmitter {
     this.pages.add(pg);
     await pg.init({ width, height });
     return pg;
+  }
+  /* всплывающее окно, которое открыла страница (вход через Google и т. п.): его не видно в окне приложения и на него
+     не действует список разрешённых адресов — закрываем сразу, а вкладке-родителю сообщаем (она объяснит, что делать) */
+  popup(t) {
+    if (!t || t.type !== 'page' || !t.openerId) return;
+    const pg = [...this.pages].find(p => p.targetId === t.openerId);
+    if (!pg) return;
+    this.cdp?.send('Target.closeTarget', { targetId: t.targetId }).catch(() => {});
+    pg.emit('popup', t.url || '');
   }
   touch() { clearTimeout(this.idleT); this.idleT = setTimeout(() => { if (!this.pages.size) this.kill(); }, IDLE_MS); this.idleT.unref?.(); }
   kill() { clearTimeout(this.idleT); if (this.alive) { try { this.cdp?.send('Browser.close').catch(() => {}); } catch {} const p = this.p; setTimeout(() => { if (p.exitCode === null) p.kill('SIGKILL'); }, 3000).unref?.(); } }

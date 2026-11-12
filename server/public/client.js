@@ -546,29 +546,44 @@ async function started() {
   if (qwHash) qwCatch(qwHash);
   if (dsHash) dsCatch(dsHash);
 }
+/* токен пришёл из окна сайта, которое открыло само приложение («Войти через Google» → закладка или команда в консоли):
+   сайт проверен по адресу отправителя, окно — наше, поэтому без лишнего вопроса. Пришёл иначе — спрашиваем */
+addEventListener('message', e => {
+  const d = e.data, P = { 'https://chat.qwen.ai': 'qwen-token', 'https://chat.deepseek.com': 'deepseek-token' };
+  if (!d || typeof d !== 'object' || P[e.origin] !== d.pc || typeof d.t !== 'string' || d.t.length > 8192) return;
+  try { e.source && e.source.postMessage({ pc: 'ok' }, e.origin); } catch (x) {}
+  const mine = !!window.webWin && e.source === window.webWin;
+  if (d.pc === 'qwen-token') qwCatch(d.t, mine);
+  else dsCatch(d.t, mine, { device: typeof d.dev === 'string' ? d.dev : '', ua: typeof d.ua === 'string' ? d.ua : '' });
+});
+/* после входа: настройки открыты — обновить карточку; закрыты — открыть на вкладке «Модель» */
+window.webLogged = async () => {
+  $('#wa-gw') && ($('#wa-gw').hidden = true);
+  if ($('#dlg').open) await loggedIn(); else { window.__keepForm = false; openSet('ai'); }
+};
 /* токен пришёл из chat.qwen.ai: подтверждение (ссылку с чужим токеном мог подсунуть кто угодно), сохранение, модель из списка */
-async function qwCatch(t) {
+async function qwCatch(t, mine) {
   if (!/^eyJ[\w-]+\.[\w-]+\.[\w-]*$/.test(t) && !/token=/.test(t)) return;
-  if (!await ask('Qwen', 'Пришёл токен с chat.qwen.ai. Подключить этот аккаунт Qwen к Personal Computer? Подтверждай, только если сам только что нажал «Войти через Google».', null, 'Подключить')) return;
+  if (!mine && !await ask('Qwen', 'Пришёл токен с chat.qwen.ai. Подключить этот аккаунт Qwen к Personal Computer? Подтверждай, только если сам только что нажал «Войти через Google».', null, 'Подключить')) return;
   try {
     const QB = 'https://chat.qwen.ai', was = isQw(srvSet && srvSet.base) ? srvSet.model : (provSaved[QB] && provSaved[QB].model) || '';
     const r = await post('api/models', { base: QB, key: t });
     srvSet = await api('api/settings', { method: 'PUT', json: { base: QB, key: t, model: r.models.includes(was) ? was : r.models[0] } }); mirror(); save();
     bt('ok', 'set', srvSet.model);
-    window.__keepForm = false; openSet('ai');
+    await webLogged();
   } catch (e) { add('e', esc('Токен Qwen не подключился: ' + e.message)); }
 }
 /* то же для DeepSeek: токен с chat.deepseek.com (из localStorage.userToken) — подтверждение и сохранение; модель у сайта одна */
-async function dsCatch(t) {
+async function dsCatch(t, mine, dev = dsDev) {
   if (!/^[\w.+\/=:-]{16,4096}$/.test(t)) return;
-  if (!await ask('DeepSeek', 'Пришёл токен с chat.deepseek.com. Подключить этот аккаунт DeepSeek к Personal Computer? Подтверждай, только если сам только что нажал «Войти через Google».', null, 'Подключить')) return;
+  if (!mine && !await ask('DeepSeek', 'Пришёл токен с chat.deepseek.com. Подключить этот аккаунт DeepSeek к Personal Computer? Подтверждай, только если сам только что нажал «Войти через Google».', null, 'Подключить')) return;
   try {
     /* сначала «браузер» (отпечаток и User-Agent) — проверка токена пойдёт уже от его имени */
-    if (dsDev && (dsDev.device || dsDev.ua)) await post('api/deepseek/device', dsDev).catch(() => {});
+    if (dev && (dev.device || dev.ua)) await post('api/deepseek/device', dev).catch(() => {});
     const DB = 'https://chat.deepseek.com', r = await post('api/models', { base: DB, key: t });
     srvSet = await api('api/settings', { method: 'PUT', json: { base: DB, key: t, model: r.models[0] } }); mirror(); save();
     bt('ok', 'set', srvSet.model);
-    window.__keepForm = false; openSet('ai');
+    await webLogged();
   } catch (e) { add('e', esc('Токен DeepSeek не подключился: ' + e.message)); }
 }
 function mirror() {
@@ -655,7 +670,7 @@ $('#c-save').onclick = async () => {
   try { window.personalComputerRoom && personalComputerRoom.sndUI(); } catch (x) {}
   if (!cfg.tts && window.personalComputerStop) personalComputerStop();
   const body = { base: $('#c-base').value.trim(), model: $('#c-model').value.trim(), sys: $('#c-sys').value.trim(), vis: $('#c-vis').checked, think: $('#c-think').checked, ...st };
-  if (isCo(body.base)) body.effort = $('#c-effort').value;
+  if (isCo(body.base) || (isKr(body.base) && !$('#f-effort').hidden)) body.effort = $('#c-effort').value;
   const k = $('#c-key').value.trim();
   if (k) body.key = k; else if (clearKey) body.clearKey = true;
   try {
@@ -672,6 +687,7 @@ function qwThink() {
   c.disabled = !!m && (m.must || !m.think);
   if (m && m.must) c.checked = true; else if (m && !m.think) c.checked = false;
   s.textContent = m && m.must ? 'Эта модель всегда сначала думает' : m && !m.think ? 'Эта модель отвечает сразу, без размышлений' : THINK_SUB;
+  if (isKr($('#c-base').value)) { coEffort(); krHint(); }
 }
 mi().addEventListener('input', qwThink); mi().addEventListener('change', qwThink);
 $('#ml').addEventListener('click', () => setTimeout(qwThink));
@@ -679,7 +695,16 @@ $('#ml').addEventListener('click', () => setTimeout(qwThink));
 let coInfo = {};
 window.coNames = { none: 'Без размышлений', minimal: 'Минимальный', low: 'Низкий', medium: 'Средний', high: 'Высокий', xhigh: 'Очень высокий', max: 'Максимальный' };
 window.coInfoOf = () => coInfo[mi().value.trim()] || null;
+/* Kiro: глубина — из умений выбранной модели, и только когда размышление включено */
+const krNames = { low: 'Низкая', medium: 'Средняя', high: 'Высокая', xhigh: 'Очень высокая', max: 'Максимальная' };
 window.coEffort = () => {
+  if (isKr($('#c-base').value)) {
+    const sel = $('#c-effort'), m = qwInfoOf(), list = m && m.efforts ? m.efforts : [], c = $('#c-think');
+    sel.textContent = ''; for (const e of list) sel.add(new Option(krNames[e] || e, e));
+    sel.value = list.includes(effortVal) ? effortVal : list.includes('medium') ? 'medium' : list[0] || '';
+    $('#f-effort').hidden = !list.length || !c.checked || (!!m && m.must);
+    return;
+  }
   const sel = $('#c-effort'), m = coInfoOf(), list = m && m.efforts && m.efforts.length ? m.efforts : Object.keys(coNames);
   sel.textContent = ''; sel.add(new Option('Как решит модель', ''));
   for (const e of list) sel.add(new Option(coNames[e] || e, e));
@@ -687,6 +712,7 @@ window.coEffort = () => {
   sel.value = list.includes(effortVal) ? effortVal : '';
 };
 $('#c-effort').onchange = () => { effortVal = $('#c-effort').value; };
+$('#c-think').addEventListener('change', () => { if (isKr($('#c-base').value)) coEffort(); });
 mi().addEventListener('input', () => coEffort()); mi().addEventListener('change', () => coEffort());
 $('#ml').addEventListener('click', () => setTimeout(coEffort));
 
@@ -745,7 +771,7 @@ $('#c-qmail').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $(
 $('#wa-out').onclick = async () => {
   const base = $('#c-base').value.trim().replace(/\/+$/, ''), w = webOf(base); if (!w) return;
   const act = base === String(srvSet?.base || '').replace(/\/+$/, '');
-  if (!await ask(w.name, 'Отключить аккаунт ' + w.name + '? Токен' + (w === WEB.ds ? ', логин, пароль и cookies сайта' : w.pw ? ', email и хеш пароля' : '') + ' сотрутся с сервера.' + (act ? ' Сейчас Personal Computer работает через него — без аккаунта модель отвечать не будет.' : ''), null, 'Отключить')) return;
+  if (!await ask(w.name, 'Отключить аккаунт ' + w.name + '? ' + (w.kiro ? 'Доступ и ключ его обновления' : 'Токен' + (w === WEB.ds ? ', логин, пароль и cookies сайта' : w.pw ? ', email и хеш пароля' : '')) + ' сотрутся с сервера.' + (act ? ' Сейчас Personal Computer работает через него — без аккаунта модель отвечать не будет.' : ''), null, 'Отключить')) return;
   try {
     srvSet = await api('api/settings', { method: 'PUT', json: { forget: base } });
     provSaved = Object.fromEntries((srvSet.provs || []).map(p => [p.base, p])); provOpts();
@@ -757,6 +783,27 @@ loadModels = async function () {
   const base = $('#c-base').value.trim().replace(/\/+$/, ''), key = $('#c-key').value.trim(), h = $('#mh'), t = ++mt;
   if (!base) { h.textContent = ''; delete h.dataset.s; return; }
   h.textContent = 'Сервер проверяет связь с моделью…'; h.dataset.s = 'wait';
+  /* Kiro: аккаунт и кредиты — в карточке, модели — с умениями и расходом кредитов */
+  if (isKr(base)) {
+    qwInfo = {}; waState('wait'); h.textContent = ''; delete h.dataset.s;
+    try {
+      const r = await post('api/models', { base }); if (t !== mt) return;
+      mdl = r.models.slice(); qwInfo = Object.fromEntries((r.info || []).map(m => [m.id, m]));
+      /* вошёл, но работает Personal Computer пока через другого провайдера — подсказываем, как переключиться */
+      const act = isKr(srvSet && srvSet.base);
+      waState('ok', { who: r.login || 'Аккаунт Kiro', sub: [r.how && r.how !== 'token' ? 'Вход через ' + r.way : 'Вход по токену', act ? 'доступ обновляется сам' : 'нажми «Сохранить», чтобы работать через Kiro', r.live ? '' : 'список моделей — основной (Kiro свой не прислал)'].filter(Boolean).join(' · ') });
+      krCredits(r.credits);
+      const cur = mi().value.trim(); if (mdl.length && (!cur || !mdl.includes(cur))) mi().value = r.def || mdl[0];
+      provNew = false; qwThink();
+      krResume(true);
+    } catch (e) {
+      if (t !== mt) return; mdl = []; krCredits(null);
+      if (e.j && e.j.needKey) { waState('none'); krResume(false); return; }
+      waState('bad', { msg: e.message });
+      krResume(false);
+    }
+    return;
+  }
   /* Qwen и DeepSeek: проверка аккаунта — в карточке; список моделей — у Qwen (у DeepSeek модель одна) */
   if (webOf(base)) {
     qwInfo = {}; waState('wait'); h.textContent = ''; delete h.dataset.s;
@@ -807,6 +854,98 @@ loadModels = async function () {
     h.textContent = e.status === 401 || e.status === 403 || u === 401 || u === 403 ? 'Ключ не подошёл. Проверь его' : e.message === 'format' ? 'Сервер ответил, но не списком моделей. Модель можно вписать вручную' : /^Это не ключ/.test(e.message) ? e.message : 'Список моделей недоступен (' + e.message + '). Впиши модель вручную';
   }
 };
+
+/* ---------- Kiro: вход окошком Kiro в своём браузере ----------
+   Сервер получает у Kiro код и адрес страницы входа (вход «по коду устройства», как у Kiro CLI), а здесь эта страница
+   открывается окошком в ТВОЁМ браузере: там ты уже вошёл в Google или GitHub, и Google не мешает входу. Ты подтверждаешь
+   вход, сервер, опрашивая Kiro, сам забирает доступ, а экран следит за сервером и, когда готово, показывает аккаунт */
+const kst = (t, s) => { const h = $('#c-kst'); h.textContent = t || ''; if (s) h.dataset.s = s; else delete h.dataset.s; };
+let krT = 0, krGen = 0;
+window.krReset = () => { clearTimeout(krT); krGen++; $('#wa-kw').hidden = true; kst(''); document.querySelectorAll('[data-kr]').forEach(b => { b.disabled = false; }); };
+const KR_WAYS = { google: 'Google', github: 'GitHub', builder: 'AWS Builder ID' };
+async function krStart(how) {
+  krReset();
+  const g = krGen, btns = document.querySelectorAll('[data-kr]');
+  btns.forEach(b => { b.disabled = true; });
+  /* окно — сразу, в обработчике нажатия (иначе браузер заблокирует его как всплывающее), адрес — когда сервер его получит.
+     opener обнуляем: странице входа незачем доступ к приложению */
+  let win = null;
+  try { win = window.open('', 'kiro-login', 'popup,width=540,height=780'); if (win) { win.opener = null; try { win.document.title = 'Вход в Kiro…'; win.document.body.style.cssText = 'font:16px system-ui;padding:24px;color:#555'; win.document.body.textContent = 'Открываю вход в Kiro…'; } catch (e) {} } } catch (e) { win = null; }
+  kst('Открываю вход через ' + KR_WAYS[how] + '…', 'wait');
+  let r;
+  try { r = await post('api/kiro/login', { how }); }
+  catch (e) { try { win && win.close(); } catch (x) {} if (g === krGen) { btns.forEach(b => { b.disabled = false; }); kst(e.message, 'err'); } return; }
+  if (g !== krGen) { try { win && win.close(); } catch (x) {} return; }
+  let opened = false;
+  try { if (win && !win.closed) { win.location.replace(r.url); opened = true; } } catch (e) {}
+  krShow(r, opened);
+  krT = setTimeout(() => krPoll(g), 1500);
+}
+function krShow(r, opened) {
+  $('#wa-kw').hidden = false; kst('');
+  $('#wa-kt').textContent = (opened ? 'В окне ' : 'Открой окно входа и ') + (r.how === 'builder' ? 'войди в AWS Builder ID (или зарегистрируйся) и разреши доступ' : 'войди через ' + (KR_WAYS[r.how] || r.way) + ' и подтверди вход в Kiro') + ' — дальше я всё сделаю сам.';
+  $('#wa-kc').textContent = r.code || '—';
+  const a = $('#wa-kopen'); a.href = r.url; a.lastChild.textContent = opened ? 'Открыть окно снова' : 'Открыть окно входа';
+}
+async function krPoll(g) {
+  if (g !== krGen) return;
+  let r;
+  try { r = await api('api/kiro/login'); } catch (e) { krT = setTimeout(() => krPoll(g), 3000); return; }
+  if (g !== krGen) return;
+  if (r.state === 'wait' || r.state === 'save') { krT = setTimeout(() => krPoll(g), r.state === 'save' ? 700 : 1500); return; }
+  krReset();
+  if (r.state === 'ok') { kst(r.msg || 'Kiro подключён.', 'ok'); window.sfx && sfx('recv'); await loggedIn(); kst(r.msg || 'Kiro подключён.', 'ok'); }
+  else kst(r.msg || 'Вход не состоялся — нажми кнопку ещё раз.', 'err');
+}
+document.querySelectorAll('[data-kr]').forEach(b => { b.onclick = () => krStart(b.dataset.kr); });
+$('#wa-kx').onclick = () => { krReset(); api('api/kiro/login', { method: 'DELETE' }).catch(() => {}); };
+/* закрыли настройки — следить перестаём; сервер сам доведёт вход до конца, а карточка покажет его при следующем открытии */
+$('#dlg').addEventListener('close', () => krReset());
+/* открыли настройки, а вход ещё идёт (окно Kiro открыто) — снова показываем код и следим */
+async function krResume(on) {
+  const g = krGen;
+  let r; try { r = await api('api/kiro/login'); } catch (e) { return; }
+  if (g !== krGen || r.state !== 'wait' || !isKr($('#c-base').value)) return;
+  if (on) { $('#wa').classList.add('swap'); $('#wa-swap').setAttribute('aria-expanded', 'true'); }
+  document.querySelectorAll('[data-kr]').forEach(b => { b.disabled = true; });
+  krShow(r, true); krT = setTimeout(() => krPoll(krGen), 1500);
+}
+/* «Токен вручную»: refreshToken или файл kiro-auth-token.json из Kiro IDE */
+$('#c-kimp').onclick = async () => {
+  const t = $('#c-kimpt').value.trim(), st = $('#c-kist'), b = $('#c-kimp');
+  const say = (x, s) => { st.textContent = x; if (s) st.dataset.s = s; else delete st.dataset.s; };
+  if (!t) { say('Вставь refreshToken или содержимое kiro-auth-token.json', 'err'); return; }
+  b.disabled = true; say('Проверяю токен в Kiro…', 'wait');
+  try { const r = await post('api/kiro/import', { text: t }); $('#c-kimpt').value = ''; $('#wa-tok').open = false; say(''); await loggedIn(); kst('Kiro подключён' + (r.login ? ': ' + r.login : '') + '.', 'ok'); }
+  catch (e) { say(e.message, 'err'); }
+  finally { b.disabled = false; }
+};
+/* кредиты месяца: сколько осталось, бонус новичка, когда обновятся */
+const krNum = x => (Math.round(x * 100) / 100).toLocaleString('ru-RU');
+const krDay = ms => new Date(ms).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+function krCredits(c) {
+  const box = $('#wa-cr');
+  if (!c || c.limit == null) { box.hidden = true; return; }
+  const left = Math.max(0, c.limit - (c.used || 0)), tr = c.trial, tl = tr ? Math.max(0, tr.limit - tr.used) : 0, all = left + tl + Math.max(0, c.bonus || 0);
+  box.hidden = false;
+  $('#wa-crl').textContent = 'Кредиты' + (c.plan ? ' · ' + c.plan : '');
+  $('#wa-crn').textContent = 'осталось ' + krNum(all) + (tr || c.bonus ? '' : ' из ' + krNum(c.limit));
+  const cap = c.limit + (tr ? tr.limit : 0) + Math.max(0, c.bonus || 0);
+  $('#wa-crb').style.width = (cap ? Math.round(all / cap * 100) : 0) + '%';
+  if (all < Math.max(2, cap * 0.1)) box.dataset.low = '1'; else delete box.dataset.low;
+  $('#wa-crs').textContent = ['в месяц: ' + krNum(left) + ' из ' + krNum(c.limit), tr ? 'бонус: ' + krNum(tl) + ' из ' + krNum(tr.limit) + (tr.until ? ' до ' + krDay(tr.until) : '') : '', c.bonus > 0 ? 'доп.: ' + krNum(c.bonus) : '', c.reset ? 'обновятся ' + krDay(c.reset) : ''].filter(Boolean).join(' · ');
+}
+/* модели Kiro: в списке — имя и расход кредитов, под полем — что выбрано */
+const krRate = m => m.rate == null ? '' : m.rate === 0 ? 'бесплатно' : '×' + krNum(m.rate);
+window.mdlLabel = x => { if (!isKr($('#c-base').value)) return ''; const m = qwInfo[x]; return m ? m.name + (krRate(m) ? ' · ' + krRate(m) : '') : ''; };
+function krHint() {
+  const m = qwInfoOf(), h = $('#mh');
+  if (!isKr($('#c-base').value) || h.dataset.s === 'err') return;
+  if (!m) { if (mdl.length && !/^Kiro не прислал/.test(h.textContent)) { h.textContent = 'Такой модели нет у твоего аккаунта Kiro — выбери из списка'; h.dataset.s = 'err'; } return; }
+  h.textContent = [m.name, krRate(m) && (m.rate === 0 ? 'не тратит кредиты' : 'расход кредитов ' + krRate(m)), m.img ? 'видит картинки' : 'без картинок', m.ctx ? 'контекст ' + Math.round(m.ctx / 1000) + ' тыс. токенов' : ''].filter(Boolean).join(' · ');
+  h.dataset.s = 'ok';
+}
+mi().addEventListener('input', () => { if (isKr($('#c-base').value)) { delete $('#mh').dataset.s; krHint(); } });
 
 /* ---------- окно проверки DeepSeek ----------
    Сайт попросил подтвердить, что ты не робот, или не узнал устройство при входе по паролю. Сервер открывает

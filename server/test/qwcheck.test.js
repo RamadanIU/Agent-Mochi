@@ -26,6 +26,9 @@ const SLIDER = '<!doctype html><html><head><meta charset="utf-8"></head><body st
   + 'addEventListener("mousemove",e=>{if(x0!==null)k.style.left=Math.max(0,e.clientX-x0)+"px"});'
   + 'addEventListener("mouseup",e=>{if(x0!==null&&e.clientX-x0>220){document.cookie="x5sec=solved-"+Date.now()+"; path=/; max-age=600";location.replace("/")}x0=null})</script></body></html>';
 const APP = '<!doctype html><html><body><div id="root"><div>Qwen</div></div></body></html>';
+/* страница входа: «Google» открывает отдельное окно (в окне приложения его не будет), «email» — входит и уходит в чат */
+const AUTH = '<!doctype html><html><body style="margin:0"><button id="g" style="position:absolute;left:20px;top:20px;width:220px;height:60px" onclick="window.open(\'https://accounts.google.com/o/oauth2/v2/auth?client_id=x\',\'g\',\'popup\')">Google</button>'
+  + '<button id="e" style="position:absolute;left:20px;top:120px;width:220px;height:60px" onclick="localStorage.setItem(\'token\',' + JSON.stringify(TOKEN).replace(/"/g, '&quot;') + ');location.href=\'/\'">email</button></body></html>';
 
 let m, srv, base;
 const punish = p => ({ ret: ['FAIL_SYS_USER_VALIDATE', 'RGV587_ERROR::SM::哎哟喂,被挤爆啦,请稍后重试'], data: { url: base.replace(/^http:\/\/127\.0\.0\.1:(\d+)/, 'http://127.0.0.1:$1') + '/' + p + '/_____tmd_____/punish?x5secdata=abc&x5step=2&action=captcha&pureCaptcha=' } });
@@ -37,7 +40,7 @@ before(async () => {
     if (!u.pathname.startsWith('/api/') || u.pathname.includes('_____tmd_____')) {
       if (u.pathname !== '/favicon.ico') F.pages.push({ path: u.pathname, ua: req.headers['user-agent'] });
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      return res.end(u.pathname.includes('_____tmd_____') ? SLIDER : APP);
+      return res.end(u.pathname.includes('_____tmd_____') ? SLIDER : u.pathname === '/auth' ? AUTH : APP);
     }
     /* антибот: без отметки о пройденном слайдере — HTTP 200 и ret RGV587 с адресом слайдера (как у chat.qwen.ai) */
     const gate = p => F.waf && !solved(req) ? (send(punish(p)), true) : false;
@@ -212,4 +215,26 @@ test('вход по паролю попал на слайдер: понятно 
     assert.equal(ok.status, 200, JSON.stringify(ok.j)); assert.equal(F.signins, n0 + 1);
     assert.equal((await c.json('/api/settings', undefined, 'GET')).j.qwEmail, 'me@qwen.test');
   } finally { F.waf = false; await c.json('/api/check', { act: 'close' }); }
+});
+
+test('вход в окне Qwen: вход через Google в окне не открывается — объясняем; вход по email — токен забирается сам', { skip: !BROWSER && 'нет Chromium/Chrome' }, async () => {
+  const c = await registered(m, 'qwwin');
+  await c.json('/api/settings', { base: QWEN, model: 'qwen3-max' }, 'PUT');
+  try {
+    const o = await c.json('/api/check', { act: 'open', why: 'login', prov: 'qwen', w: 800, h: 600 });
+    assert.equal(o.status, 200, JSON.stringify(o.j)); assert.equal(o.j.why, 'login');
+    await checkEvents(c, live);
+    for (let i = 0; i < 50 && F.pages.at(-1)?.path !== '/auth'; i++) await sleep(100);
+    assert.equal(F.pages.at(-1).path, '/auth');
+    /* «Google» открыл всплывающее окно — его закрыли, а человеку объяснили, что делать */
+    const said = checkEvents(c, evs => evs.some(e => e.ev === 'state' && /отдельное окно/.test(e.d.msg)));
+    await c.json('/api/check', { act: 'input', ev: { type: 'click', x: 100, y: 50 } });
+    await said;
+    const fin = checkEvents(c, done);
+    await c.json('/api/check', { act: 'input', ev: { type: 'click', x: 100, y: 150 } });
+    const last = (await fin).filter(e => e.ev === 'state').at(-1).d;
+    assert.equal(last.state, 'done', JSON.stringify(last)); assert.match(last.msg, /Вход выполнен/);
+    const st = (await c.json('/api/settings', undefined, 'GET')).j;
+    assert.equal(st.hasKey, true); assert.ok(st.provs.find(p => p.base === QWEN)?.hasKey);
+  } finally { await c.json('/api/check', { act: 'close' }); }
 });

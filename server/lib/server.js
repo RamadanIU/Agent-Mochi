@@ -17,6 +17,7 @@ import { apiFetch, cfBlock, cfMessage } from './net.js';
 import * as QW from './qwen.js';
 import * as DS from './deepseek.js';
 import * as CO from './coarena.js';
+import * as KR from './kiro.js';
 import * as DC from './webcheck.js';
 import * as X from './ext.js';
 import { putInbox, storeCopy, getFile, userDir, safeName } from './files.js';
@@ -59,7 +60,7 @@ function sysStats() {
 /* ---------- мелочи ---------- */
 class HttpErr extends Error { constructor(status, msg, extra) { super(msg); this.status = status; Object.assign(this, extra); } }
 const SEC = {
-  'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cross-origin-opener-policy': 'same-origin',
+  'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cross-origin-opener-policy': 'same-origin-allow-popups',
   'permissions-policy': 'camera=(), geolocation=(), payment=(), usb=()',
 };
 function json(res, code, obj, h = {}) {
@@ -178,9 +179,11 @@ function provsOf(S) {
   return P;
 }
 const pubSettings = c => {
-  /* qwAuth — вход в Qwen (email и хеш пароля), dsAuth — вход в DeepSeek (логин и зашифрованный пароль): наружу только логин */
-  const S = c.settings(), { key, provs, qwAuth, dsAuth, ...s } = S;
+  /* qwAuth — вход в Qwen (email и хеш пароля), dsAuth — вход в DeepSeek (логин и зашифрованный пароль),
+     krAuth — вход в Kiro (refresh-токен зашифрованным): наружу только кто и как вошёл */
+  const S = c.settings(), { key, provs, qwAuth, dsAuth, krAuth, ...s } = S;
   return { ...s, hasKey: !!key, maxStepsDef: DEF_SETTINGS.maxSteps, qwEmail: qwAuth?.email || '', dsLogin: dsAuth?.login || '',
+    krLogin: krAuth ? { how: krAuth.how || '', email: krAuth.email || '' } : null,
     provs: Object.entries(provsOf(S)).map(([base, p]) => ({ base, model: p.model || '', hasKey: !!p.key })) };
 };
 function putSettings(c, b) {
@@ -194,6 +197,7 @@ function putSettings(c, b) {
     if (QW.isQwen(f)) { delete s.qwAuth; c.qw.v.ck = {}; delete c.qw.v.calm; c.qw.save(); }
     /* DeepSeek: и пароль, и cookies сайта, и профиль браузера на сервере (там тоже вход в аккаунт) */
     if (DS.isDeepSeek(f)) { delete s.dsAuth; c.ds.v.ck = {}; delete c.ds.v.calm; c.ds.save(); DC.forgetProfile(c.u); }
+    if (KR.isKiro(f)) { delete s.krAuth; KR.loginStop(c.u.id); }
     return c.set.save();
   }
   if (steps !== undefined && !(steps >= 1 && steps <= MAX_STEPS)) throw new HttpErr(400, 'Лимит шагов — от 1 до ' + MAX_STEPS);
@@ -204,7 +208,9 @@ function putSettings(c, b) {
   }
   const cur = s.base || DEF_SETTINGS.base, moved = cur !== prev;
   /* «Сбросить всё» стирает ключи всех провайдеров */
-  if (b.clearKey) { s.key = ''; for (const k in P) delete P[k]; delete s.qwAuth; delete s.dsAuth; }
+  if (b.clearKey) { s.key = ''; for (const k in P) delete P[k]; delete s.qwAuth; delete s.dsAuth; delete s.krAuth; }
+  /* Kiro: доступ приходит только входом (kiroLogin / kiroImport) — вписанное в поле ключа не берём */
+  else if (KR.isKiro(cur)) { if (moved) s.key = P[cur]?.key || ''; }
   /* токен Qwen и DeepSeek вставляют как попало (Bearer, cookie, JSON из localStorage) — храним только сам токен; JWT бывает длинным */
   else if (typeof b.key === 'string' && b.key.trim()) s.key = QW.isQwen(cur) ? QW.parseToken(b.key).slice(0, 8000) : DS.isDeepSeek(cur) ? DS.parseToken(b.key).slice(0, 8000) : CO.isCoarena(cur) ? CO.parseKey(b.key) : b.key.trim().slice(0, 500);
   else if (moved) s.key = P[cur]?.key || '';
@@ -215,7 +221,7 @@ function putSettings(c, b) {
   if (b.stepLimit !== undefined) s.stepLimit = !!b.stepLimit;
   if (b.think !== undefined) s.think = !!b.think;
   /* уровень размышления (Coarena): '' — как решит модель */
-  if (b.effort !== undefined) { const e = String(b.effort || ''); if (e && !CO.EFFORTS.includes(e)) throw new HttpErr(400, 'Неизвестный уровень размышления'); s.effort = e; }
+  if (b.effort !== undefined) { const e = String(b.effort || ''); if (e && !CO.EFFORTS.includes(e) && !KR.EFFORTS.includes(e)) throw new HttpErr(400, 'Неизвестный уровень размышления'); s.effort = e; }
   if (steps !== undefined) s.maxSteps = steps;
   if (!b.clearKey) {
     P[cur] = { key: s.key || '', model: s.model || DEF_SETTINGS.model };
@@ -248,6 +254,18 @@ async function models(c, b) {
       return { ...r, pw: S.dsAuth?.login || '', calm: DS.calm(c.ds.v) };
     }
     catch (e) { throw new HttpErr(e.status === 401 ? 401 : e.captcha ? 403 : 502, e.human || e.message, { human: true, ...(e.needKey ? { needKey: true } : {}), ...(e.captcha ? { captcha: true, prov: 'deepseek', browser: DC.available() } : {}) }); }
+  }
+  /* Kiro: модели аккаунта (что умеют, сколько стоят в кредитах), чей аккаунт и сколько кредитов осталось.
+     Доступ подходит к концу — сначала обновляем; Kiro сказал «истёк» — обновляем и спрашиваем ещё раз */
+  if (KR.isKiro(base)) {
+    try {
+      let key = await c.krKey(), r;
+      try { r = await KR.check(key, c.settings().krAuth); }
+      catch (e) { if (!e.auth || !c.settings().krAuth?.rt) throw e; key = await c.krKey(true); r = await KR.check(key, c.settings().krAuth); }
+      const a = c.set.v.krAuth;
+      if (a && r.login && a.email !== r.login) { a.email = r.login; c.set.save(); }
+      return r;
+    } catch (e) { throw new HttpErr(e.status === 401 || e.auth || e.relogin ? 401 : 502, e.human || e.message, { human: true, ...(e.needKey ? { needKey: true } : {}), ...(e.relogin || e.auth ? { relogin: true } : {}) }); }
   }
   /* Coarena: модели с уровнями размышления — из открытого каталога, ключ и остаток дневного лимита — по /limits */
   if (CO.isCoarena(base)) {
@@ -334,6 +352,28 @@ async function dsLogin(c, b) {
   dsKeep(c, r.token, { login, pw: seal(password) });
   return { ok: true, login: r.login || login };
 }
+/* ---------- Kiro: вход по коду устройства ----------
+   Приложение открывает страницу входа Kiro (или AWS) окошком в браузере пользователя, а сервер опрашивает Kiro и,
+   как только вход подтверждён, сам сохраняет доступ (kiro.js → loginStart). Чей аккаунт — спрашиваем у Kiro */
+async function kiroSave(c, token, auth) {
+  c.setKrAuth(auth, token);
+  try { const u = await KR.usage(token, auth); if (u.email && c.set.v.krAuth) { c.set.v.krAuth.email = u.email; c.set.save(); } return u.email; } catch { return ''; }
+}
+async function kiroLogin(c, b) {
+  const how = String(b.how || '');
+  if (!['google', 'github', 'builder'].includes(how)) throw new HttpErr(400, 'Неизвестный способ входа');
+  try { return await KR.loginStart(c.u.id, how, (t, d) => kiroSave(c, t.access, KR.authFrom(t, d))); }
+  catch (e) { throw new HttpErr(e.status === 400 ? 400 : 502, e.human || e.message, { human: true }); }
+}
+/* «Токен вручную»: refresh-токен или kiro-auth-token.json — проверяем сразу, обновив доступ */
+async function kiroImport(c, b) {
+  let r;
+  try { r = await KR.importAuth(String(b.text || '').slice(0, 20000)); }
+  catch (e) { throw new HttpErr(e.status === 400 ? 400 : e.relogin ? 401 : 502, e.human || e.message, { human: true }); }
+  const login = await kiroSave(c, r.token, r.auth);
+  return { ok: true, login };
+}
+
 /* вход, который ждёт окна входа (сайт не узнал устройство): 15 минут */
 const pendingDs = new Map();
 function dsKeep(c, token, auth) {
@@ -346,7 +386,10 @@ function checkWatch(c, s) {
   if (s.watched) return s;
   s.watched = true;
   s.on('done', d => {
-    if (d.why !== 'login' || d.prov !== 'deepseek' || !d.token) return;
+    if (d.why !== 'login' || !d.token) return;
+    /* Qwen: токен из вкладки (вход по email, GitHub…) — как «Войти через Google», только без закладки */
+    if (d.prov === 'qwen') { c.set.v.provs = provsOf(c.settings()); c.setQwenKey(d.token); return; }
+    if (d.prov !== 'deepseek') return;
     const p = pendingDs.get(c.u.id); pendingDs.delete(c.u.id);
     dsKeep(c, d.token, p && Date.now() - p.t < 15 * 60e3 ? { login: p.login, pw: p.pw } : null);
   });
@@ -602,6 +645,13 @@ async function api(req, res, url) {
         return json(res, 200, { job: DC.install(runCmd) });
       }
       break;
+    /* Kiro: вход (начать, как идёт, отменить) и токен вручную */
+    case '/api/kiro/login':
+      if (M === 'POST') return json(res, 200, await kiroLogin(chat, await jbody(req)));
+      if (M === 'GET') return json(res, 200, KR.loginOf(u.id));
+      if (M === 'DELETE') { KR.loginStop(u.id); return json(res, 200, { ok: true }); }
+      break;
+    case '/api/kiro/import': if (M === 'POST') return json(res, 200, await kiroImport(chat, await jbody(req))); break;
     case '/api/qwen/login':
       if (M === 'POST') return json(res, 200, await qwenLogin(chat, await jbody(req)));
       if (M === 'DELETE') { delete chat.set.v.qwAuth; chat.set.save(); return json(res, 200, pubSettings(chat)); }
