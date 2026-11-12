@@ -256,7 +256,9 @@ dayMark = function (box) {
 const HM = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
 const stamp = (el, e) => { const t = el && el.querySelector('.mh time'); if (t && e.t) t.textContent = HM.format(e.t); };
 const btns = '<div class="mf"><button class="cp" data-k="a"><i class="pi"></i>копировать</button><button class="cp" data-k="s"><i class="pi"></i>вслух</button></div>';
-function aText(el, text) { el._raw = text; el._b.innerHTML = md(text) + (text ? btns : ''); }
+function aText(el, text, th) { el._raw = text; el._b.innerHTML = (th ? thinkBox(th) : '') + md(text) + (text ? btns : ''); }
+/* размышления модели (Coarena и другие думающие модели) — свёрнутым блоком: открыть, если интересно, как она пришла к ответу */
+const thinkBox = th => '<details class="rz"><summary>Размышления</summary><div class="rzb">' + esc(String(th)) + '</div></details>';
 
 function fileCardS(e) {
   think(false); const box = $('#msgs'); dayMark(box);
@@ -306,7 +308,7 @@ function render(e) {
     }
     case 'assistant': {
       const el = bubble || add('a', ''); bubble = null;
-      aText(el, e.text || ''); stamp(el, e); foldKeep(el); pin(); room('answer', e);
+      aText(el, e.text || '', e.think); stamp(el, e); foldKeep(el); pin(); room('answer', e);
       if (!replaying) { window.personalComputerSpeak && personalComputerSpeak(e.text); window.sfx && sfx('recv'); }
       break;
     }
@@ -315,6 +317,7 @@ function render(e) {
       if (e.state !== 'run' && running && !replaying) think(true);
       break;
     }
+    case 'think': { const box = $('#msgs'); box.querySelector('.empty')?.remove(); const d = document.createElement('div'); d.className = 'snote rzn'; d.innerHTML = thinkBox(e.text || ''); box.append(d); pin(); break; }
     case 'file': fileCardS(e); room('file', e); break;
     case 'error': stamp(add('e', errBox(e)), e); room('error', e); break;
     case 'note': note(e.text, e.retry); room('note', e); break;
@@ -655,6 +658,7 @@ $('#c-save').onclick = async () => {
   try { window.personalComputerRoom && personalComputerRoom.sndUI(); } catch (x) {}
   if (!cfg.tts && window.personalComputerStop) personalComputerStop();
   const body = { base: $('#c-base').value.trim(), model: $('#c-model').value.trim(), sys: $('#c-sys').value.trim(), vis: $('#c-vis').checked, think: $('#c-think').checked, ...st };
+  if (isCo(body.base)) body.effort = $('#c-effort').value;
   const k = $('#c-key').value.trim();
   if (k) body.key = k; else if (clearKey) body.clearKey = true;
   try {
@@ -674,6 +678,20 @@ function qwThink() {
 }
 mi().addEventListener('input', qwThink); mi().addEventListener('change', qwThink);
 $('#ml').addEventListener('click', () => setTimeout(qwThink));
+/* Coarena: уровни размышления выбранной модели (из /models сайта) — список под моделью следует за ней */
+let coInfo = {};
+window.coNames = { none: 'Без размышлений', minimal: 'Минимальный', low: 'Низкий', medium: 'Средний', high: 'Высокий', xhigh: 'Очень высокий', max: 'Максимальный' };
+window.coInfoOf = () => coInfo[mi().value.trim()] || null;
+window.coEffort = () => {
+  const sel = $('#c-effort'), m = coInfoOf(), list = m && m.efforts && m.efforts.length ? m.efforts : Object.keys(coNames);
+  sel.textContent = ''; sel.add(new Option('Как решит модель', ''));
+  for (const e of list) sel.add(new Option(coNames[e] || e, e));
+  /* такого уровня у этой модели нет — «как решит модель» (выбор остаётся в памяти для других моделей) */
+  sel.value = list.includes(effortVal) ? effortVal : '';
+};
+$('#c-effort').onchange = () => { effortVal = $('#c-effort').value; };
+mi().addEventListener('input', () => coEffort()); mi().addEventListener('change', () => coEffort());
+$('#ml').addEventListener('click', () => setTimeout(coEffort));
 
 /* ---------- карточка аккаунта Qwen / DeepSeek ----------
    s: none — не подключён, wait — проверяю, ok — подключён, bad — не подошло. Вместо полотна текста —
@@ -761,6 +779,19 @@ loadModels = async function () {
       /* DeepSeek попросил проверку — пройти её прямо отсюда и проверить связь снова */
       waState('bad', { msg: e.message, act: e.j && e.j.captcha ? { label: 'Пройти проверку', fn: () => openCheck('check', () => loadModels(), w === WEB.qw ? 'qwen' : 'deepseek', e.j.url || '') } : null });
     }
+    return;
+  }
+  /* Coarena: модели с уровнями размышления, ключ и остаток бесплатного лимита на сегодня */
+  if (isCo(base)) {
+    try {
+      const r = await post('api/models', { base, key }); if (t !== mt) return;
+      mdl = r.models.slice(); coInfo = Object.fromEntries((r.info || []).map(m => [m.id, m]));
+      const L = r.limits, usd = x => '$' + (Math.round(x * 100) / 100);
+      h.textContent = 'Моделей: ' + mdl.length + '. нажми на поле, чтобы выбрать' + (L ? '. Ключ подходит' + (L.usd != null && L.used != null ? ' · сегодня потрачено ' + usd(L.used) + ' из ' + usd(L.usd) : '') : '');
+      if (r.needKey) { h.textContent += '. Вставь ключ coa_… с coarena.ai/account/api'; delete h.dataset.s; } else h.dataset.s = 'ok';
+      const cur = mi().value.trim(); if (mdl.length && (!cur || !mdl.includes(cur))) mi().value = mdl.find(x => /sonnet/.test(x)) || mdl[0];
+      provNew = false; coEffort();
+    } catch (e) { if (t !== mt) return; mdl = []; h.dataset.s = 'err'; h.textContent = e.message; }
     return;
   }
   try {

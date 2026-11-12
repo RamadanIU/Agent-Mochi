@@ -14,6 +14,7 @@ import { agentNote } from './proxy.js';
 import { isQwen, turn as qwenTurn, ask as qwenAsk, renew as qwenRenew, tokenLeft, parseToken, QWEN_BASE, CHECK as QW_CHECK } from './qwen.js';
 import { isDeepSeek, turn as dsTurn, ask as dsAsk, parseToken as dsParse, signin as dsSignin, forget as dsForget, DS_BASE, CHECK as DS_CHECK } from './deepseek.js';
 import { unseal } from './store.js';
+import * as CO from './coarena.js';
 import { deviceId as dsDeviceId } from './webcheck.js';
 /* веб-чаты по токену аккаунта (Qwen, DeepSeek): свой протокол, история живёт на сайте, файлы уходят туда целиком */
 const isWeb = base => isQwen(base) || isDeepSeek(base);
@@ -24,8 +25,8 @@ export const DEF_SYS = 'Тебя зовут Personal Computer — ты ламп�
 export const OLD_SYS = new Set(['Тебя зовут Мочи — ты милый пиксельный зверёк-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. В поле action кратко и по-человечески пиши, что делаешь. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.']);
 /* что умеет показывать веб-чат — модель должна знать, чтобы рисовать таблицы и схемы, а не ASCII-картинки */
 const FMT = 'Оформление: чат показывает Markdown — заголовки, списки, таблицы, цитаты и врезки (> [!NOTE], > [!TIP], > [!WARNING]), `код` и блоки кода с языком, формулы LaTeX ($…$, $$…$$), схемы и графики в блоке ```mermaid (flowchart, sequenceDiagram, classDiagram, stateDiagram, erDiagram, gantt, pie, xychart-beta, quadrantChart, radar-beta, sankey-beta, treemap-beta, timeline, mindmap, journey, gitGraph, kanban, block-beta, packet-beta, architecture-beta, requirementDiagram, C4Context). Пользуйся этим, только когда правда помогает: сравнение — таблицей, процесс или связи — схемой, числа и динамика — графиком (xychart-beta, pie), сроки — gantt, вычисления — формулой. Короткий ответ оставляй простым текстом.';
-/* think — размышление у Qwen и DeepThink у DeepSeek (у остальных провайдеров не используется) */
-export const DEF_SETTINGS = { base: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', sys: DEF_SYS, vis: true, stepLimit: true, maxSteps: CFG.maxSteps, think: false };
+/* think — размышление у Qwen и DeepThink у DeepSeek; effort — уровень размышления у Coarena ('' — как решит модель; см. coarena.js) */
+export const DEF_SETTINGS = { base: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', sys: DEF_SYS, vis: true, stepLimit: true, maxSteps: CFG.maxSteps, think: false, effort: '' };
 /* лимит шагов подряд (настройки → Модель): число от 1 до MAX_STEPS */
 export const MAX_STEPS = 10000;
 
@@ -120,6 +121,8 @@ function withAction(tools) {
 const actionText = a => typeof a === 'string' ? a.replace(/\s+/g, ' ').trim().slice(0, 80) : '';
 
 const tailLine = out => (String(out).split('\n').map(l => l.trim()).filter(l => l && !/^\[(код выхода|таймаут|прервано)/.test(l)).pop() || '').slice(0, 200);
+/* чьи размышления лежат в истории: провайдер и модель (сменили модель — старые размышления ей не передаём) */
+const rsKey = S => String(S.base || '').trim().replace(/\/+$/, '') + '|' + S.model;
 const argsOk = s => { try { const a = JSON.parse(s); return !!a && typeof a === 'object' && !Array.isArray(a); } catch { return false; } };
 const sleep = (ms, sig) => new Promise(ok => { const t = setTimeout(ok, ms); sig?.addEventListener('abort', () => { clearTimeout(t); ok(); }, { once: true }); });
 const abortErr = () => Object.assign(new Error('остановлено'), { name: 'AbortError' });
@@ -372,10 +375,12 @@ export class Chat extends EventEmitter {
         if (t && !m.named && !m.del) { Object.assign(m, { title: t, named: 1 }); this.metaChanged(); }
         return;
       }
-      const h = { 'Content-Type': 'application/json' };
+      const h = { 'Content-Type': 'application/json' }, co = CO.isCoarena(S.base);
       if (S.key) h.Authorization = 'Bearer ' + S.key;
-      const r = await apiFetch(S.base.replace(/\/+$/, '') + '/chat/completions', { method: 'POST', headers: h, signal: AbortSignal.timeout(60000),
-        body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: TITLE_SYS }, { role: 'user', content: text }], stream: false }) });
+      /* Coarena: название — на самом низком уровне размышления, иначе думающая модель тратит на него весь ответ */
+      if (co) await CO.catalog().catch(() => null);
+      const r = await apiFetch((co ? CO.apiBase(S.base) : S.base.replace(/\/+$/, '')) + '/chat/completions', { method: 'POST', headers: h, signal: AbortSignal.timeout(60000),
+        body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: TITLE_SYS }, { role: 'user', content: text }], stream: false, ...(co ? CO.extra({ model: S.model, effort: 'none', stream: false }) : {}) }) });
       if (!r.ok) return;
       const t = cleanTitle((await r.json().catch(() => null))?.choices?.[0]?.message?.content);
       /* пока модель думала, чат переименовали или удалили — их выбор главнее */
@@ -436,12 +441,15 @@ export class Chat extends EventEmitter {
 
   /* в запрос уходят вложения трёх последних сообщений с файлами; уровень отката: 1 — без PDF, 2 — без всего */
   wire() {
-    const H = this.doc.v.hist, lvl = this.settings().vis === false ? 2 : this.noVis;
+    const S = this.settings(), H = this.doc.v.hist, lvl = S.vis === false ? 2 : this.noVis, co = CO.isCoarena(S.base), key = rsKey(S);
     const rec = new Set(H.map((m, i) => m._pf ? i : -1).filter(i => i >= 0).slice(-3));
     const us = H.map((m, i) => m.role === 'user' ? i : -1).filter(i => i >= 0), from = us.length > 40 ? us[us.length - 40] : 0;
     const out = [];
     for (let i = from; i < H.length; i++) {
-      const { _pf, _vi, _mid, _qw, _ds, _fl, ...m } = H[i];
+      const { _pf, _vi, _mid, _qw, _ds, _fl, _rs, ...m } = H[i];
+      /* размышления модели (Coarena): возвращаем их той же модели того же провайдера — без них
+         думающая модель теряет нить между вызовами инструментов, а чужой модели они ни к чему */
+      if (_rs && co && _rs.b === key) Object.assign(m, _rs.f);
       /* Ollama не принимает историю, где аргументы вызова — не JSON-объект (обрезаны или пустые): шлём {} — модель и так получила ошибку */
       if (m.tool_calls) m.tool_calls = m.tool_calls.map(c => argsOk(c.function.arguments) ? c : { ...c, function: { ...c.function, arguments: '{}' } });
       if (_pf && lvl < 2 && rec.has(i)) {
@@ -665,14 +673,17 @@ export class Chat extends EventEmitter {
     const { tools, said } = withAction([...builtins().filter(on), ...X.defs]), names = new Set(tools.map(t => t.function.name));
     const ctx = { X, names };
     const sys = await until(this.system(names, X.prompt, offB), sig); chk();
-    const { text, calls, used, qw, ds } = await until(this.callModel(sys, tools, sig), sig); chk();
-    /* _qw / _ds — скрытая метка чата Qwen / DeepSeek под ответом: следующий шаг продолжит тот же чат (см. webchat.js) */
-    H.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}), ...(qw ? { _qw: qw } : {}), ...(ds ? { _ds: ds } : {}) });
+    const { text, calls, used, qw, ds, rs, think } = await until(this.callModel(sys, tools, sig), sig); chk();
+    /* _qw / _ds — скрытая метка чата Qwen / DeepSeek под ответом: следующий шаг продолжит тот же чат (см. webchat.js);
+       _rs — размышления модели в том виде, в каком их вернул API (уйдут ей обратно в следующем запросе, см. wire) */
+    H.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}), ...(qw ? { _qw: qw } : {}), ...(ds ? { _ds: ds } : {}), ...(rs ? { _rs: { b: rsKey(S), f: rs } } : {}) });
     /* контекст: модель назвала usage — верим ей, нет — оценка по запросу и ответу */
     this.doc.v.ctx = used || tokens([sys, tools, this.wire(), H.at(-1)]);
     this.emit('ctx', this.doc.v.ctx);
     this.partial = '';
-    if (text) this.push({ kind: 'assistant', text });
+    /* размышления — свёрнутым блоком над ответом (и над шагом с инструментами, если модель думала перед ним) */
+    if (text) this.push({ kind: 'assistant', text, ...(think ? { think: think.slice(-20000) } : {}) });
+    else if (think) this.push({ kind: 'think', text: think.slice(-20000) });
     this.doc.save();
     if (!calls.length) return text;
     if (text && ask) this.emit('aside', text);
@@ -856,6 +867,10 @@ export class Chat extends EventEmitter {
         }
       }
     }
+    /* Coarena: каталог моделей нужен до запроса — уровни размышления и потолок ответа у каждой модели свои */
+    const co = CO.isCoarena(S.base);
+    if (co) await CO.catalog().catch(e => console.warn('coarena:', e.message));
+    let effort = S.effort, emptied = 0;
     for (let attempt = 0; ; attempt++) {
       const msgs = this.wire(), hasM = msgs.some(m => Array.isArray(m.content));
       const h = { 'Content-Type': 'application/json' };
@@ -866,11 +881,21 @@ export class Chat extends EventEmitter {
       const poke = () => { clearTimeout(it); it = setTimeout(() => idle.abort(), 180000); };
       const signal = AbortSignal.any([sig, idle.signal]);
       try {
-        const url = S.base.replace(/\/+$/, '') + '/chat/completions';
+        const url = (co ? CO.apiBase(S.base) : S.base.replace(/\/+$/, '')) + '/chat/completions';
         const r = await apiFetch(url, { method: 'POST', headers: h, signal,
-          body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: sys }, ...msgs], ...(tools.length ? { tools } : {}), stream: true }) });
+          body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: sys }, ...msgs], ...(tools.length ? { tools } : {}), stream: true, ...(co ? CO.extra({ model: S.model, effort }) : {}) }) });
         if (!r.ok) {
           const full = await r.text().catch(() => ''), et = full.slice(0, 300);
+          /* Coarena объясняет ошибку кодом: условия не приняты, лимит на сегодня, ключ истёк — повторять бесполезно,
+             а «2 запроса одновременно» и «слишком часто» проходят сами — ждём и пробуем снова */
+          if (co) {
+            let j = null; try { j = JSON.parse(full); } catch {}
+            const code = String(j?.error?.code || j?.error?.type || ''), hm = CO.human(r.status, j);
+            if (r.status === 429 && code !== 'insufficient_quota' && attempt < 5) {
+              const ra = +r.headers.get('retry-after'); await sleep(ra > 0 && ra < 120 ? ra * 1000 : [5000, 10000, 20000, 30000, 60000][attempt], sig); if (sig.aborted) throw abortErr(); continue;
+            }
+            if (hm && ![500, 502, 503, 504].includes(r.status)) throw Object.assign(new Error(hm), { status: r.status, human: hm, detail: code ? 'Coarena: ' + code : et });
+          }
           /* страница блокировки Cloudflare: ключ ни при чём, повторять бесполезно */
           const cf = cfBlock(r.status, full, r.headers);
           if (cf) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status, cf: cfMessage(cf, url, r.headers), detail: '' });
@@ -882,7 +907,19 @@ export class Chat extends EventEmitter {
           if ([408, 429, 500, 502, 503, 504, 529].includes(r.status) && attempt < 3) { await sleep([3000, 10000, 30000][attempt], sig); if (sig.aborted) throw abortErr(); continue; }
           throw Object.assign(new Error('HTTP ' + r.status), { status: r.status, detail: et });
         }
-        return await this.readReply(r, poke);
+        const out = await this.readReply(r, poke, co ? { model: S.model } : null);
+        /* Coarena: думающая модель промолчала (часто — размышления съели весь лимит ответа). Один раз пробуем снова
+           на уровне пониже — об этом пишем в чат; не вышло — объясняем, что случилось */
+        if (out.empty) {
+          if (co && !emptied++ && !sig.aborted) {
+            const low = CO.effortFor(out.finish === 'length' || !effort ? 'low' : effort, CO.modelInfo(S.model));
+            this.push({ kind: 'note', text: out.finish === 'length' ? 'Модель потратила весь ответ на размышления — повторяю с уровнем «' + (CO.EFFORT_NAMES[low] || low) + '»' : 'Модель вернула пустой ответ — повторяю' });
+            if (out.finish === 'length') effort = low;
+            continue;
+          }
+          throw Object.assign(new Error(co ? CO.emptyWhy({ ...out, model: S.model, headers: r.headers }) : 'Модель вернула пустой ответ. Нажми «Повторить» или выбери другую модель в настройках.'), { detail: out.finish ? 'finish_reason: ' + out.finish : '' });
+        }
+        return out;
       } catch (e) {
         if (sig.aborted) throw abortErr();
         const net = e instanceof TypeError || idle.signal.aborted || e.name === 'AbortError';
@@ -1006,8 +1043,11 @@ export class Chat extends EventEmitter {
     return [];
   }
 
-  async readReply(r, poke) {
-    let text = '', calls = [], usage = null;
+  /* ответ модели (поток SSE или JSON) → { text, calls, used, think, rs } или { empty, finish, reasoning }, если модель промолчала.
+     think — текст размышлений для экрана; rs — поля размышлений как их прислал API (reasoning_content, reasoning,
+     reasoning_details), чтобы вернуть их модели. co — это Coarena: пустой ответ решает callModel (повтор, объяснение) */
+  async readReply(r, poke, co) {
+    let text = '', calls = [], usage = null, think = '', finish = '', rkey = '', rdet = [];
     const apiErr = e => Object.assign(new Error(typeof e === 'string' ? e : (e && e.message) || 'ошибка модели'), { detail: e && typeof e === 'object' ? JSON.stringify(e).slice(0, 300) : '' });
     /* части вызовов инструментов: по index, а если его нет — по id */
     const merge = t => {
@@ -1020,14 +1060,39 @@ export class Chat extends EventEmitter {
       if (fn.arguments != null) c.function.arguments += typeof fn.arguments === 'string' ? fn.arguments : JSON.stringify(fn.arguments);
     };
     const delta = d => { text += d; this.partial = text; this.emit('delta', d, this.cid); };
+    /* размышления: строкой (reasoning_content у DeepSeek/Kimi/Qwen, reasoning у OpenRouter-подобных) или
+       массивом reasoning_details (там же подписи Claude — без них думающая модель не продолжит после инструментов) */
+    const rz = (k, v) => { if (typeof v === 'string' && v) { think += v; rkey ||= k; } };
+    const det = arr => {
+      for (const x of arr) {
+        if (!x || typeof x !== 'object') continue;
+        const ix = typeof x.index === 'number' ? x.index : rdet.length, cur = rdet[ix];
+        if (!cur || (x.type && cur.type && x.type !== cur.type)) { rdet[ix] = { ...x }; if (!rkey && typeof x.text === 'string') think += x.text; if (!rkey && typeof x.summary === 'string') think += x.summary; continue; }
+        for (const f of ['text', 'summary', 'data']) if (typeof x[f] === 'string') { cur[f] = (cur[f] || '') + x[f]; if (!rkey && f !== 'data') think += x[f]; }
+        for (const [k, v] of Object.entries(x)) if (!['text', 'summary', 'data', 'index'].includes(k) && v != null) cur[k] = v;
+      }
+    };
+    /* сообщение или дельта: content строкой или частями (text / thinking), размышления, вызовы инструментов */
+    const take = (m, stream) => {
+      if (typeof m.content === 'string' && m.content) delta(m.content);
+      else if (Array.isArray(m.content)) for (const p of m.content) {
+        if (!p) continue;
+        if (/^(thinking|reasoning)/.test(p.type || '')) rz('reasoning_content', p.thinking ?? p.text ?? p.reasoning);
+        else if (typeof p.text === 'string' && p.text) delta(p.text);
+      }
+      rz('reasoning_content', m.reasoning_content); rz('reasoning', m.reasoning); rz('reasoning', m.reasoning_text);
+      if (Array.isArray(m.reasoning_details)) det(m.reasoning_details);
+      if (Array.isArray(m.tool_calls)) { if (stream) { for (const t of m.tool_calls) if (t) merge(t); } else calls = m.tool_calls.slice(); }
+    };
     if (!(r.headers.get('content-type') || '').includes('event-stream')) {
-      const j = await r.json();
+      /* Coarena и другие шлюзы, пока модель долго думает, шлют пустые строки — JSON.parse их пропускает */
+      const j = JSON.parse((await r.text()).trim() || 'null');
       if (j && j.error) throw apiErr(j.error);
       usage = j?.usage || null;
-      const m = j?.choices?.[0]?.message;
+      const ch = j?.choices?.[0], m = ch?.message;
       if (!m) throw new Error('пустой ответ модели');
-      if (typeof m.content === 'string' && m.content) delta(m.content);
-      calls = Array.isArray(m.tool_calls) ? m.tool_calls.slice() : [];
+      finish = ch.finish_reason || '';
+      take(m, false);
     } else {
       const dec = new TextDecoder(); let buf = '';
       const lines = ls => {
@@ -1037,9 +1102,10 @@ export class Chat extends EventEmitter {
           let j; try { j = JSON.parse(p); } catch { continue; }
           if (j && j.error) throw apiErr(j.error);
           if (j?.usage) usage = j.usage;
-          const d = j?.choices?.[0]?.delta; if (!d) continue;
-          if (typeof d.content === 'string' && d.content) delta(d.content);
-          for (const t of d.tool_calls || []) if (t) merge(t);
+          const ch = j?.choices?.[0]; if (!ch) continue;
+          if (ch.finish_reason) finish = ch.finish_reason;
+          /* некоторые шлюзы шлют в последнем куске message вместо delta */
+          const d = ch.delta || ch.message; if (d) take(d, true);
         }
       };
       for await (const chunk of r.body) {
@@ -1053,9 +1119,10 @@ export class Chat extends EventEmitter {
       const fn = c.function, ar = fn.arguments;
       return { ...c, type: 'function', id: c.id || 'call_' + Date.now().toString(36) + '_' + i, function: { name: fn.name, arguments: typeof ar === 'string' ? ar : JSON.stringify(ar ?? {}) } };
     });
-    if (!text && !calls.length) throw new Error('Модель вернула пустой ответ. Нажми «Повторить» или выбери другую модель в настройках.');
+    if (!text && !calls.length) return { empty: true, finish, reasoning: !!think, text: '', calls: [] };
     const used = (+usage?.prompt_tokens || 0) + (+usage?.completion_tokens || 0);
-    return { text, calls, used: used > 0 ? used : 0 };
+    const rd = rdet.filter(Boolean), rs = rkey || rd.length ? { ...(rkey ? { [rkey]: think } : {}), ...(rd.length ? { reasoning_details: rd } : {}) } : null;
+    return { text, calls, used: used > 0 ? used : 0, ...(think.trim() ? { think: think.trim() } : {}), ...(rs ? { rs } : {}) };
   }
 
   /* убрать секрет (токен бота) из истории и журнала — он уже сохранён в защищённом месте */

@@ -16,6 +16,7 @@ import { getChat, resumeAll, DEF_SETTINGS, MAX_STEPS, toolCatalog, setTools } fr
 import { apiFetch, cfBlock, cfMessage } from './net.js';
 import * as QW from './qwen.js';
 import * as DS from './deepseek.js';
+import * as CO from './coarena.js';
 import * as DC from './webcheck.js';
 import * as X from './ext.js';
 import { putInbox, storeCopy, getFile, userDir, safeName } from './files.js';
@@ -205,7 +206,7 @@ function putSettings(c, b) {
   /* «Сбросить всё» стирает ключи всех провайдеров */
   if (b.clearKey) { s.key = ''; for (const k in P) delete P[k]; delete s.qwAuth; delete s.dsAuth; }
   /* токен Qwen и DeepSeek вставляют как попало (Bearer, cookie, JSON из localStorage) — храним только сам токен; JWT бывает длинным */
-  else if (typeof b.key === 'string' && b.key.trim()) s.key = QW.isQwen(cur) ? QW.parseToken(b.key).slice(0, 8000) : DS.isDeepSeek(cur) ? DS.parseToken(b.key).slice(0, 8000) : b.key.trim().slice(0, 500);
+  else if (typeof b.key === 'string' && b.key.trim()) s.key = QW.isQwen(cur) ? QW.parseToken(b.key).slice(0, 8000) : DS.isDeepSeek(cur) ? DS.parseToken(b.key).slice(0, 8000) : CO.isCoarena(cur) ? CO.parseKey(b.key) : b.key.trim().slice(0, 500);
   else if (moved) s.key = P[cur]?.key || '';
   if (b.model !== undefined) s.model = String(b.model).trim().slice(0, 200) || DEF_SETTINGS.model;
   else if (moved && P[cur]?.model) s.model = P[cur].model;
@@ -213,6 +214,8 @@ function putSettings(c, b) {
   if (b.vis !== undefined) { s.vis = !!b.vis; c.noVis = 0; }
   if (b.stepLimit !== undefined) s.stepLimit = !!b.stepLimit;
   if (b.think !== undefined) s.think = !!b.think;
+  /* уровень размышления (Coarena): '' — как решит модель */
+  if (b.effort !== undefined) { const e = String(b.effort || ''); if (e && !CO.EFFORTS.includes(e)) throw new HttpErr(400, 'Неизвестный уровень размышления'); s.effort = e; }
   if (steps !== undefined) s.maxSteps = steps;
   if (!b.clearKey) {
     P[cur] = { key: s.key || '', model: s.model || DEF_SETTINGS.model };
@@ -245,6 +248,11 @@ async function models(c, b) {
       return { ...r, pw: S.dsAuth?.login || '', calm: DS.calm(c.ds.v) };
     }
     catch (e) { throw new HttpErr(e.status === 401 ? 401 : e.captcha ? 403 : 502, e.human || e.message, { human: true, ...(e.needKey ? { needKey: true } : {}), ...(e.captcha ? { captcha: true, prov: 'deepseek', browser: DC.available() } : {}) }); }
+  }
+  /* Coarena: модели с уровнями размышления — из открытого каталога, ключ и остаток дневного лимита — по /limits */
+  if (CO.isCoarena(base)) {
+    try { return await CO.check(key); }
+    catch (e) { throw new HttpErr(e.status === 401 || e.status === 403 ? e.status : 502, e.human || e.message, { human: true, ...(e.status ? { upstream: e.status } : {}) }); }
   }
   const auth = key ? { Authorization: 'Bearer ' + key } : {};
   const r = await apiFetch(base + '/models', { headers: auth, signal: AbortSignal.timeout(15000) })
