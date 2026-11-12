@@ -51,7 +51,7 @@ const account = t => tokenInfo(t).id || crypto.createHash('sha256').update(Strin
 
 /* ---------- ошибки: человеческий текст сразу (agent.friendly берёт его как есть) ---------- */
 const qErr = (human, extra = {}) => Object.assign(new Error(human), { human, detail: '', ...extra });
-const EXPIRED = 'Токен Qwen не подошёл или истёк. Открой chat.qwen.ai, войди, скопируй новый токен (как — подсказка в настройках → Модель) и вставь его.';
+const EXPIRED = 'Токен Qwen не подошёл или истёк. Подключи аккаунт заново: настройки → Модель → «Войти через Google» или вход по email и паролю — тогда токен будет обновляться сам.';
 const WAF = 'chat.qwen.ai не пустил запрос с этого сервера: антибот-защита Alibaba Cloud потребовала проверку «я не робот» (слайдер). Токен тут ни при чём — он рабочий. Так защита реагирует на IP-адрес сервера (часто — на адреса хостингов): включи прокси с «домашним» адресом в настройках → Сервер → «Прокси» или повтори позже.';
 const isWafBody = t => /<html|<!doctype/i.test(t) && /captcha|punish|x5sec|nocaptcha|aliyun|baxia|unusual traffic|blocked/i.test(t);
 /* {success:false,data:{code,details}} / {error:{…}} / {detail} — во что бы ни завернули */
@@ -120,7 +120,7 @@ const netErr = e => qErr('Не достучался до chat.qwen.ai (' + (e.ca
    Сам пароль нигде не хранится — только этот хеш (ph), и только на сервере. */
 export const hashPass = p => crypto.createHash('sha256').update(String(p), 'utf8').digest('hex');
 export const tokenLeft = t => { const e = tokenInfo(t).exp; return e ? e * 1000 - Date.now() : Infinity; };
-const BADPASS = 'Qwen не пустил: неверный email или пароль. Если входишь на chat.qwen.ai через Google или GitHub, пароля у аккаунта нет — используй «Токен в один клик».';
+const BADPASS = 'Qwen не пустил: неверный email или пароль. Если входишь на chat.qwen.ai через Google или GitHub, пароля у аккаунта нет — нажми «Войти через Google».';
 export async function signin(email, ph, signal) {
   email = String(email || '').trim();
   if (!email || !ph) throw qErr('Нужны email и пароль от chat.qwen.ai', { status: 400 });

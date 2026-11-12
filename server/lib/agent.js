@@ -813,7 +813,7 @@ export class Chat extends EventEmitter {
         return go(k2);
       }
     }
-    /* DeepSeek (chat.deepseek.com): так же, как Qwen, — свой протокол, отправляется только новое; токен долгоживущий */
+    /* DeepSeek (chat.deepseek.com): так же, как Qwen, — свой протокол, отправляется только новое */
     if (isDeepSeek(S.base)) {
       this.partial = '';
       return dsTurn({ key: this.dsToken(), model: S.model, think: !!S.think, sys, tools, hist: this.doc.v.hist, signal: sig,

@@ -312,7 +312,7 @@ background:var(--card) repeating-linear-gradient(var(--ink) 0 2px,transparent 2p
 #mh::before,#sh::before{content:"";flex:none;width:8px;height:8px;background:var(--mut)}
 #mh[data-s=ok]::before{background:var(--ok)}#mh[data-s=err]::before,#sh[data-s=err]::before{background:var(--err)}#mh[data-s=wait]::before{background:var(--acc);animation:blk .5s steps(1) infinite}
 #mh[data-s=err],#sh[data-s=err]{color:var(--err)}
-#c-qst{display:block;margin-top:6px;color:var(--mut)}#c-qst:empty{display:none}#c-qst[data-s=err]{color:var(--err)}#f-qwen .brow,#f-ds .brow{margin:4px 0 10px}#c-qme .lnk{margin-bottom:8px}
+
 .note{display:block;margin-top:22px;padding:10px 12px;background:var(--bg);color:var(--mut);font-size:8px;line-height:1.8;box-shadow:var(--sh2)}
 .wfoot{flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px calc(14px + env(safe-area-inset-bottom,0px));background:var(--card);border-top:4px solid var(--ink)}
 .wfoot .lnk{margin:0;padding:8px 2px}
@@ -831,6 +831,91 @@ dialog .note{box-shadow:var(--sh2),var(--sunk)}
 #dlg .fold[data-k=acct]{--ico:var(--j-user)}#dlg .fold[data-k=tg]{--ico:var(--j-plane)}#dlg .fold[data-k=upd]{--ico:var(--j-dl)}#dlg .fold[data-k=acc]{--ico:var(--j-shield)}
 #dlg .fold[data-k=b]{--ico:var(--j-cube)}#dlg .fold[data-k=m]{--ico:var(--j-plug)}#dlg .fold[data-k="m+"]{--ico:var(--j-plus)}#dlg .fold[data-k=k]{--ico:var(--j-book)}
 #dlg .fold[data-k="k+url"]{--ico:var(--j-link)}#dlg .fold[data-k="k+new"]{--ico:var(--j-sparkle)}#dlg .fold[data-k=sys]{--ico:var(--j-heartbox)}
+
+/* ---------- подключение к веб-чату по аккаунту (Qwen, DeepSeek) ----------
+   Карточка аккаунта: значок, имя, статус одной строкой; ниже — способы входа (папка «email и пароль», кнопка Google,
+   папка «Токен вручную»). Подключён — способы входа спрятаны под «Другой аккаунт». Объяснения — под «?» */
+.wa{margin:16px 2px 2px}
+.wa-c{padding:12px;background:var(--bg);box-shadow:var(--sh2),var(--sunk)}
+.wa-h{display:flex;align-items:center;gap:12px}
+.wa-av{flex:none;position:relative;width:34px;height:34px;background:var(--card);box-shadow:var(--sh2)}
+.wa-av::before{content:"";position:absolute;inset:7px;background:var(--acc);-webkit-mask:var(--j-user) center/contain no-repeat;mask:var(--j-user) center/contain no-repeat}
+.wa[data-s=ok] .wa-av::after{content:"";position:absolute;right:-6px;bottom:-6px;width:16px;height:16px;background:var(--ok) var(--j-chkw) center/10px 8px no-repeat;box-shadow:0 0 0 2px var(--ink);animation:ipop .45s var(--ezb)}
+.wa-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.wa-t b{font:9px/1.3 var(--pf);font-weight:400;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wa-st{display:flex;align-items:center;gap:7px;font:7px/1.3 var(--pf);color:var(--mut)}
+.wa-st i{flex:none;width:8px;height:8px;background:var(--mut)}
+.wa[data-s=ok] .wa-st{color:var(--fg)}.wa[data-s=ok] .wa-st i{background:var(--ok)}
+.wa[data-s=wait] .wa-st i{background:var(--acc);animation:blk .5s steps(1) infinite}
+.wa[data-s=bad] .wa-st i{background:color-mix(in srgb,var(--err) 80%,var(--mut))}
+.wa-me{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 14px;margin:12px 0 0;padding:12px 0 0;border-top:2px dashed var(--line)}
+.wa-me[hidden]{display:none}
+.wa-who{display:flex;flex-direction:column;gap:6px;min-width:0}
+.wa-who b{font:8px/1.4 var(--pf);font-weight:400;color:var(--fg);overflow-wrap:anywhere}
+.wa-who small{font:7px/1.5 var(--pf);color:var(--mut)}.wa-who small:empty{display:none}
+.wa-act{display:flex;gap:16px;margin-left:auto}
+.wl{padding:4px 0;color:var(--mut);font:7px/1.4 var(--pf);text-decoration:underline 2px color-mix(in srgb,var(--mut) 40%,transparent);text-underline-offset:4px;transition:color .15s}
+@media(hover:hover){.wl:hover{color:var(--acc)}.wl.wd:hover{color:var(--err)}}
+.wl[aria-expanded=true]{color:var(--acc)}
+.wa-msg{margin:12px 0 0;padding:9px 11px;background:color-mix(in srgb,var(--err) 9%,var(--card));color:var(--fg);font:7px/1.8 var(--pf);box-shadow:0 0 0 2px color-mix(in srgb,var(--err) 30%,transparent)}
+.wa-msg[hidden]{display:none}
+.wa[data-s=ok]:not(.swap) .wa-ways{display:none}
+.wa.swap .wa-ways{animation:inP .3s var(--ez)}
+#dlg .wa .fold{margin:14px 0 0;background:var(--card)}
+#dlg .wa .fold[hidden]{display:none}
+#dlg .wa .fold>summary .qm{margin:-4px 0}
+#dlg .wa .fold .pbtn{margin-top:16px}
+#dlg .fold:is([data-k=pw],[data-k=tok])>summary::before{content:"";flex:none;width:20px;height:20px;background:var(--acc);-webkit-mask:var(--ico) center/contain no-repeat;mask:var(--ico) center/contain no-repeat}
+#dlg .fold[data-k=pw]{--ico:var(--j-lock)}#dlg .fold[data-k=tok]{--ico:var(--j-key)}
+#c-qlogin .pi{--ico:var(--j-enter)}
+.wa-g{display:flex;align-items:center;gap:12px;margin-top:14px}
+.wa-g .gbtn{flex:1;width:auto}
+.gi{flex:none;width:20px;height:20px;background:var(--gpix) center/contain no-repeat;image-rendering:pixelated}
+:root{--gpix:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23ea4335' d='M2 0h6v1H2zM1 1h8v1H1zM0 2h2v1H0z'/%3E%3Cpath fill='%23fbbc05' d='M0 3h2v1H0zM0 4h2v1H0zM0 5h2v1H0zM0 6h2v1H0z'/%3E%3Cpath fill='%234285f4' d='M5 4h5v1H5zM5 5h5v1H5zM8 6h2v1H8zM8 7h2v1H8zM8 8h1v1H8z'/%3E%3Cpath fill='%2334a853' d='M0 7h2v1H0zM1 8h7v1H1zM2 9h6v1H2z'/%3E%3C/svg%3E")}
+.wst{display:block;margin:10px 2px 0;font:7px/1.7 var(--pf);color:var(--mut)}.wst:empty{display:none}
+.wst[data-s=ok]{color:var(--ok)}.wst[data-s=err]{color:color-mix(in srgb,var(--err) 75%,var(--fg))}
+.wst[data-s=wait]::before{content:"";display:inline-block;width:6px;height:6px;margin-right:8px;background:var(--acc);animation:blk .5s steps(1) infinite}
+#f-model[hidden],#mh[hidden],.sw[hidden]{display:none}
+.gh+.sw[hidden]+.sw{border-top:0}
+/* мягче: ссылки «Забыть» и «Сбросить всё» не кричат красным, ошибка проверки ключа — не красным текстом */
+#c-forget,.wfoot #c-reset{color:var(--mut)}
+@media(hover:hover){#c-forget:hover,.wfoot #c-reset:hover{color:var(--err)}}
+#mh[data-s=err]{color:color-mix(in srgb,var(--err) 55%,var(--fg))}
+
+/* «?» — справка. На ПК — облачко у знака, на телефоне — шторка снизу (её же открывает долгое нажатие на строку) */
+.qm{flex:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;margin:0 2px;padding:0 0 0 1px;background:var(--card);color:var(--mut);font:9px/1 var(--pf);box-shadow:var(--sh2);cursor:pointer;transition:background-color .15s,color .15s,transform .2s var(--ezb)}
+.wa-h .qm,.wa-g .qm{background:var(--card)}
+@media(hover:hover){.qm:hover{background:var(--acc);color:var(--onacc);transform:translateY(-1px)}}
+.qm[aria-expanded=true]{background:var(--acc);color:var(--onacc)}
+.qm:active{transform:translateY(1px)}
+dialog .sw>span{flex:1;min-width:0}
+dialog .sw>.qm{margin-right:-4px}
+#dlg [data-help]:not(.qm){-webkit-touch-callout:none}
+@media(hover:none) and (pointer:coarse){#dlg .sw[data-help]>span{-webkit-user-select:none;user-select:none}}
+.hpop{position:fixed;z-index:50;width:min(360px,calc(100vw - 20px));max-height:min(72vh,540px);overflow:auto;overscroll-behavior:contain;padding:12px 14px 14px;background:var(--card);color:var(--fg);box-shadow:var(--sh2),7px 7px 0 0 var(--dsh);animation:hpin .22s var(--ez)}
+.hpop[hidden]{display:none}
+.hpop::before{content:"";position:fixed;display:none}
+@keyframes hpin{from{opacity:0;transform:translateY(-6px)}}
+.hpop.up{animation-name:hpup}@keyframes hpup{from{opacity:0;transform:translateY(6px)}}
+.hpt{display:flex;align-items:center;gap:10px;margin:0 0 10px;padding-bottom:9px;border-bottom:2px dashed var(--line)}
+.hpt b{flex:1;min-width:0;font:8px/1.4 var(--pf);font-weight:400;color:var(--acc)}
+.hpx{flex:none;width:22px;height:22px;padding:0;background:var(--bg);color:var(--mut);box-shadow:var(--sh2)}
+.hpx::before{content:"";display:block;width:10px;height:10px;margin:auto;background:currentColor;-webkit-mask:var(--j-plus) center/contain no-repeat;mask:var(--j-plus) center/contain no-repeat;transform:rotate(45deg)}
+@media(hover:hover){.hpx:hover{color:var(--err)}}
+.hpb{font:7px/1.9 var(--pf);color:var(--fg)}
+.hpb p{margin:0 0 10px}.hpb p:last-child,.hpb>:last-child{margin-bottom:0}
+.hpb ol{margin:0 0 10px;padding-left:20px}.hpb li{margin:0 0 6px}.hpb li::marker{color:var(--acc)}
+.hpb code{padding:1px 5px;background:var(--bg);font:16px/1.2 var(--mono);color:var(--fg);overflow-wrap:anywhere}
+.hpb .hbad{padding:8px 10px;background:color-mix(in srgb,var(--err) 9%,var(--card));box-shadow:0 0 0 2px color-mix(in srgb,var(--err) 30%,transparent)}
+.hpb .hnote{color:var(--mut)}
+.hcmd{display:flex;align-items:stretch;gap:10px;margin:0 0 10px}
+.hcmd code{flex:1;min-width:0;display:flex;align-items:center;padding:6px 8px;box-shadow:var(--sh2),var(--sunk)}
+.hcp{flex:none;padding:6px 9px;background:var(--acc);color:var(--onacc);font:7px/1.2 var(--pf);box-shadow:var(--sh2),var(--bevA2)}
+.hbm{position:relative;display:inline-flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);color:var(--acc);font:7px/1.4 var(--pf);text-decoration:none;box-shadow:var(--sh2);cursor:grab}
+.hbm::before{content:"";flex:none;width:14px;height:14px;background:currentColor;-webkit-mask:var(--j-book) center/contain no-repeat;mask:var(--j-book) center/contain no-repeat}
+.hbm.nope::after{content:attr(data-t);position:absolute;left:0;top:calc(100% + 8px);width:max-content;max-width:240px;padding:6px 8px;background:var(--ink);color:var(--card);font:7px/1.6 var(--pf);z-index:1}
+dialog.hlp .abody{max-height:62dvh;overflow:auto;padding-top:16px}
+dialog.hlp .wfoot{justify-content:flex-end}
 /* ===== v12: Personal Computer в шапке =====
    Верхняя панель постоянной высоты: в левом углу — компьютер (рисует скрипт ниже, масштаб кратен пикселям экрана), рядом — имя
    и что он делает, справа — журнал, настройки и очистка чата. На широком экране в панели и вкладки (Чат, Терминал, Файлы).
@@ -1662,39 +1747,41 @@ const tick=setInterval(paint,100);paint();
   <section class="spane" id="p-ai" role="tabpanel" aria-labelledby="t-ai" hidden>
     <div class="grp" data-i="conn"><h3 class="gh">Подключение</h3>
     <label class="f">Провайдер<select id="c-prov"></select></label>
-    <div id="f-qwen" hidden>
-      <div id="c-qin">
-        <small class="hint">Войди в свой аккаунт chat.qwen.ai — Personal Computer сам получит токен и будет обновлять его до истечения. Пароль не хранится, только его хеш на твоём сервере.</small>
-        <label class="f">Email от chat.qwen.ai<input id="c-qmail" type="email" autocomplete="username" autocapitalize="off" spellcheck="false"></label>
-        <label class="f">Пароль<input id="c-qpass" type="password" autocomplete="current-password"></label>
-        <div class="brow"><button class="pbtn" id="c-qlogin" type="button"><i class="pi"></i><span>Войти в Qwen</span></button></div>
+    <!-- веб-чат по аккаунту (Qwen, DeepSeek): карточка аккаунта и способы входа; объяснения — под «?» -->
+    <div class="wa" id="wa" data-s="none" hidden>
+      <div class="wa-c"><div class="wa-h">
+        <span class="wa-av" aria-hidden="true"></span>
+        <span class="wa-t"><b id="wa-n">Аккаунт</b><span class="wa-st"><i></i><span id="wa-s">Не подключён</span></span></span>
+        <button class="qm" type="button" data-help="wa" aria-label="Подробнее">?</button>
       </div>
-      <div id="c-qme" hidden><small class="hint" id="c-qmet"></small><button class="lnk" id="c-qout" type="button">Выйти из Qwen</button></div>
-      <small class="hint"><b>Входишь через Google или GitHub</b> (пароля нет)? Нажми кнопку ниже — с компьютера:<br>1. откроется chat.qwen.ai (войди, если нужно), а команда уже скопирована;<br>2. там нажми F12, открой вкладку «Console», вставь команду (Ctrl+V) и нажми Enter. Chrome при первой вставке пишет предупреждение — впиши <code>allow pasting</code>, Enter, и вставь команду ещё раз;<br>3. вкладка сама вернётся сюда — нажми «Подключить».</small>
-      <div class="brow"><button class="pbtn" id="c-qcopy" type="button"><i class="pi"></i><span>Токен в один клик</span></button></div>
-      <small class="hint">Без консоли: перетащи ссылку ниже мышкой на панель закладок. Потом на chat.qwen.ai просто нажми эту закладку — вернёшься сюда с токеном.</small>
-      <a id="c-qbm" class="lnk" href="#" draggable="true">Токен Qwen в Personal Computer</a>
-      <small id="c-qst"></small>
-    </div>
-    <div id="f-ds" hidden>
-      <small class="hint">Подключи свой аккаунт chat.deepseek.com — нужен только токен из браузера, он живёт долго. Нажми кнопку ниже — с компьютера:<br>1. откроется chat.deepseek.com (войди, если нужно), а команда уже скопирована;<br>2. там нажми F12, открой вкладку «Console», вставь команду (Ctrl+V) и нажми Enter. Chrome при первой вставке пишет предупреждение — впиши <code>allow pasting</code>, Enter, и вставь команду ещё раз;<br>3. вкладка сама вернётся сюда — нажми «Подключить».</small>
-      <div class="brow"><button class="pbtn" id="c-dcopy" type="button"><i class="pi"></i><span>Токен в один клик</span></button></div>
-      <small class="hint">Без консоли: перетащи ссылку ниже мышкой на панель закладок. Потом на chat.deepseek.com просто нажми эту закладку — вернёшься сюда с токеном.</small>
-      <a id="c-dbm" class="lnk" href="#" draggable="true">Токен DeepSeek в Personal Computer</a>
+      <div class="wa-me" id="wa-me" hidden>
+        <span class="wa-who"><b id="wa-who"></b><small id="wa-sub"></small></span>
+        <span class="wa-act"><button class="wl" id="wa-swap" type="button" aria-expanded="false">Другой аккаунт</button><button class="wl wd" id="wa-out" type="button">Отключить</button></span>
+      </div>
+      <p class="wa-msg" id="wa-msg" hidden></p></div>
+      <div class="wa-ways" id="wa-ways">
+        <details class="fold" data-k="pw" id="wa-pw"><summary><span class="ft">Вход по email и паролю</span><button class="qm" type="button" data-help="pw" aria-label="Как это работает">?</button></summary><div class="fb">
+          <label class="f">Email<input id="c-qmail" type="email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="you@mail.com"></label>
+          <label class="f">Пароль<input id="c-qpass" type="password" autocomplete="current-password"></label>
+          <button class="pbtn" id="c-qlogin" type="button"><i class="pi"></i><span>Войти</span></button>
+          <small class="wst" id="c-qst"></small>
+        </div></details>
+        <div class="wa-g"><button class="pbtn gbtn" id="c-gin" type="button"><i class="gi" aria-hidden="true"></i><span>Войти через Google</span></button><button class="qm" type="button" data-help="google" aria-label="Как войти через Google">?</button></div>
+        <small class="wst" id="c-gst"></small>
+        <details class="fold" data-k="tok" id="wa-tok"><summary><span class="ft">Токен вручную</span><button class="qm" type="button" data-help="tok" aria-label="Где взять токен">?</button></summary><div class="fb" id="wa-tokb"></div></details>
+      </div>
     </div>
     <label class="f" id="f-base" hidden>Адрес API<input id="c-base" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="https://…/v1"></label>
-    <label class="f" id="f-key">API ключ<span class="fx"><input id="c-key" type="password" autocomplete="off" spellcheck="false"><button type="button" class="eye" id="c-eye" aria-label="Показать ключ" aria-pressed="false"><i class="pi"></i></button></span></label>
-    <small class="hint" id="c-qh" hidden>Или вставь токен вручную: на chat.qwen.ai нажми F12, вкладка «Console», команда <code>copy(localStorage.token)</code> — токен в буфере обмена.</small>
-    <small class="hint" id="c-dh" hidden>Или вставь токен вручную: на chat.deepseek.com нажми F12, вкладка «Console», команда <code>copy(JSON.parse(localStorage.userToken).value)</code> — токен в буфере обмена.</small>
+    <span id="f-key-home" hidden></span><label class="f" id="f-key">API ключ<span class="fx"><input id="c-key" type="password" autocomplete="off" spellcheck="false"><button type="button" class="eye" id="c-eye" aria-label="Показать ключ" aria-pressed="false"><i class="pi"></i></button></span></label>
     <button class="lnk" id="c-forget" type="button" hidden>Забыть этого провайдера</button>
-    <label class="f">Модель<input id="c-model" autocapitalize="off" autocomplete="off" spellcheck="false"></label><div id="ml" hidden></div><small id="mh"></small>
+    <label class="f" id="f-model">Модель<input id="c-model" autocapitalize="off" autocomplete="off" spellcheck="false"></label><div id="ml" hidden></div><small id="mh"></small>
     </div>
     <div class="grp" data-i="abil"><h3 class="gh">Возможности</h3>
-    <label class="sw" id="f-think" hidden><span>Размышление<small>Qwen сначала думает, потом отвечает: умнее, но медленнее. Поиск, код и картинки самого Qwen выключены — у Personal Computer свои инструменты</small></span><input type="checkbox" role="switch" id="c-think"></label>
-    <label class="sw" id="f-vis"><span>Показывать файлы модели<small>Картинки и PDF уходят прямо в модель. Выключи, если она не умеет их читать</small></span><input type="checkbox" role="switch" id="c-vis"></label>
+    <label class="sw" id="f-think" data-help="think" hidden><span>Размышление<small>Думает перед ответом: умнее, но медленнее</small></span><button class="qm" type="button" data-help="think" aria-label="Подробнее">?</button><input type="checkbox" role="switch" id="c-think"></label>
+    <label class="sw" id="f-vis" data-help="vis"><span>Показывать файлы модели<small>Картинки и PDF — прямо в модель</small></span><button class="qm" type="button" data-help="vis" aria-label="Подробнее">?</button><input type="checkbox" role="switch" id="c-vis"></label>
     </div>
     <div class="grp" data-i="steps"><h3 class="gh">Шаги агента</h3>
-    <label class="sw"><span>Ограничение шагов<small>Personal Computer останавливается после стольких шагов подряд, чтобы не зациклиться. Выключи — будет работать до конца или до «Стоп»</small></span><input type="checkbox" role="switch" id="c-lim"></label>
+    <label class="sw" data-help="lim"><span>Ограничение шагов<small>Останавливается, чтобы не зациклиться</small></span><button class="qm" type="button" data-help="lim" aria-label="Подробнее">?</button><input type="checkbox" role="switch" id="c-lim"></label>
     <label class="f" id="f-steps">Шагов подряд, не больше<input id="c-steps" type="number" min="1" max="10000" step="1" inputmode="numeric"></label><small id="sh" hidden></small>
     </div>
     <details class="fold" data-k="sys"><summary><span class="ft">Характер Personal Computer</span></summary><div class="fb">
@@ -1704,6 +1791,11 @@ const tick=setInterval(paint,100);paint();
   <section class="spane" id="p-lx" role="tabpanel" aria-labelledby="t-lx" hidden></section>
   </div>
   <div class="wfoot"><button class="lnk" id="c-reset" type="button">Сбросить всё</button><button class="p" id="c-save" type="button">Сохранить</button></div>
+</dialog>
+<dialog id="hlp" class="win ask hlp" aria-labelledby="hlp-h">
+  <div class="wbar"><span></span><b id="hlp-h"></b><span></span></div>
+  <div class="abody hpb" id="hlp-b"></div>
+  <div class="wfoot"><span></span><button class="p" id="hlp-ok" type="button">Понятно</button></div>
 </dialog>
 <dialog id="ask" class="win ask" aria-labelledby="ask-h">
   <div class="wbar"><span></span><b id="ask-h"></b><span></span></div>
@@ -4260,18 +4352,29 @@ provOpts();
 const provBase=p=>PRESETS[p]||(p!==CUSTOM?p:'');
 const F={base:'#c-base',key:'#c-key',model:'#c-model',sys:'#c-sys'};
 /* ключ этого провайдера уже на сервере — поле можно оставить пустым */
-/* Qwen (chat.qwen.ai): вместо ключа — токен аккаунта, из настроек — только модель и размышление */
+/* Qwen (chat.qwen.ai) и DeepSeek (chat.deepseek.com): вместо ключа — аккаунт сайта (карточка #wa), из настроек — модель и размышление */
 const isQw=b=>{try{return new URL(nb(b)).hostname==='chat.qwen.ai'}catch(e){return false}};
-/* DeepSeek (chat.deepseek.com): так же — токен аккаунта из браузера, из настроек — только DeepThink */
 const isDs=b=>{try{return new URL(nb(b)).hostname==='chat.deepseek.com'}catch(e){return false}};
-/* подпись под «Размышлением»: у каждого сайта своя (client.js уточняет её по выбранной модели) */
-const thinkHint=b=>isDs(b)?'DeepSeek сначала думает, потом отвечает: умнее, но медленнее, и размышления съедают часть длины ответа. Поиск самого DeepSeek выключен — у Personal Computer свои инструменты'
-  :'Qwen сначала думает, потом отвечает: умнее, но медленнее. Поиск, код и картинки самого Qwen выключены — у Personal Computer свои инструменты';
-function keyHint(){const b=nb($('#c-base').value),sv=provSaved[b],q=isQw(b),d=isDs(b);
-  $('#c-key').placeholder=sv&&sv.hasKey?'сохранён на сервере · пусто = не менять':q?'eyJhbGciOi… (токен с chat.qwen.ai)':d?'токен с chat.deepseek.com':'sk-…';$('#c-forget').hidden=!sv;
-  $('#f-key').firstChild.nodeValue=q?'Токен Qwen':d?'Токен DeepSeek':'API ключ';$('#c-qh').hidden=$('#f-qwen').hidden=!q;$('#c-dh').hidden=$('#f-ds').hidden=!d;
-  $('#f-think').hidden=!(q||d);$('#f-vis').hidden=q||d;
-  const tn=$('#f-think').querySelector('span').firstChild;tn.nodeValue=d?'DeepThink':'Размышление';$('#f-think small').textContent=thinkHint(b)}
+/* что экран знает о веб-чате: имя, сайт, где на сайте лежит токен, ручная команда, есть ли вход по паролю */
+const WEB={qw:{k:'qw',name:'Qwen',site:'chat.qwen.ai',url:'https://chat.qwen.ai',hash:'qwen-token',take:'localStorage.token',manual:'copy(localStorage.token)',pw:true},
+  ds:{k:'ds',name:'DeepSeek',site:'chat.deepseek.com',url:'https://chat.deepseek.com',hash:'deepseek-token',take:'(()=>{try{return JSON.parse(localStorage.userToken).value}catch(e){return localStorage.userToken}})()',manual:'copy(JSON.parse(localStorage.userToken).value)',pw:false}};
+const webOf=b=>isQw(b)?WEB.qw:isDs(b)?WEB.ds:null;
+/* «Войти через Google»: команда в консоли сайта открывает это приложение с токеном после # (на сервер не уходит),
+   client.js его подхватывает и сохраняет с подтверждением. Закладка — тот же код как javascript:-ссылка */
+const webCmd=w=>"(t=>t?location.href='"+location.origin+location.pathname+"#"+w.hash+"='+encodeURIComponent(t):alert('Сначала войди в "+w.site+"'))("+w.take+")";
+const bmHref=w=>'javascript:void('+encodeURIComponent(webCmd(w))+')';
+/* подпись под «Размышлением» — коротко, подробности под «?» (client.js уточняет её по выбранной модели) */
+const THINK_SUB='Думает перед ответом: умнее, но медленнее';
+function keyHint(){const b=nb($('#c-base').value),sv=provSaved[b],w=webOf(b),wa=$('#wa');
+  $('#c-key').placeholder=sv&&sv.hasKey?'сохранён на сервере · пусто = не менять':w?'вставь токен с '+w.site:'sk-…';
+  $('#f-key').firstChild.nodeValue=w?'Токен '+w.name:'API ключ';$('#c-forget').hidden=!sv||!!w;
+  /* у веб-чата поле токена живёт в папке «Токен вручную», у остальных провайдеров — на своём месте */
+  const fk=$('#f-key');if(w){if(fk.parentNode!==$('#wa-tokb'))$('#wa-tokb').append(fk)}else if(fk.previousElementSibling!==$('#f-key-home'))$('#f-key-home').after(fk);
+  if(wa.dataset.p!==(w?w.k:'')){wa.dataset.p=w?w.k:'';wa.classList.remove('swap');$('#wa-swap').setAttribute('aria-expanded','false');$('#c-gst').textContent='';$('#c-qst').textContent=''}
+  wa.hidden=!w;$('#mh').hidden=!!w;$('#f-model').hidden=isDs(b);
+  if(w){$('#wa-n').textContent='Аккаунт '+w.name;$('#wa-pw').hidden=!w.pw}
+  $('#f-think').hidden=!w;$('#f-vis').hidden=!!w;
+  $('#f-think').querySelector('span').firstChild.nodeValue=isDs(b)?'DeepThink':'Размышление'}
 function syncSet(){const p=prov.value;$('#f-steps').hidden=!$('#c-lim').checked;$('#sh').hidden=true;$('#f-base').hidden=!!PRESETS[p];$('#f-key').hidden=LOCAL.includes(p);keyHint()}
 function fill(s){
   for(const k in F)$(F[k]).value=s[k]||'';
@@ -4285,20 +4388,82 @@ prov.onchange=()=>{const b=provBase(prov.value),sv=provSaved[b];$('#c-base').val
   if(sv&&sv.model){mi().value=sv.model;provNew=false}else{provNew=true;if(isDs(b))mi().value='deepseek'}
   syncSet();if(b)loadModels();else{$('#mh').textContent='';$('#c-base').focus()}};
 $('#c-lim').onchange=syncSet;
-/* «Токен в один клик»: команда в консоли chat.qwen.ai открывает это приложение с токеном в адресе (#qwen-token=…, после # — на сервер не уходит),
-   а client.js его подхватывает и сохраняет (с подтверждением) */
-const qwCmd=()=>"localStorage.token?location.href='"+location.origin+location.pathname+"#qwen-token='+encodeURIComponent(localStorage.token):alert('Сначала войди в chat.qwen.ai')";
-/* закладка: тот же код как javascript:-ссылка — на chat.qwen.ai нажимают её вместо консоли; здесь по клику — только подсказка */
-{const a=$('#c-qbm');a.href='javascript:void('+encodeURIComponent(qwCmd())+')';a.onclick=e=>{e.preventDefault();ask('Токен Qwen','Эту ссылку не нажимают здесь: перетащи её мышкой на панель закладок браузера (Ctrl+Shift+B — показать панель). Потом открой chat.qwen.ai, войди и нажми эту закладку — вернёшься сюда с токеном.',null,'Понятно')}}
-$('#c-qcopy').onclick=async()=>{const c=qwCmd(),b=$('#c-qcopy');
-  try{await navigator.clipboard.writeText(c);b.lastChild.textContent='Скопировано — вставь в консоль chat.qwen.ai'}catch(e){await ask('Токен Qwen','Скопируй команду и вставь её в консоль (F12 → Console) на chat.qwen.ai:',c,'Готово')}
-  window.open('https://chat.qwen.ai','_blank','noopener')};
-/* то же для DeepSeek: токен лежит в localStorage.userToken как JSON {"value": "…"}; #deepseek-token=… подхватывает client.js */
-const dsCmd=()=>"(t=>t?location.href='"+location.origin+location.pathname+"#deepseek-token='+encodeURIComponent(t):alert('Сначала войди в chat.deepseek.com'))((()=>{try{return JSON.parse(localStorage.userToken).value}catch(e){return localStorage.userToken}})())";
-{const a=$('#c-dbm');a.href='javascript:void('+encodeURIComponent(dsCmd())+')';a.onclick=e=>{e.preventDefault();ask('Токен DeepSeek','Эту ссылку не нажимают здесь: перетащи её мышкой на панель закладок браузера (Ctrl+Shift+B — показать панель). Потом открой chat.deepseek.com, войди и нажми эту закладку — вернёшься сюда с токеном.',null,'Понятно')}}
-$('#c-dcopy').onclick=async()=>{const c=dsCmd(),b=$('#c-dcopy');
-  try{await navigator.clipboard.writeText(c);b.lastChild.textContent='Скопировано — вставь в консоль chat.deepseek.com'}catch(e){await ask('Токен DeepSeek','Скопируй команду и вставь её в консоль (F12 → Console) на chat.deepseek.com:',c,'Готово')}
-  window.open('https://chat.deepseek.com','_blank','noopener')};
+/* карточка аккаунта: «Другой аккаунт» показывает способы входа и у подключённого */
+$('#wa-swap').onclick=()=>{const on=$('#wa').classList.toggle('swap');$('#wa-swap').setAttribute('aria-expanded',on)};
+/* «Войти через Google»: копируем команду и открываем сайт; с телефона консоли нет — объясняем, как сделать с компьютера */
+$('#c-gin').onclick=async()=>{const w=webOf($('#c-base').value),st=$('#c-gst');if(!w)return;
+  if(touchUI()){openHelp('google',$('#c-gin'));return}
+  const c=webCmd(w);
+  try{await navigator.clipboard.writeText(c);st.textContent='Команда скопирована — вставь её в консоль на '+w.site+' (F12, вкладка Console)';st.dataset.s='ok'}
+  catch(e){st.textContent='';await ask('Войти через Google','Скопируй команду и вставь её в консоль на '+w.site+' (F12, вкладка Console):',c,'Готово')}
+  window.open(w.url,'_blank','noopener')};
+
+/* ---------- справка под «?» ----------
+   Объяснения не лежат полотном в настройках: на ПК — облачко у знака вопроса, на телефоне — шторка снизу,
+   которую открывает и долгое нажатие на строку с настройкой. Текст собирается при открытии: он зависит от провайдера,
+   модели и того, что сейчас с аккаунтом (waNote — полный текст последней ошибки, его ставит client.js) */
+const touchUI=()=>matchMedia('(hover:none) and (pointer:coarse)').matches;
+let waNote='';
+const cmdBox=c=>'<div class="hcmd"><code>'+esc(c)+'</code><button type="button" class="hcp" data-copy="'+esc(c).replace(/"/g,'&quot;')+'">Копировать</button></div>';
+function helpOf(k){const w=webOf($('#c-base').value)||WEB.qw,n=w.name,s=w.site,ds=w===WEB.ds;
+  const steps='<ol><li>Нажми «Войти через Google» — откроется '+s+' (войди там, если нужно), а команда уже скопирована.</li><li>На '+s+' нажми F12, открой вкладку «Console», вставь команду (Ctrl+V) и нажми Enter. Chrome при первой вставке попросит набрать <code>allow pasting</code> — набери и вставь ещё раз.</li><li>Вкладка сама вернётся сюда — нажми «Подключить».</li></ol>';
+  if(k==='wa')return{t:'Аккаунт '+n,h:(waNote?'<p class="hbad">'+esc(waNote)+'</p>':'')
+    +'<p>Personal Computer говорит с '+s+' от имени твоего аккаунта: модели бесплатно, запросы идут с твоего сервера прямо на сайт — без сторонних прокси.</p>'
+    +(ds?'<p>Подключить — «Войти через Google» (подходит для любого входа на сайте: Google, почта, телефон) или токеном вручную. Вход по паролю прямо отсюда DeepSeek не пускает: сайт проверяет устройство.</p><p>Токен сайта со временем истекает — бывает, через несколько часов. Тогда в чате появится просьба подключить заново: это пара секунд.</p>'
+      :'<p>Подключить можно по email и паролю — тогда токен обновляется сам, — через «Войти через Google» (для входа через Google или GitHub) или токеном вручную.</p>')};
+  if(k==='pw')return{t:'Вход по email и паролю',h:'<p>Сервер сам войдёт на '+s+', получит токен и будет обновлять его до истечения — вставлять токен не придётся.</p><p>Пароль не хранится: на твоём сервере лежит только его хеш SHA-256 — именно его и принимает '+s+'. «Отключить» стирает и его.</p><p>Входишь через Google или GitHub? Пароля у такого аккаунта нет — нажми «Войти через Google».</p>'};
+  if(k==='google')return{t:'Войти через Google',h:'<p>'+(ds?'Подходит для любого входа на '+s+' — через Google, почту или телефон.':'Для аккаунтов, которые входят на '+s+' через Google или GitHub.')+' С компьютера:</p>'+steps
+    +'<p>Без консоли: один раз перетащи эту ссылку на панель закладок, а потом просто нажимай её на '+s+':</p><p><a class="hbm" draggable="true" href="'+bmHref(w)+'">Токен '+n+' в Personal Computer</a></p>'
+    +(touchUI()?'<p class="hnote">С телефона консоли нет — подключи аккаунт с компьютера: токен сохранится на сервере и будет работать отовсюду.</p>':'<p class="hnote">Токен приходит после # в адресе и в логи сервера не попадает; сохранится только после твоего подтверждения.</p>')};
+  if(k==='tok')return{t:'Токен вручную',h:'<p>На '+s+' нажми F12, открой вкладку «Console» и выполни команду — токен окажется в буфере обмена:</p>'+cmdBox(w.manual)
+    +'<p>Вставь его в поле «Токен '+n+'» и нажми «Сохранить». Подойдёт и с «Bearer»'+(ds?', и целиком JSON из localStorage.userToken.':', и строкой cookie.')+'</p>'};
+  if(k==='think'){const m=window.qwInfoOf?qwInfoOf():null;
+    return{t:isDs($('#c-base').value)?'DeepThink':'Размышление',h:(m&&m.must?'<p>Эта модель всегда сначала думает — выключить нельзя.</p>':m&&!m.think?'<p>Эта модель не умеет размышлять — отвечает сразу.</p>':'')
+      +'<p>Модель сначала думает, потом отвечает: умнее, но медленнее.'+(ds?' Размышления у DeepSeek съедают часть длины ответа; если ответ оборвётся, Personal Computer сам попросит его продолжить.':'')+'</p>'
+      +'<p>'+(ds?'Поиск в интернете самого DeepSeek выключен':'Поиск, код и картинки самого Qwen выключены')+' — у Personal Computer свои инструменты: сервер, файлы, MCP.</p>'}}
+  if(k==='vis')return{t:'Показывать файлы модели',h:'<p>Картинки и PDF из твоих сообщений уходят прямо в модель — она видит их сама.</p><p>Выключи, если модель не умеет их читать: файлы всё равно лягут на сервер в inbox/, и Personal Computer откроет их своими инструментами.</p>'};
+  if(k==='lim')return{t:'Ограничение шагов',h:'<p>Personal Computer останавливается после стольких шагов подряд, чтобы не зациклиться, — продолжить можно кнопкой «Повторить».</p><p>Выключи — будет работать до конца задачи или до «Стоп».</p>'};
+  return null}
+/* облачко на ПК */
+const hpop=document.createElement('div');hpop.className='hpop';hpop.hidden=true;hpop.setAttribute('role','dialog');
+hpop.innerHTML='<div class="hpt"><b></b><button type="button" class="hpx" aria-label="Закрыть"></button></div><div class="hpb"></div>';
+let hpAt=null;
+function closeHelp(){if(hpop.hidden)return;hpop.hidden=true;hpAt&&hpAt.setAttribute('aria-expanded','false');hpAt=null}
+function placeHelp(){if(!hpAt||hpop.hidden)return;const r=hpAt.getBoundingClientRect(),M=10;
+  if(!r.width||r.bottom<0||r.top>innerHeight){closeHelp();return}
+  const w=hpop.offsetWidth,h=hpop.offsetHeight,x=Math.min(Math.max(M,r.right-w+14),innerWidth-w-M);
+  let y=r.bottom+10,up=false;if(y+h>innerHeight-M&&r.top-h-10>=M){y=r.top-h-10;up=true}
+  hpop.style.left=x+'px';hpop.style.top=Math.max(M,Math.min(y,innerHeight-h-M))+'px';hpop.classList.toggle('up',up);hpop.style.setProperty('--ax',(r.left+r.width/2-x)+'px')}
+function openHelp(k,at){const H=helpOf(k);if(!H)return;
+  if(touchUI()||innerWidth<600){closeHelp();const d=$('#hlp');$('#hlp-h').textContent=H.t;$('#hlp-b').innerHTML=H.h;if(!d.open)d.showModal();$('#hlp-ok').focus();return}
+  if(hpAt===at){closeHelp();return}
+  closeHelp();(at.closest('dialog')||document.body).append(hpop);
+  hpop.querySelector('.hpt b').textContent=H.t;hpop.querySelector('.hpb').innerHTML=H.h;hpop.hidden=false;hpAt=at;at.setAttribute('aria-expanded','true');placeHelp()}
+hpop.querySelector('.hpx').onclick=closeHelp;
+$('#hlp-ok').onclick=()=>$('#hlp').close();
+$('#hlp').addEventListener('click',e=>{if(e.target===$('#hlp'))$('#hlp').close()});
+/* «?» — в фазе перехвата: внутри строки-переключателя или заголовка папки нажатие не должно щёлкать ими */
+document.addEventListener('click',e=>{const q=e.target.closest('.qm[data-help]');if(!q)return;e.preventDefault();e.stopPropagation();openHelp(q.dataset.help,q)},true);
+/* клик мимо закрывает облачко; клик по фону вокруг окна при открытом облачке закрывает только облачко, а не настройки */
+let hpEat=false;
+document.addEventListener('pointerdown',e=>{if(hpop.hidden||hpop.contains(e.target)||e.target.closest('.qm'))return;hpEat=e.target.tagName==='DIALOG';closeHelp()},true);
+document.addEventListener('click',e=>{if(hpEat){hpEat=false;if(e.target.tagName==='DIALOG'){e.preventDefault();e.stopImmediatePropagation()}}},true);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!hpop.hidden){e.preventDefault();e.stopPropagation();closeHelp()}},true);
+addEventListener('scroll',placeHelp,true);addEventListener('resize',closeHelp);
+$('#dlg').addEventListener('close',closeHelp);
+/* в справке: «Копировать» команду и закладка, которую не нажимают здесь, а перетаскивают на панель */
+const helpClick=async e=>{const c=e.target.closest('.hcp');
+  if(c){try{await navigator.clipboard.writeText(c.dataset.copy);c.textContent='Скопировано'}catch(x){c.textContent='Выдели и скопируй'}setTimeout(()=>{c.textContent='Копировать'},1800);return}
+  const a=e.target.closest('.hbm');if(a){e.preventDefault();a.classList.add('nope');a.dataset.t=touchUI()?'Закладку добавляют на компьютере':'Не нажимай здесь — перетащи на панель закладок (Ctrl+Shift+B)';setTimeout(()=>a.classList.remove('nope'),2600)}};
+hpop.addEventListener('click',helpClick);$('#hlp-b').addEventListener('click',helpClick);
+/* на телефоне — долгое нажатие на строку с настройкой (data-help) открывает ту же справку */
+{let t=0,x=0,y=0,eat=false;const stop=()=>{clearTimeout(t);t=0};
+  document.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch')return;const el=e.target.closest('[data-help]');if(!el||e.target.closest('input,select,textarea,a,.qm'))return;
+    x=e.clientX;y=e.clientY;stop();t=setTimeout(()=>{t=0;eat=true;navigator.vibrate&&navigator.vibrate(12);openHelp(el.dataset.help,el)},480)},true);
+  document.addEventListener('pointermove',e=>{if(t&&Math.hypot(e.clientX-x,e.clientY-y)>10)stop()},true);
+  ['pointerup','pointercancel'].forEach(n=>document.addEventListener(n,stop,true));
+  document.addEventListener('click',e=>{if(eat){eat=false;e.preventDefault();e.stopPropagation()}},true);
+  document.addEventListener('contextmenu',e=>{if(e.target.closest&&e.target.closest('#dlg [data-help]'))e.preventDefault()},true)}
 /* лимит шагов: пустое или вне 1…10000 не сохраняем, а показываем ошибку у поля */
 function readSteps(){const n=stepsOk($('#c-steps').value),h=$('#sh');
   if(n||!$('#c-lim').checked){h.hidden=true;return{stepLimit:$('#c-lim').checked,maxSteps:n||undefined}}
