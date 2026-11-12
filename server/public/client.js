@@ -489,7 +489,7 @@ async function started() {
 }
 function mirror() {
   if (!srvSet) return;
-  Object.assign(cfg, { base: srvSet.base, model: srvSet.model, sys: srvSet.sys, vis: srvSet.vis, stepLimit: srvSet.stepLimit, maxSteps: srvSet.maxSteps, key: '' });
+  Object.assign(cfg, { base: srvSet.base, model: srvSet.model, sys: srvSet.sys, vis: srvSet.vis, think: !!srvSet.think, stepLimit: srvSet.stepLimit, maxSteps: srvSet.maxSteps, key: '' });
   provSaved = Object.fromEntries((srvSet.provs || []).map(p => [p.base, p]));
   provOpts();
 }
@@ -505,7 +505,8 @@ window.srvSubmit = async () => {
   if (fs.length) {
     upBusy = true; $('#send').disabled = true;
     try {
-      if (!srvSet || srvSet.vis !== false) parts = (await Promise.all(fs.map(toPart))).filter(Boolean);
+      /* Qwen картинок не видит — файлы только на сервер, без копии для модели */
+      if (!srvSet || (srvSet.vis !== false && !isQw(srvSet.base))) parts = (await Promise.all(fs.map(toPart))).filter(Boolean);
       for (const [k, f] of fs.entries()) {
         setSt('загружаю файлы ' + (k + 1) + '/' + fs.length + '…', 'on');
         files.push(await api('api/upload?name=' + encodeURIComponent(f.name), { method: 'POST', body: f, headers: { 'content-type': 'application/octet-stream' } }));
@@ -569,7 +570,7 @@ $('#c-save').onclick = async () => {
   cfg.tts = $('#c-tts').checked; cfg.sfx = $('#c-sfx').checked; cfg.room = $('#c-room').checked; cfg.vlang = $('#c-vlang').value;
   try { window.personalComputerRoom && personalComputerRoom.sndUI(); } catch (x) {}
   if (!cfg.tts && window.personalComputerStop) personalComputerStop();
-  const body = { base: $('#c-base').value.trim(), model: $('#c-model').value.trim(), sys: $('#c-sys').value.trim(), vis: $('#c-vis').checked, ...st };
+  const body = { base: $('#c-base').value.trim(), model: $('#c-model').value.trim(), sys: $('#c-sys').value.trim(), vis: $('#c-vis').checked, think: $('#c-think').checked, ...st };
   const k = $('#c-key').value.trim();
   if (k) body.key = k; else if (clearKey) body.clearKey = true;
   try {
@@ -578,10 +579,40 @@ $('#c-save').onclick = async () => {
     const w = $('#msgs .empty'); if (w && !w.dataset.cleared) { w.remove(); welcomeS(); }
   } catch (e) { stab('ai'); const h = $('#mh'); h.textContent = 'Не сохранилось: ' + e.message; h.dataset.s = 'err'; }
 };
+/* Qwen: умеет ли выбранная модель размышлять — переключатель следует за моделью (must — без размышления не работает) */
+let qwInfo = {};
+function qwThink() {
+  const m = qwInfo[mi().value.trim()], c = $('#c-think'), s = c.closest('label').querySelector('small');
+  c.disabled = !!m && (m.must || !m.think);
+  if (m && m.must) c.checked = true; else if (m && !m.think) c.checked = false;
+  s.textContent = m && m.must ? 'Эта модель всегда сначала думает — выключить нельзя' : m && !m.think ? 'Эта модель не умеет размышлять — отвечает сразу'
+    : 'Qwen сначала думает, потом отвечает: умнее, но медленнее. Поиск, код и картинки самого Qwen выключены — у Personal Computer свои инструменты';
+}
+mi().addEventListener('input', qwThink); mi().addEventListener('change', qwThink);
+$('#ml').addEventListener('click', () => setTimeout(qwThink));
+const qwDate = ms => new Date(ms).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 loadModels = async function () {
   const base = $('#c-base').value.trim().replace(/\/+$/, ''), key = $('#c-key').value.trim(), h = $('#mh'), t = ++mt;
   if (!base) { h.textContent = ''; delete h.dataset.s; return; }
   h.textContent = 'Сервер проверяет связь с моделью…'; h.dataset.s = 'wait';
+  if (isQw(base)) {
+    qwInfo = {};
+    try {
+      const r = await post('api/models', { base, key }); if (t !== mt) return;
+      mdl = r.models.slice(); qwInfo = Object.fromEntries((r.qwen || []).map(m => [m.id, m]));
+      const left = r.exp ? r.exp - Date.now() : 0;
+      h.textContent = 'Связь с Qwen есть, моделей: ' + mdl.length + ' — нажми на поле, чтобы выбрать'
+        + (r.exp ? (left < 0 ? '. Токен истёк — вставь новый' : '. Токен действует до ' + qwDate(r.exp) + (left < 3 * 864e5 ? ' — скоро понадобится новый' : '')) : '');
+      h.dataset.s = r.exp && left < 0 ? 'err' : 'ok';
+      const cur = mi().value.trim(); if (mdl.length && (!cur || !mdl.includes(cur))) mi().value = mdl[0];
+      provNew = false; qwThink();
+    } catch (e) {
+      if (t !== mt) return; mdl = [];
+      if (e.j && e.j.needKey && !(provSaved[base] && provSaved[base].hasKey)) { h.textContent = 'Вставь токен Qwen — после этого загружу список моделей'; delete h.dataset.s; return; }
+      h.textContent = e.message; h.dataset.s = 'err';
+    }
+    return;
+  }
   try {
     const { models: ids, free, needKey } = await post('api/models', { base, key }); if (t !== mt) return;
     const f = ids.filter(x => !/embed|whisper|tts|dall-e|moderation|image|audio|realtime|transcribe/i.test(x));
