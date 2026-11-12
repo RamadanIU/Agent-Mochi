@@ -386,7 +386,7 @@ export class Chat extends EventEmitter {
   ctxSize() {
     const v = this.doc.v;
     if (typeof v.ctx === 'number') return v.ctx;
-    return v.hist.length ? tokens(v.hist.map(({ _pf, _vi, _mid, _qw, ...m }) => m)) : 0;
+    return v.hist.length ? tokens(v.hist.map(({ _pf, _vi, _mid, _qw, _fl, ...m }) => m)) : 0;
   }
   /* c — какой чат показываем (не обязательно тот, где работает агент) */
   snapshot(id = this.cid) {
@@ -431,7 +431,7 @@ export class Chat extends EventEmitter {
     const us = H.map((m, i) => m.role === 'user' ? i : -1).filter(i => i >= 0), from = us.length > 40 ? us[us.length - 40] : 0;
     const out = [];
     for (let i = from; i < H.length; i++) {
-      const { _pf, _vi, _mid, _qw, ...m } = H[i];
+      const { _pf, _vi, _mid, _qw, _fl, ...m } = H[i];
       /* Ollama не принимает историю, где аргументы вызова — не JSON-объект (обрезаны или пустые): шлём {} — модель и так получила ошибку */
       if (m.tool_calls) m.tool_calls = m.tool_calls.map(c => argsOk(c.function.arguments) ? c : { ...c, function: { ...c.function, arguments: '{}' } });
       if (_pf && lvl < 2 && rec.has(i)) {
@@ -476,6 +476,8 @@ export class Chat extends EventEmitter {
       ? '\n\n[Пользователь загрузил файлы на сервер:\n' + files.map(f => '- ' + f.path + ' (' + sz(f.size) + ')').join('\n') + ']' : '');
     const m = busy ? { role: 'user', content: MID + content, _mid: 1 } : { role: 'user', content };
     if (parts.length) m._pf = this.saveParts(parts);
+    /* сами файлы (путь на сервере) — для провайдеров, которые принимают файлы целиком (Qwen); модели не показывается */
+    if (files.length) m._fl = files.map(f => ({ path: f.path, name: f.name, size: f.size }));
     const pub = { text, origin, files: files.map(f => ({ name: f.name, size: f.size, fid: f.fid || null })) };
     if (busy) {
       const q = { id: rid(6), t: Date.now(), ...pub, msg: m };
@@ -610,7 +612,7 @@ export class Chat extends EventEmitter {
       + (tgOn ? '\n' + (hooks.tg?.statusLine(this.u) || 'Telegram не подключён.') + ' Если пользователь хочет управлять тобой из Telegram или получать уведомления: попроси создать бота у @BotFather (команда /newbot) и прислать токен, затем вызови telegram_connect и дай пользователю ссылку из ответа.' : '')
       + (offB.length ? '\nВыключено пользователем: ' + offB.join(', ') + '. Включить их может только он сам в настройках — ты не можешь.' : '')
       + extra
-      + (!isQwen(S.base) && this.wire().some(m => Array.isArray(m.content)) ? '\nКартинки и PDF из сообщений пользователя ты видишь напрямую; те же файлы лежат в inbox/, если их нужно обработать.' : '')
+      + ((isQwen(S.base) ? this.doc.v.hist.some(m => m._fl) : this.wire().some(m => Array.isArray(m.content))) ? '\nКартинки и PDF из сообщений пользователя ты видишь напрямую; те же файлы лежат в inbox/, если их нужно обработать.' : '')
       + (has('view_image') ? '\nЧтобы увидеть картинку с сервера (фото, скриншот, график), вызови view_image — не гадай по имени файла и не читай её через read_file.' : '')
       + (this.doc.v.hist.some(m => m._mid) ? MID_SYS : '');
   }
@@ -643,7 +645,7 @@ export class Chat extends EventEmitter {
   /* один шаг → текст ответа (модель закончила) или null (были инструменты — нужен следующий шаг) */
   async step(sig, g, H, run, ask) {
     const chk = () => { if (sig.aborted || g !== this.gen) throw abortErr(); };
-    const S = this.settings(), qw = isQwen(S.base), on = t => isOn(S, t.function.name) && !(qw && t.function.name === 'view_image');
+    const S = this.settings(), on = t => isOn(S, t.function.name);
     /* лимит — шагов подряд без сообщений пользователя */
     if (S.stepLimit !== false && run.steps - (run.base || 0) >= S.maxSteps) throw new Error('Personal Computer сделал ' + S.maxSteps + ' шагов подряд и остановился, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить. Лимит шагов меняется в настройках → Модель.');
     run.steps++;
@@ -708,7 +710,7 @@ export class Chat extends EventEmitter {
     }
     if (FILE_TOOLS.has(nm)) return await this.fileTool(nm, a, sig);
     if (nm === 'view_image') {
-      if (this.settings().vis === false || this.noVis >= 2) return 'Ошибка: эта модель не видит картинки (или зрение выключено в настройках) — смотреть нечем. Опиши файл по метаданным (run_command: file, identify) или скажи пользователю, что нужна модель со зрением.';
+      if (!isQwen(this.settings().base) && (this.settings().vis === false || this.noVis >= 2)) return 'Ошибка: эта модель не видит картинки (или зрение выключено в настройках) — смотреть нечем. Опиши файл по метаданным (run_command: file, identify) или скажи пользователю, что нужна модель со зрением.';
       if (!String(a.path || '').trim()) return 'Ошибка: нет параметра path';
       if (imgs.length >= 5) return 'Ошибка: за один шаг — не больше 5 картинок; остальные открой следующим шагом';
       const r = await fileCmd({ fop: 'image', path: String(a.path), cwd: this.doc.v.cwd || userDir(this.u) }, sig);
@@ -796,7 +798,7 @@ export class Chat extends EventEmitter {
     if (isQwen(S.base)) {
       this.partial = '';
       return qwenTurn({ key: S.key, model: S.model, think: !!S.think, sys, tools, hist: this.doc.v.hist, signal: sig,
-        onText: d => { this.partial += d; this.emit('delta', d, this.cid); } });
+        onText: d => { this.partial += d; this.emit('delta', d, this.cid); }, getFiles: m => this.qwenFiles(m) });
     }
     for (let attempt = 0; ; attempt++) {
       const msgs = this.wire(), hasM = msgs.some(m => Array.isArray(m.content));
@@ -833,6 +835,24 @@ export class Chat extends EventEmitter {
         throw e;
       } finally { clearTimeout(it); }
     }
+  }
+
+  /* файлы сообщения для Qwen: загруженные пользователем — с диска (как есть, любой формат), картинки view_image — из вложений */
+  async qwenFiles(m) {
+    if (m._fl) {
+      const out = [];
+      for (const f of m._fl) try { const r = await pullFile(f.path); out.push({ name: f.name || r.name, data: r.data, at: f.path }); } catch {}
+      return out;
+    }
+    if (m._vi && m._pf) {
+      /* подпись картинки — «путь (размер)» */
+      const at = String(m.content || '').replace(/^\[Картинки из view_image: |\]$/g, '').split(', ').map(x => x.replace(/\s+\([^()]*\)$/, ''));
+      return this.loadParts(m._pf).filter(p => p.type === 'image_url').map((p, i) => {
+        const d = /^data:([^;,]+);base64,(.*)$/s.exec(p.image_url?.url || '');
+        return d && { name: (at[i] || 'image').split('/').pop() || 'image.png', mime: d[1], data: Buffer.from(d[2], 'base64'), at: at[i] };
+      }).filter(Boolean);
+    }
+    return [];
   }
 
   async readReply(r, poke) {
