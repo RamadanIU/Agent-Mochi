@@ -15,6 +15,7 @@ import * as A from './auth.js';
 import { getChat, resumeAll, DEF_SETTINGS, MAX_STEPS, toolCatalog, setTools } from './agent.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
 import * as QW from './qwen.js';
+import * as DS from './deepseek.js';
 import * as X from './ext.js';
 import { putInbox, storeCopy, getFile, userDir, safeName } from './files.js';
 import * as TG from './telegram.js';
@@ -200,8 +201,8 @@ function putSettings(c, b) {
   const cur = s.base || DEF_SETTINGS.base, moved = cur !== prev;
   /* «Сбросить всё» стирает ключи всех провайдеров */
   if (b.clearKey) { s.key = ''; for (const k in P) delete P[k]; delete s.qwAuth; }
-  /* токен Qwen вставляют как попало (Bearer, cookie, JSON) — храним только сам токен; JWT бывает длинным */
-  else if (typeof b.key === 'string' && b.key.trim()) s.key = QW.isQwen(cur) ? QW.parseToken(b.key).slice(0, 8000) : b.key.trim().slice(0, 500);
+  /* токен Qwen и DeepSeek вставляют как попало (Bearer, cookie, JSON из localStorage) — храним только сам токен; JWT бывает длинным */
+  else if (typeof b.key === 'string' && b.key.trim()) s.key = QW.isQwen(cur) ? QW.parseToken(b.key).slice(0, 8000) : DS.isDeepSeek(cur) ? DS.parseToken(b.key).slice(0, 8000) : b.key.trim().slice(0, 500);
   else if (moved) s.key = P[cur]?.key || '';
   if (b.model !== undefined) s.model = String(b.model).trim().slice(0, 200) || DEF_SETTINGS.model;
   else if (moved && P[cur]?.model) s.model = P[cur].model;
@@ -229,6 +230,11 @@ async function models(c, b) {
      Токен из поля — как есть; сохранённый — сначала обновляем, если подходит к концу */
   if (QW.isQwen(base)) {
     try { return { ...await QW.check(String(b.key || '').trim() ? key : await c.qwenKey().catch(() => key)), login: S.qwAuth?.email || '' }; }
+    catch (e) { throw new HttpErr(e.status === 401 ? 401 : 502, e.human || e.message, { human: true, ...(e.needKey ? { needKey: true } : {}) }); }
+  }
+  /* DeepSeek: свой API у chat.deepseek.com — рабочий ли токен и чей это аккаунт; модель у сайта одна */
+  if (DS.isDeepSeek(base)) {
+    try { return await DS.check(key); }
     catch (e) { throw new HttpErr(e.status === 401 ? 401 : 502, e.human || e.message, { human: true, ...(e.needKey ? { needKey: true } : {}) }); }
   }
   const auth = key ? { Authorization: 'Bearer ' + key } : {};

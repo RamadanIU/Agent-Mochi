@@ -446,6 +446,7 @@
 :root[data-theme=modern] #mh::before,:root[data-theme=modern] #sh::before{width:7px;height:7px;border-radius:50%;transform:translateY(-1px)}
 :root[data-theme=modern] #mh[data-s=wait]::before{background:var(--hi);animation:mdpulse 1s var(--ez) infinite}
 :root[data-theme=modern] .hint,:root[data-theme=modern] .grp .hint{display:block;margin:10px 0 0;font:400 12.5px/1.45 var(--sans);color:var(--mut)}
+:root[data-theme=modern] .hint[hidden]{display:none}
 :root[data-theme=modern] .note,:root[data-theme=modern] dialog .note{margin-top:14px;padding:10px 12px;border-radius:10px;background:var(--sb);color:var(--mut);font:400 12.5px/1.5 var(--sans);box-shadow:inset 0 0 0 1px var(--bd)}
 :root[data-theme=modern] #dlg .grp .note,:root[data-theme=modern] #dlg .fold .note{background:var(--field)}
 /* переключатели */
@@ -512,6 +513,64 @@
 :root[data-theme=modern] #dlg .fold[data-k=b]{--ico:var(--m-cube)}:root[data-theme=modern] #dlg .fold[data-k=m]{--ico:var(--m-plug)}:root[data-theme=modern] #dlg .fold[data-k="m+"]{--ico:var(--m-plus)}:root[data-theme=modern] #dlg .fold[data-k=k]{--ico:var(--m-book)}
 :root[data-theme=modern] #dlg .fold[data-k="k+url"]{--ico:var(--m-link)}:root[data-theme=modern] #dlg .fold[data-k="k+new"]{--ico:var(--m-sparkle)}:root[data-theme=modern] #dlg .fold[data-k=sys]{--ico:var(--m-heart)}:root[data-theme=modern] #dlg .fold[data-k=px]{--ico:var(--m-globe)}
 :root[data-theme=modern] #dlg .fold[data-k=px]>summary::before{-webkit-mask-image:var(--m-globe);mask-image:var(--m-globe)}
+/* подключение к веб-чату по аккаунту (Qwen, DeepSeek): карточка, способы входа, «?» и справка */
+:root[data-theme=modern]{--gvec:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath fill='%23FFC107' d='M43.6 20.1H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z'/%3E%3Cpath fill='%23FF3D00' d='m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z'/%3E%3Cpath fill='%234CAF50' d='M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z'/%3E%3Cpath fill='%231976D2' d='M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z'/%3E%3C/svg%3E")}
+:root[data-theme=modern] .wa{margin:14px 0 2px}
+:root[data-theme=modern] .wa-c{padding:12px 14px;border-radius:12px;background:var(--field);box-shadow:inset 0 0 0 1px var(--bd)}
+:root[data-theme=modern] .wa-av{width:36px;height:36px;border-radius:50%;background:var(--card);box-shadow:0 0 0 1px var(--bd)}
+:root[data-theme=modern] .wa-av::before{inset:9px;background:var(--mut)}
+:root[data-theme=modern] .wa[data-s=ok] .wa-av::before{background:var(--fg)}
+:root[data-theme=modern] .wa[data-s=ok] .wa-av::after{right:-3px;bottom:-3px;width:16px;height:16px;border-radius:50%;background:var(--ok) var(--m-chkw) center/10px 10px no-repeat;box-shadow:0 0 0 2px var(--field)}
+:root[data-theme=modern] .wa-t{gap:2px}
+:root[data-theme=modern] .wa-t b{font:600 14px/1.3 var(--sans)}
+:root[data-theme=modern] .wa-st{gap:6px;font:400 12.5px/1.35 var(--sans)}
+:root[data-theme=modern] .wa-st i{width:7px;height:7px;border-radius:50%}
+:root[data-theme=modern] .wa[data-s=wait] .wa-st i{background:var(--hi);animation:mdpulse 1s var(--ez) infinite}
+:root[data-theme=modern] .wa[data-s=bad] .wa-st i{background:var(--err)}
+:root[data-theme=modern] .wa-me{margin-top:12px;padding-top:11px;border-top:1px solid var(--bd)}
+:root[data-theme=modern] .wa-who{gap:1px}
+:root[data-theme=modern] .wa-who b{font:500 13.5px/1.35 var(--sans)}
+:root[data-theme=modern] .wa-who small{font:400 12.5px/1.4 var(--sans)}
+:root[data-theme=modern] .wa-act{gap:14px}
+:root[data-theme=modern] .wl{padding:4px 0;color:var(--mut);font:500 13px/1.3 var(--sans);text-decoration:none}
+@media(hover:hover){:root[data-theme=modern] .wl:hover{color:var(--fg);text-decoration:underline 1px;text-underline-offset:3px}:root[data-theme=modern] .wl.wd:hover{color:var(--err)}}
+:root[data-theme=modern] .wl[aria-expanded=true]{color:var(--fg)}
+:root[data-theme=modern] .wa-msg{margin-top:11px;padding:9px 11px;border-radius:9px;background:color-mix(in srgb,var(--err) 7%,var(--card));color:var(--fg);font:400 12.5px/1.45 var(--sans);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--err) 20%,transparent)}
+:root[data-theme=modern] #dlg .wa .fold{margin:10px 0 0;background:var(--gb)}
+:root[data-theme=modern] #dlg .wa .fold .pbtn{margin-top:14px;background:var(--acc);color:var(--onacc);box-shadow:none}
+@media(hover:hover){:root[data-theme=modern] #dlg .wa .fold .pbtn:hover:not(:disabled){background:color-mix(in srgb,var(--acc) 86%,var(--bg));color:var(--onacc)}}
+:root[data-theme=modern] #dlg .fold:is([data-k=pw],[data-k=tok])>summary::before{width:17px;height:17px;background:var(--mut)}
+:root[data-theme=modern] .wa-g{gap:8px;margin-top:10px}
+:root[data-theme=modern] dialog .pbtn.gbtn{background:var(--card);box-shadow:inset 0 0 0 1px var(--bd2),var(--sh-s)}
+@media(hover:hover){:root[data-theme=modern] dialog .pbtn.gbtn:hover:not(:disabled){background:var(--s2)}}
+:root[data-theme=modern] .gi{width:18px;height:18px;background-image:var(--gvec);image-rendering:auto}
+:root[data-theme=modern] .wst{margin:8px 0 0;font:400 12.5px/1.45 var(--sans)}
+:root[data-theme=modern] .wst[data-s=wait]::before{width:7px;height:7px;border-radius:50%;background:var(--hi);animation:mdpulse 1s var(--ez) infinite}
+:root[data-theme=modern] .qm,:root[data-theme=modern] .wa-h .qm,:root[data-theme=modern] .wa-g .qm{width:22px;height:22px;margin:0;padding:0;border-radius:50%;background:none;color:var(--mut);font:600 12px/1 var(--sans);box-shadow:inset 0 0 0 1px var(--bd2)}
+@media(hover:hover){:root[data-theme=modern] .qm:hover{background:var(--s2);color:var(--fg);transform:none}}
+:root[data-theme=modern] .qm[aria-expanded=true]{background:var(--fg);color:var(--bg);box-shadow:none}
+:root[data-theme=modern] dialog .sw>.qm{margin-right:-2px}
+:root[data-theme=modern] .gh+.sw[hidden]+.sw{border-top:0}
+:root[data-theme=modern] .hpop{padding:14px 16px 16px;border-radius:14px;background:var(--card);box-shadow:0 0 0 1px var(--bd),var(--sh-l)}
+:root[data-theme=modern] .hpt{margin:0 0 8px;padding:0;border:0}
+:root[data-theme=modern] .hpt b{font:600 14px/1.3 var(--sans);color:var(--fg)}
+:root[data-theme=modern] .hpx{width:26px;height:26px;margin:-4px -6px -4px 0;border-radius:8px;background:none;color:var(--mut);box-shadow:none}
+:root[data-theme=modern] .hpx::before{width:14px;height:14px;-webkit-mask-image:var(--m-x);mask-image:var(--m-x);transform:none}
+@media(hover:hover){:root[data-theme=modern] .hpx:hover{background:var(--s2);color:var(--fg)}}
+:root[data-theme=modern] .hpb{font:400 13px/1.55 var(--sans);color:var(--fg)}
+:root[data-theme=modern] .hpb li::marker{color:var(--mut);font-weight:500}
+:root[data-theme=modern] .hpb code{padding:1px 5px;border-radius:5px;background:var(--s2);font:400 12px/1.45 var(--mono)}
+:root[data-theme=modern] .hpb .hbad{border-radius:9px;background:color-mix(in srgb,var(--err) 7%,var(--card));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--err) 20%,transparent)}
+:root[data-theme=modern] .hcmd{gap:8px}
+:root[data-theme=modern] .hcmd code{padding:7px 9px;border-radius:8px;background:var(--field);box-shadow:inset 0 0 0 1px var(--bd)}
+:root[data-theme=modern] .hcp{padding:6px 11px;border-radius:8px;background:var(--acc);color:var(--onacc);font:500 12.5px/1.2 var(--sans);box-shadow:none}
+:root[data-theme=modern] .hbm{gap:7px;padding:7px 11px;border-radius:9px;background:var(--s2);color:var(--fg);font:500 13px/1.3 var(--sans);box-shadow:inset 0 0 0 1px var(--bd)}
+:root[data-theme=modern] .hbm::before{width:15px;height:15px}
+:root[data-theme=modern] .hbm.nope::after{border-radius:8px;background:var(--fg);color:var(--bg);font:400 12px/1.4 var(--sans)}
+:root[data-theme=modern] dialog.hlp .abody{padding-top:14px}
+:root[data-theme=modern] #c-forget,:root[data-theme=modern] .wfoot #c-reset{color:var(--mut)}
+@media(hover:hover){:root[data-theme=modern] #c-forget:hover,:root[data-theme=modern] .wfoot #c-reset:hover{color:var(--err)}}
+:root[data-theme=modern] #mh[data-s=err]{color:var(--fg)}
 /* ползунок громкости */
 :root[data-theme=modern] .f input[type=range]{height:26px;padding:0;background:none;box-shadow:none}
 :root[data-theme=modern] .f input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:var(--s3)}

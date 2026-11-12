@@ -125,8 +125,9 @@ async function api(p, o = {}) {
 }
 const post = (p, json = {}) => api(p, { method: 'POST', json });
 
-/* «Токен в один клик»: chat.qwen.ai вернул нас сюда с токеном после # — забираем его из адреса сразу (в историю браузера он не попадёт) */
-const qwHash = (() => { const m = /[#&]qwen-token=([^&]+)/.exec(location.hash); if (!m) return ''; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} try { return decodeURIComponent(m[1]); } catch (e) { return ''; } })();
+/* «Войти через Google»: chat.qwen.ai или chat.deepseek.com вернул нас сюда с токеном после # — забираем его из адреса сразу (в историю браузера он не попадёт) */
+const hashToken = k => { const m = new RegExp('[#&]' + k + '-token=([^&]+)').exec(location.hash); if (!m) return ''; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} try { return decodeURIComponent(m[1]); } catch (e) { return ''; } };
+const qwHash = hashToken('qwen'), dsHash = hashToken('deepseek');
 let me = null, es = null, running = false, view = null, busyElse = null, srvSet = null, bubble = null, hideT = 0, connected = false, replaying = false, olderNow = false;
 /* событие журнала → компьютер в шапке (при перерисовке истории — только в его журнал, без реакций; старую историю «Показать раньше» не трогаем) */
 const room = (k, e) => { if (olderNow) return; try { window.personalComputerRoom && personalComputerRoom[k](e, replaying); } catch (x) { console.error(x); } };
@@ -489,11 +490,12 @@ async function started() {
   initPane();
   updBoot(true);
   if (qwHash) qwCatch(qwHash);
+  if (dsHash) dsCatch(dsHash);
 }
 /* токен пришёл из chat.qwen.ai: подтверждение (ссылку с чужим токеном мог подсунуть кто угодно), сохранение, модель из списка */
 async function qwCatch(t) {
   if (!/^eyJ[\w-]+\.[\w-]+\.[\w-]*$/.test(t) && !/token=/.test(t)) return;
-  if (!await ask('Qwen', 'Пришёл токен с chat.qwen.ai. Подключить этот аккаунт Qwen к Personal Computer? Подтверждай, только если сам только что нажал «Токен в один клик».', null, 'Подключить')) return;
+  if (!await ask('Qwen', 'Пришёл токен с chat.qwen.ai. Подключить этот аккаунт Qwen к Personal Computer? Подтверждай, только если сам только что нажал «Войти через Google».', null, 'Подключить')) return;
   try {
     const QB = 'https://chat.qwen.ai', was = isQw(srvSet && srvSet.base) ? srvSet.model : (provSaved[QB] && provSaved[QB].model) || '';
     const r = await post('api/models', { base: QB, key: t });
@@ -501,6 +503,17 @@ async function qwCatch(t) {
     bt('ok', 'set', srvSet.model);
     window.__keepForm = false; openSet('ai');
   } catch (e) { add('e', esc('Токен Qwen не подключился: ' + e.message)); }
+}
+/* то же для DeepSeek: токен с chat.deepseek.com (из localStorage.userToken) — подтверждение и сохранение; модель у сайта одна */
+async function dsCatch(t) {
+  if (!/^[\w.+\/=:-]{16,4096}$/.test(t)) return;
+  if (!await ask('DeepSeek', 'Пришёл токен с chat.deepseek.com. Подключить этот аккаунт DeepSeek к Personal Computer? Подтверждай, только если сам только что нажал «Войти через Google».', null, 'Подключить')) return;
+  try {
+    const DB = 'https://chat.deepseek.com', r = await post('api/models', { base: DB, key: t });
+    srvSet = await api('api/settings', { method: 'PUT', json: { base: DB, key: t, model: r.models[0] } }); mirror(); save();
+    bt('ok', 'set', srvSet.model);
+    window.__keepForm = false; openSet('ai');
+  } catch (e) { add('e', esc('Токен DeepSeek не подключился: ' + e.message)); }
 }
 function mirror() {
   if (!srvSet) return;
@@ -520,8 +533,8 @@ window.srvSubmit = async () => {
   if (fs.length) {
     upBusy = true; $('#send').disabled = true;
     try {
-      /* Qwen картинок не видит — файлы только на сервер, без копии для модели */
-      if (!srvSet || (srvSet.vis !== false && !isQw(srvSet.base))) parts = (await Promise.all(fs.map(toPart))).filter(Boolean);
+      /* Qwen и DeepSeek получают файлы сами (сервер загружает их на сайт) — без копии для модели */
+      if (!srvSet || (srvSet.vis !== false && !isQw(srvSet.base) && !isDs(srvSet.base))) parts = (await Promise.all(fs.map(toPart))).filter(Boolean);
       for (const [k, f] of fs.entries()) {
         setSt('загружаю файлы ' + (k + 1) + '/' + fs.length + '…', 'on');
         files.push(await api('api/upload?name=' + encodeURIComponent(f.name), { method: 'POST', body: f, headers: { 'content-type': 'application/octet-stream' } }));
@@ -594,22 +607,35 @@ $('#c-save').onclick = async () => {
     const w = $('#msgs .empty'); if (w && !w.dataset.cleared) { w.remove(); welcomeS(); }
   } catch (e) { stab('ai'); const h = $('#mh'); h.textContent = 'Не сохранилось: ' + e.message; h.dataset.s = 'err'; }
 };
-/* Qwen: умеет ли выбранная модель размышлять — переключатель следует за моделью (must — без размышления не работает) */
+/* Qwen и DeepSeek: умеет ли выбранная модель размышлять — переключатель следует за моделью (must — без размышления не работает) */
 let qwInfo = {};
+window.qwInfoOf = () => qwInfo[mi().value.trim()] || null;
 function qwThink() {
-  const m = qwInfo[mi().value.trim()], c = $('#c-think'), s = c.closest('label').querySelector('small');
+  const m = qwInfoOf(), c = $('#c-think'), s = c.closest('label').querySelector('small');
   c.disabled = !!m && (m.must || !m.think);
   if (m && m.must) c.checked = true; else if (m && !m.think) c.checked = false;
-  s.textContent = m && m.must ? 'Эта модель всегда сначала думает — выключить нельзя' : m && !m.think ? 'Эта модель не умеет размышлять — отвечает сразу'
-    : 'Qwen сначала думает, потом отвечает: умнее, но медленнее. Поиск, код и картинки самого Qwen выключены — у Personal Computer свои инструменты';
+  s.textContent = m && m.must ? 'Эта модель всегда сначала думает' : m && !m.think ? 'Эта модель отвечает сразу, без размышлений' : THINK_SUB;
 }
 mi().addEventListener('input', qwThink); mi().addEventListener('change', qwThink);
 $('#ml').addEventListener('click', () => setTimeout(qwThink));
-/* вход в Qwen по email и паролю: сервер сам получает токен и обновляет его до истечения */
-function qwAcct(email) {
-  $('#c-qin').hidden = !!email; $('#c-qme').hidden = !email;
-  $('#c-qmet').textContent = email ? 'Вход выполнен: ' + email + '. Токен Qwen обновляется сам — вставлять его не нужно.' : '';
+
+/* ---------- карточка аккаунта Qwen / DeepSeek ----------
+   s: none — не подключён, wait — проверяю, ok — подключён, bad — не подошло. Вместо полотна текста —
+   статус одной строкой и короткая причина; полный текст ошибки — под «?» (waNote) */
+const short = t => { t = String(t || '').trim(); const m = /^(.{12,140}?[.!?])(\s|$)/.exec(t); return m ? m[1] : t.length > 140 ? t.slice(0, 139) + '…' : t; };
+function waState(st, o = {}) {
+  const wa = $('#wa'), w = webOf($('#c-base').value);
+  wa.dataset.s = st;
+  $('#wa-s').textContent = { none: 'Не подключён', wait: 'Проверяю…', ok: o.fresh ? 'Токен подходит' : 'Подключён', bad: 'Не подключён' }[st];
+  $('#wa-me').hidden = st !== 'ok';
+  $('#wa-who').textContent = o.who || ''; $('#wa-sub').textContent = o.sub || '';
+  const m = $('#wa-msg'); m.textContent = o.msg ? short(o.msg) : ''; m.hidden = !o.msg;
+  waNote = o.msg ? String(o.msg).trim() : '';
+  /* подключён — способы входа прячутся (их показывает «Другой аккаунт») */
+  if (st !== 'ok') wa.classList.remove('swap');
+  if (w && st !== 'wait') { const tk = $('#wa-tok'); if (o.fresh || (st === 'bad' && $('#c-key').value.trim())) tk.open = true; }
 }
+/* вход в Qwen по email и паролю: сервер сам получает токен и обновляет его до истечения */
 const qst = (t, s) => { const h = $('#c-qst'); h.textContent = t; if (s) h.dataset.s = s; else delete h.dataset.s; };
 $('#c-qlogin').onclick = async () => {
   const email = $('#c-qmail').value.trim(), password = $('#c-qpass').value;
@@ -617,39 +643,47 @@ $('#c-qlogin').onclick = async () => {
   const b = $('#c-qlogin'); b.disabled = true; qst('Вхожу в Qwen…', 'wait');
   try {
     await post('api/qwen/login', { email, password });
-    $('#c-qpass').value = ''; $('#c-key').value = '';
+    $('#c-qpass').value = ''; $('#c-key').value = ''; $('#wa-pw').open = false;
     srvSet = await api('api/settings'); provSaved = Object.fromEntries((srvSet.provs || []).map(p => [p.base, p])); provOpts();
     qst('', ''); keyHint(); loadModels();
-  } catch (e) { qst(e.message, 'err'); }
+  } catch (e) { qst(short(e.message), 'err'); }
   finally { b.disabled = false; }
 };
 $('#c-qpass').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('#c-qlogin').click(); } };
-$('#c-qout').onclick = async () => {
-  if (!await ask('Qwen', 'Выйти из Qwen? Email и хеш пароля сотрутся с сервера, токен перестанет обновляться сам.', null, 'Выйти')) return;
-  try { srvSet = await api('api/qwen/login', { method: 'DELETE' }); qwAcct(''); qst('', ''); } catch (e) { qst(e.message, 'err'); }
+$('#c-qmail').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('#c-qpass').focus(); } };
+/* «Отключить»: токен (и вход по паролю у Qwen) стираются с сервера сразу, без «Сохранить» */
+$('#wa-out').onclick = async () => {
+  const base = $('#c-base').value.trim().replace(/\/+$/, ''), w = webOf(base); if (!w) return;
+  const act = base === String(srvSet?.base || '').replace(/\/+$/, '');
+  if (!await ask(w.name, 'Отключить аккаунт ' + w.name + '? Токен' + (w.pw ? ', email и хеш пароля' : '') + ' сотрутся с сервера.' + (act ? ' Сейчас Personal Computer работает через него — без аккаунта модель отвечать не будет.' : ''), null, 'Отключить')) return;
+  try {
+    srvSet = await api('api/settings', { method: 'PUT', json: { forget: base } });
+    provSaved = Object.fromEntries((srvSet.provs || []).map(p => [p.base, p])); provOpts();
+    $('#c-key').value = ''; syncSet(); loadModels();
+  } catch (e) { waState('bad', { msg: 'Не получилось отключить: ' + e.message }); }
 };
 const qwDate = ms => ms - Date.now() < 864e5 ? new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : new Date(ms).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 loadModels = async function () {
   const base = $('#c-base').value.trim().replace(/\/+$/, ''), key = $('#c-key').value.trim(), h = $('#mh'), t = ++mt;
   if (!base) { h.textContent = ''; delete h.dataset.s; return; }
   h.textContent = 'Сервер проверяет связь с моделью…'; h.dataset.s = 'wait';
-  if (isQw(base)) {
-    qwInfo = {};
+  /* Qwen и DeepSeek: проверка аккаунта — в карточке; список моделей — у Qwen (у DeepSeek модель одна) */
+  if (webOf(base)) {
+    qwInfo = {}; waState('wait'); h.textContent = ''; delete h.dataset.s;
+    const w = webOf(base), typed = !!key;
     try {
       const r = await post('api/models', { base, key }); if (t !== mt) return;
-      mdl = r.models.slice(); qwInfo = Object.fromEntries((r.qwen || []).map(m => [m.id, m]));
+      mdl = r.models.slice(); qwInfo = Object.fromEntries((r.qwen || r.info || []).map(m => [m.id, m]));
       const left = r.exp ? r.exp - Date.now() : 0;
-      h.textContent = 'Связь с Qwen есть, моделей: ' + mdl.length + ' — нажми на поле, чтобы выбрать'
-        + (r.login || !r.exp ? '' : left < 0 ? '. Токен истёк — войди в Qwen выше или возьми новый' : '. Токен действует до ' + qwDate(r.exp) + (left < 36e5 ? ' — он короткий: войди по email и паролю, и он будет обновляться сам' : ''));
-      h.dataset.s = r.exp && left < 0 && !r.login ? 'err' : 'ok';
+      if (w.pw && r.exp && left < 0 && !r.login) waState('bad', { msg: 'Токен Qwen истёк. Войди по email и паролю или через Google — и он больше не будет истекать сам.' });
+      else waState('ok', { fresh: typed, who: r.login || 'Вход по токену',
+        sub: typed ? 'Нажми «Сохранить», чтобы подключить' : w.pw ? (r.login ? 'Токен обновляется сам' : r.exp ? 'Токен действует до ' + qwDate(r.exp) : '') : '' });
       const cur = mi().value.trim(); if (mdl.length && (!cur || !mdl.includes(cur))) mi().value = mdl[0];
-      provNew = false; qwThink(); qwAcct(r.login);
-      if (r.login) h.textContent += '. Вход: ' + r.login + ' — токен обновляется сам';
+      provNew = false; qwThink();
     } catch (e) {
       if (t !== mt) return; mdl = [];
-      qwAcct(srvSet && srvSet.qwEmail);
-      if (e.j && e.j.needKey && !(provSaved[base] && provSaved[base].hasKey)) { h.textContent = 'Вставь токен Qwen — после этого загружу список моделей'; delete h.dataset.s; return; }
-      h.textContent = e.message; h.dataset.s = 'err';
+      if (e.j && e.j.needKey && !(provSaved[base] && provSaved[base].hasKey)) { waState('none'); return; }
+      waState('bad', { msg: e.message });
     }
     return;
   }
