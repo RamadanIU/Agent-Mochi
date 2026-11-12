@@ -86,7 +86,7 @@ async function freshFE(signal) {
 }
 const tz = () => new Date().toString().replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, ' ').trim();
 function headers(token, chatId, accept = 'application/json') {
-  return { 'Content-Type': 'application/json', Accept: accept, Authorization: 'Bearer ' + token, Cookie: 'token=' + token,
+  return { 'Content-Type': 'application/json', Accept: accept, ...(token ? { Authorization: 'Bearer ' + token, Cookie: 'token=' + token } : {}),
     source: 'web', Version: FE, timezone: tz(), 'x-request-id': crypto.randomUUID(), 'x-accel-buffering': 'no',
     Origin: QWEN_BASE, Referer: QWEN_BASE + (chatId ? '/c/' + chatId : '/') };
 }
@@ -108,6 +108,40 @@ async function call(token, method, p, body, signal, chatId) {
   }
 }
 const netErr = e => qErr('Не достучался до chat.qwen.ai (' + (e.cause?.code || e.message) + '). ' + (e.proxy ? 'Проверь прокси: настройки → Сервер → «Прокси» → «Проверить».' : 'Проверь интернет на сервере или включи прокси в настройках → Сервер.'), { net: true, proxy: !!e.proxy });
+
+/* ---------- вход и продление токена ----------
+   Токен сайта живёт недолго (бывает — 15 минут). Обновляем его сами, до истечения:
+   1) пока токен жив — спрашиваем сессию (/api/v1/auths/): если сайт выдал токен новее, берём его;
+   2) есть email и пароль — входим заново (/api/v1/auths/signin, как сайт: пароль уходит хешем SHA-256).
+   Сам пароль нигде не хранится — только этот хеш (ph), и только на сервере. */
+export const hashPass = p => crypto.createHash('sha256').update(String(p), 'utf8').digest('hex');
+export const tokenLeft = t => { const e = tokenInfo(t).exp; return e ? e * 1000 - Date.now() : Infinity; };
+const BADPASS = 'Qwen не пустил: неверный email или пароль. Если входишь на chat.qwen.ai через Google или GitHub, пароля у аккаунта нет — используй «Токен в один клик».';
+export async function signin(email, ph, signal) {
+  email = String(email || '').trim();
+  if (!email || !ph) throw qErr('Нужны email и пароль от chat.qwen.ai', { status: 400 });
+  let d;
+  try { d = await call('', 'POST', '/api/v1/auths/signin', { email, password: ph }, signal || AbortSignal.timeout(20000)); }
+  catch (e) { if (e.status === 401 || /password|credential|incorrect|密码/i.test(e.message)) throw qErr(BADPASS, { status: 401, badPass: true }); throw e; }
+  const token = parseToken(d?.token || d?.access_token || '');
+  if (!token) throw qErr('chat.qwen.ai не выдал токен при входе', { status: 502, detail: JSON.stringify(d || {}).slice(0, 200) });
+  return token;
+}
+/* новый токен или null (обновить нечем) */
+export async function renew({ token, email, ph }, signal) {
+  token = parseToken(token);
+  let err = null;
+  if (token && tokenLeft(token) > 20000) {
+    try {
+      const d = await call(token, 'GET', '/api/v1/auths/', null, signal || AbortSignal.timeout(15000));
+      const t = parseToken(d?.token || d?.access_token || '');
+      if (t && t !== token && tokenLeft(t) > tokenLeft(token)) return t;
+    } catch (e) { err = e; }
+  }
+  if (email && ph) return signin(email, ph, signal);
+  if (err && (err.waf || err.net)) throw err;
+  return null;
+}
 
 /* ---------- модели ----------
    Только те, что умеют обычный чат (t2t). think — умеет размышлять, must — без размышления не работает

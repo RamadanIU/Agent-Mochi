@@ -15,6 +15,10 @@ const QWEN = 'https://chat.qwen.ai';
 let m, srv;
 const Q = { chats: new Map(), calls: [], news: [], dels: [], script: null, sts: [], oss: new Map(), parsed: [], polls: 0 };
 const SECRET = 'oss-secret';
+/* выданные токены (вход, продление); истёкшие и отозванные — 401 */
+Q.valid = new Set([TOKEN, TOKEN2]); Q.signins = 0; Q.renews = 0; Q.renewable = false;
+const PASS = 'мой-пароль', PH = crypto.createHash('sha256').update(PASS).digest('hex');
+const issue = (id, sec) => { const t = jwt({ id, exp: Math.floor(Date.now() / 1000) + sec, n: Math.random() }); Q.valid.add(t); return t; };
 before(async () => {
   srv = http.createServer(async (req, res) => {
     const raw = []; for await (const c of req) raw.push(c);
@@ -30,7 +34,16 @@ before(async () => {
       Q.oss.set(key, { type: h['content-type'], data: Buffer.from(b, 'latin1') });
       res.writeHead(200); return res.end();
     }
-    if (![TOKEN, TOKEN2].map(t => 'Bearer ' + t).includes(auth)) return send(401, { success: false, data: { code: 'Unauthorized', details: 'token expired' } });
+    if (u.pathname === '/api/v1/auths/signin') {
+      Q.signins++;
+      const q = JSON.parse(b);
+      if (q.email !== 'me@qwen.test' || q.password !== PH) return send(400, { success: false, data: { code: 'Bad_Request', details: 'incorrect email or password' } });
+      return send(200, { id: 'acc-1', email: q.email, token: issue('acc-1', 900), token_type: 'Bearer' });
+    }
+    const bearer = auth.replace(/^Bearer /, '');
+    if (!Q.valid.has(bearer) || tokenInfo(bearer).exp * 1000 < Date.now()) return send(401, { success: false, data: { code: 'Unauthorized', details: 'token expired' } });
+    if (u.pathname === '/api/v1/auths/') { Q.renews++; return send(200, { id: tokenInfo(bearer).id, token: Q.renewable ? issue(tokenInfo(bearer).id, 900) : bearer }); }
+    if (false) return send(401, { success: false, data: { code: 'Unauthorized', details: 'token expired' } });
     if (u.pathname === '/api/models') return send(200, { data: [
       { id: 'qwen3-max', name: 'Qwen3-Max', info: { meta: { abilities: { thinking: true }, chat_type: ['t2t', 'search'] } } },
       { id: 'qwen-image', name: 'Qwen Image', info: { meta: { chat_type: ['t2i'] } } },
@@ -78,7 +91,7 @@ before(async () => {
   });
   await new Promise(ok => srv.listen(0, '127.0.0.1', ok));
   const qurl = 'http://127.0.0.1:' + srv.address().port;
-  m = await startPersonalComputer({ PERSONALCOMPUTER_QWEN_URL: qurl, PERSONALCOMPUTER_QWEN_OSS: qurl + '/oss' });
+  m = await startPersonalComputer({ PERSONALCOMPUTER_QWEN_URL: qurl, PERSONALCOMPUTER_QWEN_OSS: qurl + '/oss', PERSONALCOMPUTER_QWEN_KEEPALIVE_MS: '200' });
 });
 after(async () => { await m?.stop(); srv?.close(); });
 
@@ -279,4 +292,67 @@ test('view_image: агент смотрит картинку с сервера �
   const last = Q.calls.at(-1);
   assert.match(last.content, /\[TOOL RESULT: view_image\]/);
   assert.match(last.files[0].url, /screen\.png$/);
+});
+
+test('вход по email и паролю: токен получает сервер, наружу — только email', async () => {
+  const c = await registered(m, 'qlogin');
+  await c.json('/api/settings', { base: QWEN }, 'PUT');
+  const bad = await c.json('/api/qwen/login', { email: 'me@qwen.test', password: 'не тот' });
+  assert.equal(bad.status, 401); assert.match(bad.j.error, /неверный email или пароль/);
+  const ok = await c.json('/api/qwen/login', { email: 'me@qwen.test', password: PASS });
+  assert.equal(ok.status, 200, JSON.stringify(ok.j)); assert.equal(ok.j.email, 'me@qwen.test');
+  const s = (await c.json('/api/settings', undefined, 'GET')).j;
+  assert.equal(s.qwEmail, 'me@qwen.test'); assert.equal(s.hasKey, true);
+  assert.doesNotMatch(JSON.stringify(s), new RegExp(PH + '|' + PASS + '|eyJ'));
+  const r = await c.json('/api/models', { base: QWEN });
+  assert.equal(r.status, 200); assert.equal(r.j.login, 'me@qwen.test');
+  /* выйти — email и хеш стираются */
+  assert.equal((await c.json('/api/qwen/login', undefined, 'DELETE')).j.qwEmail, '');
+});
+
+test('токен истёк — сервер сам входит заново по сохранённому паролю, чат не замечает', async () => {
+  const c = await registered(m, 'qrelog');
+  await c.json('/api/settings', { base: QWEN, model: 'qwen3-max' }, 'PUT');
+  await c.json('/api/qwen/login', { email: 'me@qwen.test', password: PASS });
+  await c.json('/api/settings', { key: jwt({ id: 'acc-1', exp: 10 }) }, 'PUT');
+  Q.script = () => ({ text: 'живой' });
+  const n = Q.signins;
+  const L = logs(await say(c, 'привет'));
+  assert.equal(L.filter(e => e.kind === 'assistant').at(-1)?.text, 'живой', JSON.stringify(L.filter(e => e.kind === 'error')));
+  assert.equal(Q.signins, n + 1);
+  const used = Q.calls.at(-1).headers.authorization.slice(7);
+  assert.ok(tokenInfo(used).exp * 1000 > Date.now() + 600e3, 'запрос ушёл со свежим токеном');
+  /* следующий раз — с ним же, без нового входа */
+  await say(c, 'ещё');
+  assert.equal(Q.signins, n + 1);
+});
+
+test('токен отозвали раньше срока (401) — новый вход и повтор запроса', async () => {
+  const c = await registered(m, 'qrevoke');
+  await c.json('/api/settings', { base: QWEN, model: 'qwen3-max' }, 'PUT');
+  await c.json('/api/qwen/login', { email: 'me@qwen.test', password: PASS });
+  Q.valid.clear(); Q.valid.add(TOKEN); Q.valid.add(TOKEN2);
+  Q.script = () => ({ text: 'после повтора' });
+  const n = Q.signins;
+  const L = logs(await say(c, 'привет'));
+  assert.equal(L.filter(e => e.kind === 'assistant').at(-1)?.text, 'после повтора');
+  assert.equal(Q.signins, n + 1);
+  assert.ok(!L.some(e => e.kind === 'error'));
+});
+
+test('без пароля: живой токен продлевается до истечения — перед запросом и фоном', async () => {
+  const c = await registered(m, 'qrenew');
+  Q.renewable = true;
+  try {
+    await c.json('/api/settings', { base: QWEN, key: issue('acc-9', 60), model: 'qwen3-max' }, 'PUT');
+    Q.script = () => ({ text: 'продлён' });
+    const L = logs(await say(c, 'привет'));
+    assert.equal(L.filter(e => e.kind === 'assistant').at(-1)?.text, 'продлён');
+    assert.ok(tokenInfo(Q.calls.at(-1).headers.authorization.slice(7)).exp * 1000 > Date.now() + 600e3);
+    /* фоном: токен подходит к концу, а сообщений нет — сервер продлевает сам */
+    await c.json('/api/settings', { key: issue('acc-9', 120) }, 'PUT');
+    const r0 = Q.renews;
+    for (let i = 0; i < 60 && Q.renews === r0; i++) await sleep(50);
+    assert.ok(Q.renews > r0, 'фоновое продление не случилось');
+  } finally { Q.renewable = false; }
 });

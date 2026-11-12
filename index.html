@@ -312,6 +312,7 @@ background:var(--card) repeating-linear-gradient(var(--ink) 0 2px,transparent 2p
 #mh::before,#sh::before{content:"";flex:none;width:8px;height:8px;background:var(--mut)}
 #mh[data-s=ok]::before{background:var(--ok)}#mh[data-s=err]::before,#sh[data-s=err]::before{background:var(--err)}#mh[data-s=wait]::before{background:var(--acc);animation:blk .5s steps(1) infinite}
 #mh[data-s=err],#sh[data-s=err]{color:var(--err)}
+#c-qst{display:block;margin-top:6px;color:var(--mut)}#c-qst:empty{display:none}#c-qst[data-s=err]{color:var(--err)}#f-qwen .brow{margin:4px 0 10px}#c-qme .lnk{margin-bottom:8px}
 .note{display:block;margin-top:22px;padding:10px 12px;background:var(--bg);color:var(--mut);font-size:8px;line-height:1.8;box-shadow:var(--sh2)}
 .wfoot{flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px calc(14px + env(safe-area-inset-bottom,0px));background:var(--card);border-top:4px solid var(--ink)}
 .wfoot .lnk{margin:0;padding:8px 2px}
@@ -1661,10 +1662,21 @@ const tick=setInterval(paint,100);paint();
   <section class="spane" id="p-ai" role="tabpanel" aria-labelledby="t-ai" hidden>
     <div class="grp" data-i="conn"><h3 class="gh">Подключение</h3>
     <label class="f">Провайдер<select id="c-prov"></select></label>
+    <div id="f-qwen" hidden>
+      <div id="c-qin">
+        <small class="hint">Войди в свой аккаунт chat.qwen.ai — Personal Computer сам получит токен и будет обновлять его до истечения. Пароль не хранится, только его хеш на твоём сервере.</small>
+        <label class="f">Email от chat.qwen.ai<input id="c-qmail" type="email" autocomplete="username" autocapitalize="off" spellcheck="false"></label>
+        <label class="f">Пароль<input id="c-qpass" type="password" autocomplete="current-password"></label>
+        <div class="brow"><button class="pbtn" id="c-qlogin" type="button"><i class="pi"></i><span>Войти в Qwen</span></button></div>
+      </div>
+      <div id="c-qme" hidden><small class="hint" id="c-qmet"></small><button class="lnk" id="c-qout" type="button">Выйти из Qwen</button></div>
+      <small class="hint">Входишь через Google или GitHub? «Токен в один клик»: откроется chat.qwen.ai, а команда уже скопирована — вставь её в консоль (F12, вкладка «Console») и нажми Enter. Вкладка сама вернётся сюда с токеном.</small>
+      <button class="lnk" id="c-qcopy" type="button">Токен в один клик</button>
+      <small id="c-qst"></small>
+    </div>
     <label class="f" id="f-base" hidden>Адрес API<input id="c-base" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="https://…/v1"></label>
     <label class="f" id="f-key">API ключ<span class="fx"><input id="c-key" type="password" autocomplete="off" spellcheck="false"><button type="button" class="eye" id="c-eye" aria-label="Показать ключ" aria-pressed="false"><i class="pi"></i></button></span></label>
-    <small class="hint" id="c-qh" hidden>Где взять токен: открой <b>chat.qwen.ai</b> и войди, нажми F12, вкладка «Console», вставь <code>copy(localStorage.token)</code> и нажми Enter — токен скопирован. Вставь его сюда.</small>
-    <button class="lnk" id="c-qcopy" type="button" hidden>Скопировать команду и открыть chat.qwen.ai</button>
+    <small class="hint" id="c-qh" hidden>Или вставь токен вручную: на chat.qwen.ai нажми F12, вкладка «Console», команда <code>copy(localStorage.token)</code> — токен в буфере обмена.</small>
     <button class="lnk" id="c-forget" type="button" hidden>Забыть этого провайдера</button>
     <label class="f">Модель<input id="c-model" autocapitalize="off" autocomplete="off" spellcheck="false"></label><div id="ml" hidden></div><small id="mh"></small>
     </div>
@@ -4243,7 +4255,7 @@ const F={base:'#c-base',key:'#c-key',model:'#c-model',sys:'#c-sys'};
 const isQw=b=>{try{return new URL(nb(b)).hostname==='chat.qwen.ai'}catch(e){return false}};
 function keyHint(){const b=nb($('#c-base').value),sv=provSaved[b],q=isQw(b);
   $('#c-key').placeholder=sv&&sv.hasKey?'сохранён на сервере · пусто = не менять':q?'eyJhbGciOi… (токен с chat.qwen.ai)':'sk-…';$('#c-forget').hidden=!sv;
-  $('#f-key').firstChild.nodeValue=q?'Токен Qwen':'API ключ';$('#c-qh').hidden=$('#c-qcopy').hidden=!q;
+  $('#f-key').firstChild.nodeValue=q?'Токен Qwen':'API ключ';$('#c-qh').hidden=$('#f-qwen').hidden=!q;
   $('#f-think').hidden=!q;$('#f-vis').hidden=q}
 function syncSet(){const p=prov.value;$('#f-steps').hidden=!$('#c-lim').checked;$('#sh').hidden=true;$('#f-base').hidden=!!PRESETS[p];$('#f-key').hidden=LOCAL.includes(p);keyHint()}
 function fill(s){
@@ -4258,8 +4270,10 @@ prov.onchange=()=>{const b=provBase(prov.value),sv=provSaved[b];$('#c-base').val
   if(sv&&sv.model){mi().value=sv.model;provNew=false}else provNew=true;
   syncSet();if(b)loadModels();else{$('#mh').textContent='';$('#c-base').focus()}};
 $('#c-lim').onchange=syncSet;
-$('#c-qcopy').onclick=async()=>{const c='copy(localStorage.token)',b=$('#c-qcopy');
-  try{await navigator.clipboard.writeText(c);b.textContent='Команда скопирована — вставь её в консоль на chat.qwen.ai'}catch(e){await ask('Токен Qwen','Скопируй команду и вставь её в консоль (F12 → Console) на chat.qwen.ai:',c,'Готово')}
+/* «Токен в один клик»: команда в консоли chat.qwen.ai открывает это приложение с токеном в адресе (#qwen-token=…, после # — на сервер не уходит),
+   а client.js его подхватывает и сохраняет (с подтверждением) */
+$('#c-qcopy').onclick=async()=>{const c="location.href='"+location.origin+location.pathname+"#qwen-token='+encodeURIComponent(localStorage.token)",b=$('#c-qcopy');
+  try{await navigator.clipboard.writeText(c);b.textContent='Команда скопирована — вставь её в консоль на chat.qwen.ai и нажми Enter'}catch(e){await ask('Токен Qwen','Скопируй команду и вставь её в консоль (F12 → Console) на chat.qwen.ai:',c,'Готово')}
   window.open('https://chat.qwen.ai','_blank','noopener')};
 /* лимит шагов: пустое или вне 1…10000 не сохраняем, а показываем ошибку у поля */
 function readSteps(){const n=stepsOk($('#c-steps').value),h=$('#sh');
