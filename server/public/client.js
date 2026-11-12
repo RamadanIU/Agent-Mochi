@@ -152,7 +152,10 @@ dialog.dsw{width:min(1000px,calc(100% - 24px));max-width:none;height:min(900px,c
 #dsw-re{color:var(--mut)}@media(hover:hover){#dsw-re:hover{color:var(--acc)}}
 /* браузера нет — окно по содержимому, без пустого экрана */
 dialog.dsw.nob{width:min(640px,calc(100% - 24px));height:fit-content}.dsw.nob .dsw-st{display:none}.dsw.nob .dsw-no{flex:none}
-@media(max-width:559px){dialog.dsw{width:100%;height:100dvh;margin:0;border-width:0}.dsw-b{padding:10px 10px 12px}}
+/* телефон: окно с экраном сайта — во весь экран; окно-подсказка (нет браузера) — карточкой по центру, длинное прокручивается */
+@media(max-width:559px){dialog.dsw:not(.nob){width:100%;height:100dvh;margin:0;border-width:0}.dsw-b{padding:10px 10px 12px}
+  dialog.dsw.nob{width:calc(100% - 20px);max-height:calc(100dvh - 20px);margin:auto}.dsw.nob .dsw-b{min-height:0}.dsw.nob .dsw-no{flex:0 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
+  .dsw-no .hcmd{flex-wrap:wrap}.dsw-no .hcmd code{min-width:0;overflow-wrap:anywhere}}
 /* действие в карточке аккаунта и под входом: «Пройти проверку», «Войти в окне DeepSeek» */
 .wa-do{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 0}.wa-do[hidden]{display:none}
 .wa-do .pbtn{width:auto;margin:2px}.wa-do .pbtn .pi{--ico:var(--j-shield)}

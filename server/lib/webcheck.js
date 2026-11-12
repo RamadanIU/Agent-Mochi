@@ -85,7 +85,7 @@ class Sess extends EventEmitter {
     super();
     this.setMaxListeners(20);
     this.chat = chat; this.prov = prov; this.P = PROV[prov]; this.why = why; this.o = o;
-    this.state = 'open'; this.msg = ''; this.frame = null; this.t = Date.now(); this.sawWaf = false; this.good = 0; this.tries = 0;
+    this.state = 'open'; this.msg = ''; this.frame = null; this.t = Date.now(); this.sawWaf = false; this.good = 0; this.tries = 0; this.errs = 0;
   }
   get doc() { return this.P.state(this.chat); }
   pub() { return { state: this.state, prov: this.prov, why: this.why, msg: this.msg, url: this.page?.url || '', t: this.t, login: this.login || '' }; }
@@ -134,13 +134,18 @@ class Sess extends EventEmitter {
       if (s.sdk && !has && this.good < 8) return;
       if (Date.now() < (this.probeAt || 0)) return;
       await this.takeCookies();
-      const ok = await P.probe(P.token(this.chat), this.doc.v, () => this.doc.save());
-      if (ok !== false) return this.finishCheck();
+      /* «пройдено» — только когда сам сервер убедился, что сайт пускает его запросы. Страница в браузере открылась —
+         ещё не значит, что пустят запросы сервера: раньше здесь хватало «не знаю», и окно закрывалось с галочкой зря */
+      const r = await P.probe(P.token(this.chat), this.doc.v, () => this.doc.save());
+      if (r?.s === 'ok') return this.finishCheck();
+      /* спрашиваем не чаще раза в 6 с, а потом в 15 с: лишние запросы защиту только настораживают */
+      this.probeAt = Date.now() + (this.tries + this.errs < 3 ? 6000 : 15000);
+      if (r?.s === 'auth') { this.set('live', 'Токен ' + P.name + ' не подошёл — сайт пускает, но не тебя. Закрой окно и подключи аккаунт заново: настройки → Модель.'); return; }
+      if (r?.s !== 'captcha') { if (++this.errs === 2 || this.errs % 10 === 0) this.set('live', 'Не получается спросить ' + P.name + ', пускает ли он сервер' + (r?.msg ? ': ' + r.msg : '') + '. Пробую ещё…'); return; }
       /* браузер сайт пустил, а запросы сервера — ещё нет: проверку на сайте показывают, когда отправляешь сообщение */
-      this.probeAt = Date.now() + 6000;
       if (++this.tries === 1 || this.tries % 10 === 0) this.set('live', this.sawWaf
         ? 'Проверка пройдена, но сайт пока не пускает запросы сервера. Отправь здесь любое сообщение — если сайт покажет проверку, пройди её.'
-        : 'Сайт открылся. Отправь здесь любое сообщение — если сайт покажет проверку, пройди её.');
+        : 'Сайт в браузере открылся, но запросы сервера он пока не пускает. Отправь здесь любое сообщение — если сайт покажет проверку, пройди её.');
     } finally { this.busy = false; }
   }
   async takeCookies() {
@@ -199,7 +204,8 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, Math.round(+v || a)));
 export async function open(chat, prov, why, o = {}) {
   prov = provOf(prov);
   let s = sessions.get(chat.u.id);
-  if (s && !s.ended && s.why === why && s.prov === prov) return s;
+  /* уже готовое (галочка) не отдаём: новое нажатие — новая проверка */
+  if (s && !s.ended && s.state !== 'done' && s.why === why && s.prov === prov) return s;
   s?.end('closed');
   if (!available()) throw Object.assign(new Error('На сервере нет браузера'), { nobrowser: true });
   s = new Sess(chat, prov, why, { had: why === 'login' ? '' : undefined, ...o });

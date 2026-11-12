@@ -58,7 +58,10 @@ before(async () => {
     if (req.method === 'DELETE') return send({ success: true });
     if (u.pathname === '/api/v2/chat/completions') {
       if (gate('api/v2/chat/completions')) return;
-      const b = JSON.parse(buf.toString()), content = b.messages[0].content;
+      const b = JSON.parse(buf.toString());
+      /* проверка сервера из окна: чата нет — «не найден» (как у сайта) */
+      if (!b.messages?.length) return send({ success: false, data: { code: 'Not_Found', details: 'chat not found' } });
+      const content = b.messages[0].content;
       F.calls.push({ content, bytes: buf.length, headers: req.headers });
       res.writeHead(200, { 'content-type': 'text/event-stream' });
       const w = j => res.write('data: ' + JSON.stringify(j) + '\n\n');
@@ -240,4 +243,22 @@ test('вход в окне Qwen: вход через Google в окне не о�
     const st = (await c.json('/api/settings', undefined, 'GET')).j;
     assert.equal(st.hasKey, true); assert.ok(st.provs.find(p => p.base === QWEN)?.hasKey);
   } finally { await c.json('/api/check', { act: 'close' }); }
+});
+
+test('окно проверки не ставит галочку зря: сайт в браузере открылся, а запросы сервера всё ещё на слайдере — так и говорим', { skip: !BROWSER && 'нет Chromium/Chrome' }, async () => {
+  const c = await registered(m, 'qwnofalse');
+  await c.json('/api/settings', { base: QWEN, key: TOKEN, model: 'qwen3-max' }, 'PUT');
+  F.waf = true;
+  try {
+    const o = await c.json('/api/check', { act: 'open', prov: 'qwen', w: 800, h: 600 });
+    assert.equal(o.status, 200, JSON.stringify(o.j));
+    const evs = await checkEvents(c, e => e.some(x => x.ev === 'state' && (/запросы сервера .*не пускает|не пускает запросы сервера/.test(x.d.msg) || x.d.state === 'done')), 40000);
+    const last = evs.filter(e => e.ev === 'state').at(-1).d;
+    assert.equal(last.state, 'live', 'не «пройдено»: ' + JSON.stringify(last));
+    assert.match(last.msg, /запросы сервера .*не пускает|не пускает запросы сервера/);
+    /* защита отпустила (как будто проверку прошли) — вот теперь галочка */
+    F.waf = false;
+    const fin = await checkEvents(c, done, 40000);
+    assert.equal(fin.filter(e => e.ev === 'state').at(-1).d.state, 'done');
+  } finally { F.waf = false; await c.json('/api/check', { act: 'close' }); }
 });
