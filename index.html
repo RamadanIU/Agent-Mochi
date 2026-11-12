@@ -1679,6 +1679,7 @@ const tick=setInterval(paint,100);paint();
     <label class="f" id="f-base" hidden>Адрес API<input id="c-base" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="https://…/v1"></label>
     <label class="f" id="f-key">API ключ<span class="fx"><input id="c-key" type="password" autocomplete="off" spellcheck="false"><button type="button" class="eye" id="c-eye" aria-label="Показать ключ" aria-pressed="false"><i class="pi"></i></button></span></label>
     <small class="hint" id="c-qh" hidden>Или вставь токен вручную: на chat.qwen.ai нажми F12, вкладка «Console», команда <code>copy(localStorage.token)</code> — токен в буфере обмена.</small>
+    <small class="hint" id="c-dsh" hidden>Официальный API моделей Qwen — без антибот-проверок chat.qwen.ai, с инструментами и картинками. Ключ: зарегистрируйся на <b>modelstudio.console.alibabacloud.com</b> → «API Key» → «Create API Key» (у новых аккаунтов есть бесплатная квота). Адрес — для аккаунта в Сингапуре; аккаунт в Китае — «Другой» и <code>https://dashscope.aliyuncs.com/compatible-mode/v1</code>.</small>
     <button class="lnk" id="c-forget" type="button" hidden>Забыть этого провайдера</button>
     <label class="f">Модель<input id="c-model" autocapitalize="off" autocomplete="off" spellcheck="false"></label><div id="ml" hidden></div><small id="mh"></small>
     </div>
@@ -4236,7 +4237,7 @@ $('#ask-ok').onclick=()=>$('#ask').close('ok');$('#ask-no').onclick=()=>$('#ask'
 $('#ask-i').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#ask').close('ok')}};
 $('#ask').addEventListener('click',e=>{if(e.target===$('#ask'))$('#ask').close('')});
 /* свой Ollama и другие OpenAI-совместимые серверы — через «Другой» */
-const PRESETS={OpenAI:'https://api.openai.com/v1','Qwen (chat.qwen.ai)':'https://chat.qwen.ai',OpenRouter:'https://openrouter.ai/api/v1','Ollama Cloud':'https://ollama.com/v1',JustWoker:'https://api.justwoker.icu/v1','LM Studio':'http://localhost:1234/v1'};
+const PRESETS={OpenAI:'https://api.openai.com/v1','Qwen (chat.qwen.ai)':'https://chat.qwen.ai','Qwen API (Alibaba Cloud)':'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',OpenRouter:'https://openrouter.ai/api/v1','Ollama Cloud':'https://ollama.com/v1',JustWoker:'https://api.justwoker.icu/v1','LM Studio':'http://localhost:1234/v1'};
 const LOCAL=['LM Studio'],CUSTOM='Другой';
 const prov=$('#c-prov');
 /* сохранённые на сервере провайдеры: адрес API → {model, hasKey} (заполняет client.js; сами ключи в браузер не приходят).
@@ -4255,10 +4256,11 @@ const F={base:'#c-base',key:'#c-key',model:'#c-model',sys:'#c-sys'};
 /* ключ этого провайдера уже на сервере — поле можно оставить пустым */
 /* Qwen (chat.qwen.ai): вместо ключа — токен аккаунта, из настроек — только модель и размышление */
 const isQw=b=>{try{return new URL(nb(b)).hostname==='chat.qwen.ai'}catch(e){return false}};
-function keyHint(){const b=nb($('#c-base').value),sv=provSaved[b],q=isQw(b);
-  $('#c-key').placeholder=sv&&sv.hasKey?'сохранён на сервере · пусто = не менять':q?'eyJhbGciOi… (токен с chat.qwen.ai)':'sk-…';$('#c-forget').hidden=!sv;
+const isDs=b=>{try{return /(^|\.)dashscope[\w-]*\.aliyuncs\.com$/i.test(new URL(nb(b)).hostname)}catch(e){return false}};
+function keyHint(){const b=nb($('#c-base').value),sv=provSaved[b],q=isQw(b),ds=isDs(b);
+  $('#c-key').placeholder=sv&&sv.hasKey?'сохранён на сервере · пусто = не менять':q?'eyJhbGciOi… (токен с chat.qwen.ai)':ds?'sk-… (ключ Model Studio)':'sk-…';$('#c-dsh').hidden=!ds;$('#c-forget').hidden=!sv;
   $('#f-key').firstChild.nodeValue=q?'Токен Qwen':'API ключ';$('#c-qh').hidden=$('#f-qwen').hidden=!q;
-  $('#f-think').hidden=!q;$('#f-vis').hidden=q}
+  $('#f-think').hidden=!q&&!ds;$('#f-vis').hidden=q}
 function syncSet(){const p=prov.value;$('#f-steps').hidden=!$('#c-lim').checked;$('#sh').hidden=true;$('#f-base').hidden=!!PRESETS[p];$('#f-key').hidden=LOCAL.includes(p);keyHint()}
 function fill(s){
   for(const k in F)$(F[k]).value=s[k]||'';
@@ -4309,7 +4311,7 @@ function showModels(){const q=mi().value.trim().toLowerCase(),box=$('#ml');
   box.hidden=!l.length}
 /* OpenRouter: ключ без купленных кредитов (is_free_tier) пускает только к моделям «…:free», остальные отвечают 402 */
 const isFree=x=>/:free$/i.test(x);
-const pickModel=l=>l.find(x=>/gemma|deepseek|qwen|llama|gpt-oss/i.test(x))||l[0];
+const pickModel=l=>l.find(x=>/^(qwen-plus|qwen3-max|qwen-max)$/i.test(x))||l.find(x=>/gemma|deepseek|qwen|llama|gpt-oss/i.test(x))||l[0];
 const freeNote=k=>'Ключ бесплатный: доступны только модели «:free»'+(k.limit?' (до '+k.limit+' запросов в день)':'');
 /* список моделей запрашивает сервер — ключ хранится там; функцию ставит client.js */
 let loadModels=()=>{};

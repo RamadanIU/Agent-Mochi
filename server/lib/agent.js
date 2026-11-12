@@ -11,7 +11,7 @@ import { runCmd, fileCmd, agentInfo } from './runner-client.js';
 import { userDir, pullFile, storeFile, dropFids, sz } from './files.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
 import { agentNote } from './proxy.js';
-import { isQwen, turn as qwenTurn, ask as qwenAsk, renew as qwenRenew, tokenLeft, parseToken, QWEN_BASE } from './qwen.js';
+import { isQwen, isDashScope, turn as qwenTurn, ask as qwenAsk, renew as qwenRenew, tokenLeft, parseToken, QWEN_BASE } from './qwen.js';
 import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens, setPresetSeed, presetsOff } from './ext.js';
 
 export const DEF_SYS = 'Тебя зовут Personal Computer — ты ламповый пиксельный компьютер-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
@@ -365,7 +365,7 @@ export class Chat extends EventEmitter {
       const h = { 'Content-Type': 'application/json' };
       if (S.key) h.Authorization = 'Bearer ' + S.key;
       const r = await apiFetch(S.base.replace(/\/+$/, '') + '/chat/completions', { method: 'POST', headers: h, signal: AbortSignal.timeout(60000),
-        body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: TITLE_SYS }, { role: 'user', content: text }], stream: false }) });
+        body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: TITLE_SYS }, { role: 'user', content: text }], stream: false, ...(isDashScope(S.base) ? { enable_thinking: false } : {}) }) });
       if (!r.ok) return;
       const t = cleanTitle((await r.json().catch(() => null))?.choices?.[0]?.message?.content);
       /* пока модель думала, чат переименовали или удалили — их выбор главнее */
@@ -797,7 +797,8 @@ export class Chat extends EventEmitter {
     /* Qwen (chat.qwen.ai): свой протокол, история живёт в чате Qwen — отправляется только новое */
     if (isQwen(S.base)) {
       const go = key => { this.partial = ''; return qwenTurn({ key, model: S.model, think: !!S.think, sys, tools, hist: this.doc.v.hist, signal: sig,
-        onText: d => { this.partial += d; this.emit('delta', d, this.cid); }, getFiles: m => this.qwenFiles(m) }); };
+        onText: d => { this.partial += d; this.emit('delta', d, this.cid); }, getFiles: m => this.qwenFiles(m),
+        onWait: ms => this.push({ kind: 'note', text: 'chat.qwen.ai попросил паузу (антибот-защита) — подожду ' + Math.round(ms / 1000) + ' с и повторю' }) }); };
       /* обновить заранее не вышло — пробуем с тем, что есть: вдруг ещё жив */
       const key = await this.qwenKey().catch(() => this.qwenToken());
       try { return await go(key); }
@@ -821,7 +822,7 @@ export class Chat extends EventEmitter {
       try {
         const url = S.base.replace(/\/+$/, '') + '/chat/completions';
         const r = await apiFetch(url, { method: 'POST', headers: h, signal,
-          body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: sys }, ...msgs], ...(tools.length ? { tools } : {}), stream: true }) });
+          body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: sys }, ...msgs], ...(tools.length ? { tools } : {}), stream: true, ...(isDashScope(S.base) ? { enable_thinking: !!S.think } : {}) }) });
         if (!r.ok) {
           const full = await r.text().catch(() => ''), et = full.slice(0, 300);
           /* страница блокировки Cloudflare: ключ ни при чём, повторять бесполезно */

@@ -653,6 +653,7 @@ loadModels = async function () {
     }
     return;
   }
+  qwInfo = {}; qwThink();
   try {
     const { models: ids, free, needKey } = await post('api/models', { base, key }); if (t !== mt) return;
     const f = ids.filter(x => !/embed|whisper|tts|dall-e|moderation|image|audio|realtime|transcribe/i.test(x));
