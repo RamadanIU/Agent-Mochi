@@ -48,10 +48,12 @@ const account = t => tokenInfo(t).id || crypto.createHash('sha256').update(Strin
 /* ---------- ошибки: человеческий текст сразу (agent.friendly берёт его как есть) ---------- */
 const qErr = (human, extra = {}) => Object.assign(new Error(human), { human, detail: '', ...extra });
 const EXPIRED = 'Токен Qwen не подошёл или истёк. Открой chat.qwen.ai, войди, скопируй новый токен (как — подсказка в настройках → Модель) и вставь его.';
-const WAF = 'chat.qwen.ai не пустил запрос с этого сервера: защита Alibaba Cloud попросила проверку «я не робот». Токен тут ни при чём. Обычно так блокируют IP-адрес сервера — включи прокси (настройки → Сервер → «Прокси») или повтори позже.';
+const WAF = 'chat.qwen.ai не пустил запрос с этого сервера: антибот-защита Alibaba Cloud потребовала проверку «я не робот» (слайдер). Токен тут ни при чём — он рабочий. Так защита реагирует на IP-адрес сервера (часто — на адреса хостингов): включи прокси с «домашним» адресом в настройках → Сервер → «Прокси» или повтори позже.';
 const isWafBody = t => /<html|<!doctype/i.test(t) && /captcha|punish|x5sec|nocaptcha|aliyun|baxia|unusual traffic|blocked/i.test(t);
 /* {success:false,data:{code,details}} / {error:{…}} / {detail} — во что бы ни завернули */
+const isWafJson = j => !!j && typeof j === 'object' && (/FAIL_SYS_USER_VALIDATE|RGV587|punish|x5sec|captcha/i.test(JSON.stringify(j.ret || '')) || /punish|x5sec|captcha/i.test(String(j.data?.url || '')));
 function bizErr(j, status) {
+  if (isWafJson(j)) return qErr(WAF, { status: 403, waf: true });
   const d = j?.data && typeof j.data === 'object' ? j.data : {}, e = j?.error;
   const code = String(d.code || (e && e.code) || j?.code || '');
   const msg = String(d.details || d.message || (typeof e === 'string' ? e : e?.message) || j?.message || j?.detail || j?.msg || '').slice(0, 300);
@@ -121,7 +123,8 @@ export async function listModels(rawToken, signal) {
   const list = arr.map(m => {
     const meta = m?.info?.meta || {}, ab = meta.abilities || meta.capabilities || {}, ct = meta.chat_type;
     return { id: String(m?.id || ''), name: String(m?.name || m?.id || ''), chat: !Array.isArray(ct) || ct.includes('t2t'),
-      think: !!(ab.thinking || ab.thinking_budget || meta.think_skip), must: meta.think_skip?.enable === false };
+      think: !!(ab.thinking || ab.thinking_budget || meta.think_skip), must: meta.think_skip?.enable === false,
+      vision: ab.vision === undefined ? null : !!ab.vision };
   }).filter(m => m.id && m.chat && !/image|video|research|web-?dev|full-?stack|slides|tts|asr/i.test(m.id))
     .map(({ chat, ...m }) => m);
   if (!list.length) throw qErr('chat.qwen.ai не отдал список моделей', { status: 502 });
@@ -146,9 +149,9 @@ async function newChat(token, model, signal) {
 const features = (think, must) => ({ output_schema: 'phase', thinking_enabled: !!(think || must), auto_thinking: false,
   thinking_mode: think ? 'Thinking' : 'Fast', thinking_format: 'summary', research_mode: 'normal', auto_search: false });
 
-async function complete({ token, chatId, parent, model, content, think, must, signal, onText, onPoke }) {
+async function complete({ token, chatId, parent, model, content, files = [], think, must, signal, onText, onPoke }) {
   const now = Math.floor(Date.now() / 1000), fid = crypto.randomUUID();
-  const msg = { fid, parentId: parent, parent_id: parent, childrenIds: [crypto.randomUUID()], role: 'user', content, user_action: 'chat', files: [],
+  const msg = { fid, parentId: parent, parent_id: parent, childrenIds: [crypto.randomUUID()], role: 'user', content, user_action: 'chat', files,
     timestamp: now, models: [model], chat_type: 't2t', feature_config: features(think, must), extra: { meta: { subChatType: 't2t' } }, sub_chat_type: 't2t' };
   const body = { stream: true, version: '2.1', incremental_output: true, chat_id: chatId, chatId, chat_mode: 'normal', model, parent_id: parent, parentId: parent, messages: [msg], timestamp: now };
   let r;
@@ -183,7 +186,7 @@ async function readStream(chunks, { onText, onPoke }) {
       chatId = cr.chat_id || cr.chatId || chatId;
       return;
     }
-    if (j.success === false || (j.error && !Array.isArray(j.choices))) { err = bizErr(j, 0); return; }
+    if (j.success === false || isWafJson(j) || (j.error && !Array.isArray(j.choices))) { err = bizErr(j, 0); return; }
     const rid = j.response_id;
     if (rid) {
       if (!responseId) { if (idx.has(rid) && idx.get(rid) !== 0) return; responseId = rid; }
@@ -215,6 +218,100 @@ async function readStream(chunks, { onText, onPoke }) {
   if (!text && waf) throw qErr(WAF, { status: 403, waf: true });
   const used = (+usage?.input_tokens || +usage?.prompt_tokens || 0) + (+usage?.output_tokens || +usage?.completion_tokens || 0);
   return { chatId, responseId, text, used };
+}
+
+/* ---------- файлы в чат Qwen ----------
+   Как у сайта: STS-ключ на загрузку (/api/v1/files/getstsToken) → PUT в Alibaba OSS (подпись OSS V1 с временным ключом) →
+   документ Qwen ещё разбирает у себя (/api/v2/files/parse, ждём готовности) → описание файла уходит в messages[0].files.
+   Картинки (до 5) Qwen видит сам, документы (до 5: PDF, Word, Excel, PowerPoint, TXT, MD, CSV) читает целиком.
+   Остальное (архивы, видео, код) модели не отправляем — оно лежит на сервере, и агент открывает его своими инструментами.
+   Один и тот же файл в одном аккаунте загружаем один раз (кэш на 40 минут). */
+const IMG = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp' };
+const DOC = { pdf: 'application/pdf', txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+export const MAX_FILE = 20 * 2 ** 20, MAX_IMGS = 5, MAX_DOCS = 5;
+export function kindOf(name, mime) {
+  const ext = String(name || '').split('.').pop().toLowerCase();
+  if (IMG[ext] || /^image\/(png|jpe?g|gif|webp|bmp)$/.test(mime || '')) return { kind: 'image', mime: IMG[ext] || mime };
+  if (DOC[ext]) return { kind: 'doc', mime: DOC[ext] };
+  if (mime === 'application/pdf') return { kind: 'doc', mime };
+  return null;
+}
+const ossBase = (bucket, endpoint) => process.env.PERSONALCOMPUTER_QWEN_OSS || 'https://' + bucket + '.' + endpoint;
+async function ossPut(sts, data, mime, signal) {
+  const bucket = sts.bucketname || sts.bucket, endpoint = sts.endpoint || (String(sts.region || '').replace(/\.aliyuncs\.com$/, '') + '.aliyuncs.com');
+  const key = String(sts.file_path || '').replace(/^\/+/, ''), date = new Date().toUTCString();
+  if (!bucket || !key || !sts.access_key_id) throw new Error('chat.qwen.ai не выдал ключ на загрузку');
+  const str = 'PUT\n\n' + mime + '\n' + date + '\nx-oss-security-token:' + sts.security_token + '\n/' + bucket + '/' + key;
+  const sig = crypto.createHmac('sha1', String(sts.access_key_secret)).update(str, 'utf8').digest('base64');
+  let r;
+  try {
+    r = await apiFetch(ossBase(bucket, endpoint) + '/' + key.split('/').map(encodeURIComponent).join('/'), { method: 'PUT', signal, body: new Uint8Array(data),
+      headers: { Date: date, 'Content-Type': mime, Authorization: 'OSS ' + sts.access_key_id + ':' + sig, 'x-oss-security-token': String(sts.security_token) } });
+  } catch (e) { if (signal?.aborted) throw e; throw new Error('хранилище Qwen не отвечает (' + (e.cause?.code || e.message) + ')'); }
+  if (!r.ok) throw new Error('хранилище Qwen не приняло файл (HTTP ' + r.status + ')');
+  await r.arrayBuffer().catch(() => {});
+}
+/* документ Qwen разбирает у себя; пока не разобрал — модель его не видит */
+async function parseDoc(token, id, signal) {
+  await call(token, 'POST', '/api/v2/files/parse', { file_id: id }, signal);
+  for (let i = 0; i < 90; i++) {
+    const d = await call(token, 'POST', '/api/v2/files/parse/status', { file_id_list: [id] }, signal);
+    const rec = (Array.isArray(d) ? d : d?.list || d?.items || [d]).find(x => x?.file_id === id) || (Array.isArray(d) ? d[0] : d);
+    const st = String(rec?.status || '').toLowerCase();
+    if (/^(success|completed|done|parsed)$/.test(st)) return;
+    if (/^(failed|error)$/.test(st)) throw new Error(rec?.error_msg || rec?.message || 'Qwen не смог разобрать документ');
+    await new Promise(ok => setTimeout(ok, i < 10 ? 500 : 1000));
+    if (signal?.aborted) throw signal.reason;
+  }
+  throw new Error('Qwen слишком долго разбирает документ');
+}
+const fcache = new Map();
+export async function upload(token, { name, data, mime, kind }, signal) {
+  const ck = account(token) + ':' + crypto.createHash('sha256').update(data).digest('hex');
+  const c = fcache.get(ck);
+  if (c && Date.now() - c.t < 40 * 60e3) return c.desc;
+  const sts = await call(token, 'POST', '/api/v1/files/getstsToken', { filename: name, filesize: data.length, filetype: kind === 'image' ? 'image' : 'file' }, signal);
+  await ossPut(sts, data, mime, signal);
+  const id = sts.file_id, url = sts.file_url;
+  if (!id || !url) throw new Error('chat.qwen.ai не вернул адрес файла');
+  let desc;
+  if (kind === 'image') desc = { type: 'image', url };
+  else {
+    await parseDoc(token, id, signal);
+    const t = Date.now();
+    desc = { type: 'file', file: { created_at: t, data: {}, filename: name, hash: null, id, meta: { name, size: data.length, content_type: mime, parse_meta: { parse_status: 'success' } }, update_at: t, name, size: data.length, type: mime },
+      id, url, name, collection_name: '', status: 'uploaded', progress: 100, greenNet: 'success', size: data.length, error: '', itemId: id, file_type: mime, showType: 'file', file_class: 'document', context: 'full' };
+  }
+  fcache.set(ck, { t: Date.now(), desc });
+  if (fcache.size > 200) fcache.delete(fcache.keys().next().value);
+  return desc;
+}
+/* вложения сообщений, которые сейчас уйдут модели. getFiles(m) → [{ name, data, mime?, at }] (at — путь на сервере).
+   Свежие важнее: идём с конца, лишнее сверх лимитов — заметкой «лежит на сервере» */
+async function attach(token, msgs, getFiles, { vision, signal }) {
+  const files = [], notes = [], seen = new Set();
+  let ni = 0, nd = 0;
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    let got = [];
+    try { got = getFiles ? await getFiles(msgs[i]) : []; } catch (e) { notes.push('[Файлы сообщения модели не переданы: ' + e.message + ']'); }
+    /* с конца: files.unshift сохраняет исходный порядок */
+    for (const f of got.slice().reverse()) {
+      const k = kindOf(f.name, f.mime), where = f.at ? ' Он лежит на сервере: ' + f.at + ' — открой его своими инструментами, если нужно.' : '';
+      if (!k) continue;
+      const dk = crypto.createHash('sha256').update(f.data).digest('hex');
+      if (seen.has(dk)) continue; seen.add(dk);
+      const fail = why => notes.push('[Файл «' + f.name + '» модели не передан: ' + why + '.' + where + ']');
+      if (k.kind === 'image' && vision === false) { fail('эта модель не видит картинки'); continue; }
+      if (f.data.length > MAX_FILE) { fail('больше 20 МБ'); continue; }
+      if (k.kind === 'image' ? ni >= MAX_IMGS : nd >= MAX_DOCS) { fail('за раз можно не больше ' + (k.kind === 'image' ? MAX_IMGS + ' картинок' : MAX_DOCS + ' документов')); continue; }
+      try { files.unshift(await upload(token, { name: f.name, data: f.data, mime: k.mime, kind: k.kind }, signal)); k.kind === 'image' ? ni++ : nd++; }
+      catch (e) { if (signal?.aborted) throw e; if (e.waf || e.status === 401) throw e; fail(e.human || e.message); }
+    }
+  }
+  return { files, note: notes.length ? '\n\n' + notes.join('\n') : '' };
 }
 
 /* ---------- протокол инструментов агента ---------- */
@@ -320,14 +417,13 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex').slice(0, 16
 const sysHash = (sys, tools) => sha(String(sys).replace(/\nСегодня [^\n]*?время сервера \d\d:\d\d\./, '') + '\n' + JSON.stringify(tools.map(t => [t.function.name, t.function.description, t.function.parameters])));
 const textOf = c => typeof c === 'string' ? c : Array.isArray(c) ? c.filter(p => p && p.type === 'text').map(p => p.text).join('\n') : c == null ? '' : String(c);
 const clip = (s, n) => s.length <= n ? s : s.slice(0, Math.floor(n * 0.6)) + '\n…[пропущено ' + (s.length - n) + ' символов]…\n' + s.slice(s.length - Math.floor(n * 0.4));
-const NO_IMG = ' (картинку эта модель не видит — изображение не передано)';
 function names(H) { const n = new Map(); for (const m of H) for (const c of m.tool_calls || []) n.set(c.id, c.function?.name || 'tool'); return n; }
 const argsObj = s => { try { const a = JSON.parse(s); return a && typeof a === 'object' ? a : {}; } catch { return {}; } };
 /* сообщения → текст для Qwen. lim — сколько символов на один результат инструмента */
 function render(msgs, nm, { lim = 60000, label = false } = {}) {
   const out = [];
   for (const m of msgs) {
-    if (m.role === 'user') out.push((label ? '### Пользователь\n' : '') + textOf(m.content) + (m._vi ? NO_IMG : ''));
+    if (m.role === 'user') out.push((label ? '### Пользователь\n' : '') + textOf(m.content));
     else if (m.role === 'tool') out.push(renderResult(nm.get(m.tool_call_id) || 'tool', clip(textOf(m.content), lim)));
     else if (m.role === 'assistant') {
       const t = textOf(m.content).trim(), cs = (m.tool_calls || []).map(c => renderCall(c.function.name, argsObj(c.function.arguments)));
@@ -366,7 +462,7 @@ export function anchorOf(H, acct) {
 
 /* ---------- шаг агента ----------
    hist — история чата (с метками _qw), sys и tools — как для обычной модели. → { text, calls, used, qw } */
-export async function turn({ key, model, think, sys, tools, hist, signal, onText, idleMs = 180000 }) {
+export async function turn({ key, model, think, sys, tools, hist, signal, onText, getFiles, idleMs = 180000 }) {
   const token = parseToken(key);
   if (!token) throw qErr('Вставь токен Qwen в настройках → Модель — без него модель не ответит.', { status: 401 });
   if (!model) throw qErr('Выбери модель Qwen в настройках → Модель.', { status: 400 });
@@ -376,17 +472,20 @@ export async function turn({ key, model, think, sys, tools, hist, signal, onText
   let fresh = false, shown = false;
   for (let attempt = 0; ; attempt++) {
     const an = fresh ? null : anchorOf(hist, acct);
-    let content;
+    let content, sent;
     if (an) {
-      const delta = hist.slice(an.i + 1);
+      const delta = sent = hist.slice(an.i + 1);
       content = render(delta, nm);
       if (delta.length && delta.at(-1).role === 'tool') content += NUDGE;
       if (an.q.h !== h) content = wrapInstr(sys, tools, true) + '\n\n' + content;
       /* длинный чат пережил полночь — модель должна знать, какое сегодня число */
       else if (day && an.q.d && an.q.d !== day) content = '[Сегодня ' + day + ']\n' + content;
       if (content.length > MAX_MSG) content = clip(content, MAX_MSG);
-    } else content = freshContent(hist, wrapInstr(sys, tools, false), nm);
+    } else { content = freshContent(hist, wrapInstr(sys, tools, false), nm); sent = hist; }
     if (!content.trim()) content = 'Продолжай.';
+    /* файлы из того, что уходит сейчас (в новом чате — и из прежней переписки, сколько влезет) */
+    const att = await attach(token, sent, getFiles, { vision: info?.vision, signal });
+    content += att.note;
     /* «тишина» дольше idleMs — модель зависла */
     const idle = new AbortController();
     let it = setTimeout(() => idle.abort(), idleMs);
@@ -395,7 +494,7 @@ export async function turn({ key, model, think, sys, tools, hist, signal, onText
     const P = callParser(s => { shown = true; onText?.(s); });
     try {
       const chatId = an ? an.q.c : await newChat(token, model, sig);
-      const r = await complete({ token, chatId, parent: an ? an.q.r : null, model, content, think: th, must, signal: sig, onText: s => P.push(s), onPoke: poke });
+      const r = await complete({ token, chatId, parent: an ? an.q.r : null, model, content, files: att.files, think: th, must, signal: sig, onText: s => P.push(s), onPoke: poke });
       const { text, calls } = P.end();
       if (!text && !calls.length) throw qErr('Qwen вернул пустой ответ. Нажми «Повторить» или выбери другую модель в настройках.', { empty: true });
       return { text, calls, used: r.used, qw: r.responseId ? { c: r.chatId || chatId, r: r.responseId, a: acct, h, d: day } : null };

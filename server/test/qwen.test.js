@@ -2,6 +2,7 @@
 import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { startPersonalComputer, registered, chatFile, sleep } from './helpers.js';
 import { callParser, parseToken, tokenInfo } from '../lib/qwen.js';
@@ -12,12 +13,23 @@ const TOKEN = jwt({ id: 'acc-1', exp: EXP }), TOKEN2 = jwt({ id: 'acc-2', exp: E
 const QWEN = 'https://chat.qwen.ai';
 
 let m, srv;
-const Q = { chats: new Map(), calls: [], news: [], dels: [], script: null };
+const Q = { chats: new Map(), calls: [], news: [], dels: [], script: null, sts: [], oss: new Map(), parsed: [], polls: 0 };
+const SECRET = 'oss-secret';
 before(async () => {
   srv = http.createServer(async (req, res) => {
-    let b = ''; for await (const c of req) b += c;
+    const raw = []; for await (const c of req) raw.push(c);
+    const b = Buffer.concat(raw).toString(req.url.startsWith('/oss/') ? 'latin1' : 'utf8');
     const u = new URL(req.url, 'http://x'), auth = req.headers.authorization || '';
     const send = (code, j) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(j)); };
+    /* «Alibaba OSS»: проверяем подпись временным ключом */
+    if (u.pathname.startsWith('/oss/')) {
+      const key = decodeURIComponent(u.pathname.slice(5)), h = req.headers;
+      const str = 'PUT\n\n' + h['content-type'] + '\n' + h.date + '\nx-oss-security-token:' + h['x-oss-security-token'] + '\n/qwen-bucket/' + key;
+      const sig = crypto.createHmac('sha1', SECRET).update(str).digest('base64');
+      if (h.authorization !== 'OSS AKID:' + sig || h['x-oss-security-token'] !== 'STS-TOKEN') { res.writeHead(403); return res.end('<Error>SignatureDoesNotMatch</Error>'); }
+      Q.oss.set(key, { type: h['content-type'], data: Buffer.from(b, 'latin1') });
+      res.writeHead(200); return res.end();
+    }
     if (![TOKEN, TOKEN2].map(t => 'Bearer ' + t).includes(auth)) return send(401, { success: false, data: { code: 'Unauthorized', details: 'token expired' } });
     if (u.pathname === '/api/models') return send(200, { data: [
       { id: 'qwen3-max', name: 'Qwen3-Max', info: { meta: { abilities: { thinking: true }, chat_type: ['t2t', 'search'] } } },
@@ -25,6 +37,17 @@ before(async () => {
       { id: 'qwen3-deep', name: 'Qwen3-Deep', info: { meta: { abilities: { thinking: true }, think_skip: { enable: false }, chat_type: ['t2t'] } } },
       { id: 'qwen3-coder', name: 'Qwen3-Coder', info: { meta: { chat_type: ['t2t'] } } },
     ] });
+    if (u.pathname === '/api/v1/files/getstsToken') {
+      const q = JSON.parse(b), id = 'file-' + (Q.sts.length + 1);
+      Q.sts.push(q);
+      return send(200, { success: true, data: { access_key_id: 'AKID', access_key_secret: SECRET, security_token: 'STS-TOKEN', file_url: 'https://cdn.qwen/' + id + '/' + q.filename,
+        file_path: 'user/' + id + '/' + q.filename, bucketname: 'qwen-bucket', region: 'oss-test', file_id: id } });
+    }
+    if (u.pathname === '/api/v2/files/parse') { Q.parsed.push(JSON.parse(b).file_id); return send(200, { success: true, data: {} }); }
+    if (u.pathname === '/api/v2/files/parse/status') {
+      const id = JSON.parse(b).file_id_list[0];
+      return send(200, { success: true, data: [{ file_id: id, status: ++Q.polls % 2 ? 'parsing' : 'success' }] });
+    }
     if (u.pathname === '/api/v2/chats/new') {
       const id = 'chat-' + (Q.chats.size + 1) + '-' + Math.random().toString(36).slice(2, 6);
       Q.chats.set(id, { acct: auth, n: 0 }); Q.news.push({ id, body: JSON.parse(b) });
@@ -35,7 +58,7 @@ before(async () => {
       const chatId = u.searchParams.get('chat_id'), body = JSON.parse(b), ch = Q.chats.get(chatId);
       if (!ch || ch.acct !== auth) return send(200, { success: false, data: { code: 'NotFound', details: 'chat not found' } });
       const msg = body.messages[0];
-      const call = { chatId, parent: body.parent_id, content: msg.content, fc: msg.feature_config, model: body.model, headers: req.headers };
+      const call = { chatId, parent: body.parent_id, content: msg.content, files: msg.files, fc: msg.feature_config, model: body.model, headers: req.headers };
       Q.calls.push(call);
       const rid = 'resp-' + Q.calls.length;
       const step = await Q.script(call, Q.calls.length - 1);
@@ -54,7 +77,8 @@ before(async () => {
     send(404, { success: false, data: { code: 'NotFound' } });
   });
   await new Promise(ok => srv.listen(0, '127.0.0.1', ok));
-  m = await startPersonalComputer({ PERSONALCOMPUTER_QWEN_URL: 'http://127.0.0.1:' + srv.address().port });
+  const qurl = 'http://127.0.0.1:' + srv.address().port;
+  m = await startPersonalComputer({ PERSONALCOMPUTER_QWEN_URL: qurl, PERSONALCOMPUTER_QWEN_OSS: qurl + '/oss' });
 });
 after(async () => { await m?.stop(); srv?.close(); });
 
@@ -145,7 +169,8 @@ test('чат: один и тот же чат Qwen, отправляется то
   /* первый запрос: инструкция, протокол инструментов и сообщение; второй — только результат */
   assert.match(calls[0].content, /^\[Инструкция[\s\S]*Personal Computer[\s\S]*## run_command[\s\S]*\[TOOL CALL\][\s\S]*\[Конец инструкции\]\n\nкакое ядро\?$/);
   assert.match(calls[0].content, /Встроенных инструментов чата Qwen здесь нет/);
-  assert.doesNotMatch(calls[0].content, /## view_image/, 'картинки Qwen не видит — инструмента нет');
+  assert.match(calls[0].content, /## view_image/, 'картинки уходят в Qwen файлами — инструмент есть');
+  assert.deepEqual(calls[0].files, []);
   assert.match(calls[1].content, /^\[TOOL RESULT: run_command\]\nпривет-из-шелла\n\[код выхода: 0\]\n\[END TOOL RESULT\]/);
   assert.doesNotMatch(calls[1].content, /Инструкция|какое ядро/);
   /* встроенное у Qwen выключено, размышление — по настройке; заголовки как у сайта */
@@ -207,4 +232,51 @@ test('истёк токен — понятная ошибка в чате', asyn
   const err = logs(evs).find(e => e.kind === 'error');
   assert.ok(err, 'нет ошибки');
   assert.match(err.text, /^Токен Qwen не подошёл или истёк/);
+});
+
+test('файлы в чат: картинка и документ уходят в Qwen (STS → OSS → разбор), остальное — путём на сервере', async () => {
+  const c = await registered(m, 'qfiles');
+  await c.json('/api/settings', { base: QWEN, key: TOKEN, model: 'qwen3-max' }, 'PUT');
+  Q.script = call => ({ text: 'вижу файлов: ' + call.files.length });
+  const up = async (name, data) => { const r = await c('/api/upload?name=' + encodeURIComponent(name), { method: 'POST', body: data, headers: { 'content-type': 'application/octet-stream' } }); assert.equal(r.status, 200); return r.json(); };
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4f30000000049454e44ae426082', 'hex');
+  const files = [await up('кот.png', png), await up('отчёт.pdf', Buffer.from('%PDF-1.4 тест')), await up('архив.zip', Buffer.from('PK..'))];
+  const s0 = Q.sts.length;
+  const w = c.events(doneRun); await sleep(100);
+  assert.equal((await c.json('/api/chat', { text: 'посмотри', files })).status, 200);
+  const L = logs(await w);
+  assert.equal(L.filter(e => e.kind === 'assistant').at(-1).text, 'вижу файлов: 2');
+  const call = Q.calls.at(-1);
+  assert.deepEqual(Q.sts.slice(s0).map(x => [x.filename, x.filetype]).sort(), [['кот.png', 'image'], ['отчёт.pdf', 'file']]);
+  const id = n => 'file-' + (s0 + 1 + Q.sts.slice(s0).findIndex(x => x.filename === n));
+  assert.deepEqual(call.files[0], { type: 'image', url: 'https://cdn.qwen/' + id('кот.png') + '/кот.png' });
+  const doc = call.files[1];
+  assert.equal(doc.type, 'file'); assert.equal(doc.file_class, 'document'); assert.equal(doc.id, id('отчёт.pdf')); assert.equal(doc.file_type, 'application/pdf');
+  assert.ok(Q.parsed.includes(doc.id), 'документ разобран');
+  /* в хранилище легли настоящие байты с правильным типом */
+  const o = Q.oss.get('user/' + id('кот.png') + '/кот.png');
+  assert.equal(o.type, 'image/png'); assert.ok(o.data.equals(png));
+  /* путь к файлам на сервере модель тоже знает — архив она откроет инструментами */
+  assert.match(call.content, /inbox\/архив\.zip/);
+  /* следующее сообщение файлы не повторяет: они уже в чате Qwen */
+  await say(c, 'ещё раз');
+  assert.deepEqual(Q.calls.at(-1).files, []);
+  assert.equal(Q.sts.length, s0 + 2);
+});
+
+test('view_image: агент смотрит картинку с сервера — она уходит в Qwen файлом', async () => {
+  const c = await registered(m, 'qview');
+  await c.json('/api/settings', { base: QWEN, key: TOKEN, model: 'qwen3-max' }, 'PUT');
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4f30000000049454e44ae426082', 'hex');
+  /* другие байты: ту же картинку этот аккаунт уже загружал — она взялась бы из кэша */
+  const r = await c('/api/upload?name=' + encodeURIComponent('screen.png'), { method: 'POST', body: Buffer.concat([png, Buffer.from('2')]), headers: { 'content-type': 'application/octet-stream' } });
+  const f = await r.json();
+  Q.script = call => /покажи/.test(call.content)
+    ? { text: '[TOOL CALL]\n' + JSON.stringify({ name: 'view_image', arguments: { action: 'Смотрю', path: f.path } }) + '\n[END TOOL CALL]' }
+    : { text: 'на картинке: ' + call.files.map(x => x.type).join(',') };
+  const L = logs(await say(c, 'покажи ' + f.path));
+  assert.equal(L.filter(e => e.kind === 'assistant').at(-1).text, 'на картинке: image');
+  const last = Q.calls.at(-1);
+  assert.match(last.content, /\[TOOL RESULT: view_image\]/);
+  assert.match(last.files[0].url, /screen\.png$/);
 });
