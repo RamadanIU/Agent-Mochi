@@ -1670,8 +1670,10 @@ const tick=setInterval(paint,100);paint();
         <div class="brow"><button class="pbtn" id="c-qlogin" type="button"><i class="pi"></i><span>Войти в Qwen</span></button></div>
       </div>
       <div id="c-qme" hidden><small class="hint" id="c-qmet"></small><button class="lnk" id="c-qout" type="button">Выйти из Qwen</button></div>
-      <small class="hint">Входишь через Google или GitHub? «Токен в один клик»: откроется chat.qwen.ai, а команда уже скопирована — вставь её в консоль (F12, вкладка «Console») и нажми Enter. Вкладка сама вернётся сюда с токеном.</small>
-      <button class="lnk" id="c-qcopy" type="button">Токен в один клик</button>
+      <small class="hint"><b>Входишь через Google или GitHub</b> (пароля нет)? Нажми кнопку ниже — с компьютера:<br>1. откроется chat.qwen.ai (войди, если нужно), а команда уже скопирована;<br>2. там нажми F12, открой вкладку «Console», вставь команду (Ctrl+V) и нажми Enter. Chrome при первой вставке пишет предупреждение — впиши <code>allow pasting</code>, Enter, и вставь команду ещё раз;<br>3. вкладка сама вернётся сюда — нажми «Подключить».</small>
+      <div class="brow"><button class="pbtn" id="c-qcopy" type="button"><i class="pi"></i><span>Токен в один клик</span></button></div>
+      <small class="hint">Без консоли: перетащи ссылку ниже мышкой на панель закладок. Потом на chat.qwen.ai просто нажми эту закладку — вернёшься сюда с токеном.</small>
+      <a id="c-qbm" class="lnk" href="#" draggable="true">Токен Qwen в Personal Computer</a>
       <small id="c-qst"></small>
     </div>
     <label class="f" id="f-base" hidden>Адрес API<input id="c-base" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="https://…/v1"></label>
@@ -4272,8 +4274,11 @@ prov.onchange=()=>{const b=provBase(prov.value),sv=provSaved[b];$('#c-base').val
 $('#c-lim').onchange=syncSet;
 /* «Токен в один клик»: команда в консоли chat.qwen.ai открывает это приложение с токеном в адресе (#qwen-token=…, после # — на сервер не уходит),
    а client.js его подхватывает и сохраняет (с подтверждением) */
-$('#c-qcopy').onclick=async()=>{const c="location.href='"+location.origin+location.pathname+"#qwen-token='+encodeURIComponent(localStorage.token)",b=$('#c-qcopy');
-  try{await navigator.clipboard.writeText(c);b.textContent='Команда скопирована — вставь её в консоль на chat.qwen.ai и нажми Enter'}catch(e){await ask('Токен Qwen','Скопируй команду и вставь её в консоль (F12 → Console) на chat.qwen.ai:',c,'Готово')}
+const qwCmd=()=>"localStorage.token?location.href='"+location.origin+location.pathname+"#qwen-token='+encodeURIComponent(localStorage.token):alert('Сначала войди в chat.qwen.ai')";
+/* закладка: тот же код как javascript:-ссылка — на chat.qwen.ai нажимают её вместо консоли; здесь по клику — только подсказка */
+{const a=$('#c-qbm');a.href='javascript:void('+encodeURIComponent(qwCmd())+')';a.onclick=e=>{e.preventDefault();ask('Токен Qwen','Эту ссылку не нажимают здесь: перетащи её мышкой на панель закладок браузера (Ctrl+Shift+B — показать панель). Потом открой chat.qwen.ai, войди и нажми эту закладку — вернёшься сюда с токеном.',null,'Понятно')}}
+$('#c-qcopy').onclick=async()=>{const c=qwCmd(),b=$('#c-qcopy');
+  try{await navigator.clipboard.writeText(c);b.lastChild.textContent='Скопировано — вставь в консоль chat.qwen.ai'}catch(e){await ask('Токен Qwen','Скопируй команду и вставь её в консоль (F12 → Console) на chat.qwen.ai:',c,'Готово')}
   window.open('https://chat.qwen.ai','_blank','noopener')};
 /* лимит шагов: пустое или вне 1…10000 не сохраняем, а показываем ошибку у поля */
 function readSteps(){const n=stepsOk($('#c-steps').value),h=$('#sh');
