@@ -11,7 +11,7 @@ import { runCmd, fileCmd, agentInfo } from './runner-client.js';
 import { userDir, pullFile, storeFile, dropFids, sz } from './files.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
 import { agentNote } from './proxy.js';
-import { isQwen, turn as qwenTurn, ask as qwenAsk } from './qwen.js';
+import { isQwen, turn as qwenTurn, ask as qwenAsk, renew as qwenRenew, tokenLeft, parseToken, QWEN_BASE } from './qwen.js';
 import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens, setPresetSeed, presetsOff } from './ext.js';
 
 export const DEF_SYS = 'Тебя зовут Personal Computer — ты ламповый пиксельный компьютер-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
@@ -358,7 +358,7 @@ export class Chat extends EventEmitter {
       const text = log.map(e => (e.kind === 'user' ? 'Пользователь: ' : 'Ассистент: ') + oneLine(e.text, 600)).join('\n');
       /* Qwen: короткий вопрос во временном чате (он сразу удаляется), а не в чате разговора */
       if (isQwen(S.base)) {
-        const t = cleanTitle(await qwenAsk({ key: S.key, model: S.model, prompt: TITLE_SYS + '\n\n' + text, signal: AbortSignal.timeout(60000) }));
+        const t = cleanTitle(await qwenAsk({ key: await this.qwenKey(), model: S.model, prompt: TITLE_SYS + '\n\n' + text, signal: AbortSignal.timeout(60000) }));
         if (t && !m.named && !m.del) { Object.assign(m, { title: t, named: 1 }); this.metaChanged(); }
         return;
       }
@@ -796,9 +796,18 @@ export class Chat extends EventEmitter {
     const S = this.settings();
     /* Qwen (chat.qwen.ai): свой протокол, история живёт в чате Qwen — отправляется только новое */
     if (isQwen(S.base)) {
-      this.partial = '';
-      return qwenTurn({ key: S.key, model: S.model, think: !!S.think, sys, tools, hist: this.doc.v.hist, signal: sig,
-        onText: d => { this.partial += d; this.emit('delta', d, this.cid); }, getFiles: m => this.qwenFiles(m) });
+      const go = key => { this.partial = ''; return qwenTurn({ key, model: S.model, think: !!S.think, sys, tools, hist: this.doc.v.hist, signal: sig,
+        onText: d => { this.partial += d; this.emit('delta', d, this.cid); }, getFiles: m => this.qwenFiles(m) }); };
+      /* обновить заранее не вышло — пробуем с тем, что есть: вдруг ещё жив */
+      const key = await this.qwenKey().catch(() => this.qwenToken());
+      try { return await go(key); }
+      catch (e) {
+        /* токен отозвали раньше срока — обновляем и пробуем ещё раз, пока пользователь ничего не увидел */
+        if (e.status !== 401 || sig.aborted || this.partial) throw e;
+        const k2 = await this.qwenKey(true).catch(x => { throw Object.assign(x, { human: 'Токен Qwen истёк, а обновить его не вышло: ' + (x.human || x.message) }); });
+        if (k2 === key) throw e;
+        return go(k2);
+      }
     }
     for (let attempt = 0; ; attempt++) {
       const msgs = this.wire(), hasM = msgs.some(m => Array.isArray(m.content));
@@ -835,6 +844,30 @@ export class Chat extends EventEmitter {
         throw e;
       } finally { clearTimeout(it); }
     }
+  }
+
+  /* ---------- токен Qwen: живёт недолго, обновляем сами (qwen.js → renew) ----------
+     Перед запросом: осталось меньше 2 минут — обновляем. force — обновить сейчас (Qwen ответил 401).
+     Обновить нечем (нет пароля, сайт не продлил) — отдаём старый: модель ответит понятной ошибкой */
+  qwenToken() { const S = this.settings(); return parseToken(isQwen(S.base) ? S.key : (S.provs || {})[QWEN_BASE]?.key || ''); }
+  async qwenKey(force) {
+    const key = this.qwenToken();
+    if (!force) this.qwUsed = Date.now();
+    if (!force && tokenLeft(key) > 120e3) return key;
+    if (!this.qwRenew) this.qwRenew = (async () => {
+      try {
+        const t = await qwenRenew({ token: key, ...(this.settings().qwAuth || {}) });
+        if (t) this.setQwenKey(t);
+        return t || key;
+      } finally { this.qwRenew = null; }
+    })();
+    return this.qwRenew;
+  }
+  setQwenKey(t) {
+    const s = this.set.v, P = s.provs ||= {};
+    if (isQwen(s.base)) s.key = t;
+    P[QWEN_BASE] = { ...(P[QWEN_BASE] || {}), key: t, model: P[QWEN_BASE]?.model || (isQwen(s.base) ? s.model : '') || '' };
+    this.set.save();
   }
 
   /* файлы сообщения для Qwen: загруженные пользователем — с диска (как есть, любой формат), картинки view_image — из вложений */

@@ -175,8 +175,9 @@ function provsOf(S) {
   return P;
 }
 const pubSettings = c => {
-  const S = c.settings(), { key, provs, ...s } = S;
-  return { ...s, hasKey: !!key, maxStepsDef: DEF_SETTINGS.maxSteps,
+  /* qwAuth — вход в Qwen (email и хеш пароля): наружу только email */
+  const S = c.settings(), { key, provs, qwAuth, ...s } = S;
+  return { ...s, hasKey: !!key, maxStepsDef: DEF_SETTINGS.maxSteps, qwEmail: qwAuth?.email || '',
     provs: Object.entries(provsOf(S)).map(([base, p]) => ({ base, model: p.model || '', hasKey: !!p.key })) };
 };
 function putSettings(c, b) {
@@ -187,6 +188,7 @@ function putSettings(c, b) {
     const f = normBase(b.forget);
     delete P[f];
     if (f === prev) s.key = '';
+    if (QW.isQwen(f)) delete s.qwAuth;
     return c.set.save();
   }
   if (steps !== undefined && !(steps >= 1 && steps <= MAX_STEPS)) throw new HttpErr(400, 'Лимит шагов — от 1 до ' + MAX_STEPS);
@@ -197,7 +199,7 @@ function putSettings(c, b) {
   }
   const cur = s.base || DEF_SETTINGS.base, moved = cur !== prev;
   /* «Сбросить всё» стирает ключи всех провайдеров */
-  if (b.clearKey) { s.key = ''; for (const k in P) delete P[k]; }
+  if (b.clearKey) { s.key = ''; for (const k in P) delete P[k]; delete s.qwAuth; }
   /* токен Qwen вставляют как попало (Bearer, cookie, JSON) — храним только сам токен; JWT бывает длинным */
   else if (typeof b.key === 'string' && b.key.trim()) s.key = QW.isQwen(cur) ? QW.parseToken(b.key).slice(0, 8000) : b.key.trim().slice(0, 500);
   else if (moved) s.key = P[cur]?.key || '';
@@ -223,9 +225,10 @@ async function models(c, b) {
   const base = normBase(b.base || S.base);
   if (!/^https?:\/\//i.test(base)) throw new HttpErr(400, 'неверный адрес API');
   const key = String(b.key || '').trim() || provsOf(S)[base]?.key || (base === S.base ? S.key : '');
-  /* Qwen: свой API у chat.qwen.ai — модели, умеют ли размышлять, до какого числа действует токен */
+  /* Qwen: свой API у chat.qwen.ai — модели, умеют ли размышлять, до какого числа действует токен.
+     Токен из поля — как есть; сохранённый — сначала обновляем, если подходит к концу */
   if (QW.isQwen(base)) {
-    try { return await QW.check(key); }
+    try { return { ...await QW.check(String(b.key || '').trim() ? key : await c.qwenKey().catch(() => key)), login: S.qwAuth?.email || '' }; }
     catch (e) { throw new HttpErr(e.status === 401 ? 401 : 502, e.human || e.message, { human: true, ...(e.needKey ? { needKey: true } : {}) }); }
   }
   const auth = key ? { Authorization: 'Bearer ' + key } : {};
@@ -264,6 +267,31 @@ async function models(c, b) {
     }
   }
   return { models: ids.slice(0, 2000), free, needKey: !key && (isOpenRouter(base) || isOllamaCloud(base)) };
+}
+
+/* ---------- Qwen: вход по email и паролю ----------
+   Сервер сам входит на chat.qwen.ai, сохраняет токен и (хешем) пароль — дальше токен обновляется сам, до истечения */
+async function qwenLogin(c, b) {
+  const email = String(b.email || '').trim().slice(0, 200), ph = QW.hashPass(String(b.password || ''));
+  if (!email || !b.password) throw new HttpErr(400, 'Впиши email и пароль от chat.qwen.ai');
+  let token;
+  try { token = await QW.signin(email, ph); } catch (e) { throw new HttpErr(e.status === 401 ? 401 : e.status === 400 ? 400 : 502, e.human || e.message, { human: true }); }
+  const s = c.set.v;
+  s.qwAuth = { email, ph };
+  s.provs = provsOf(c.settings());
+  c.setQwenKey(token);
+  return { ok: true, email, exp: QW.tokenInfo(token).exp * 1000 || 0 };
+}
+/* фоном: у кого Qwen — токен продлеваем заранее (за 5 минут), чтобы он не истёк между сообщениями.
+   Повторный вход по паролю — только по делу (перед запросом), продление сессии — дёшево */
+function qwenKeepAlive() {
+  for (const u of A.listUsers()) {
+    const c = getChat(u), S = c.settings();
+    /* только у тех, кто пользовался Qwen в последние 6 часов: незачем входить в аккаунт круглые сутки */
+    if (!QW.isQwen(S.base) || !S.key || !(Date.now() - (c.qwUsed || 0) < 6 * 3600e3)) continue;
+    const left = QW.tokenLeft(S.key);
+    if (left < 300e3 && left > 20e3) c.qwenKey(true).catch(e => console.warn('qwen: токен', u.name + ':', e.message));
+  }
 }
 
 /* ---------- обновления: что стоит, что нового, как идёт обновление (busy — сколько задач продолжатся после перезапуска) ---------- */
@@ -438,6 +466,10 @@ async function api(req, res, url) {
       if (M === 'PUT') { putSettings(chat, await jbody(req)); return json(res, 200, pubSettings(chat)); }
       break;
     case '/api/models': if (M === 'POST') return json(res, 200, await models(chat, await jbody(req))); break;
+    case '/api/qwen/login':
+      if (M === 'POST') return json(res, 200, await qwenLogin(chat, await jbody(req)));
+      if (M === 'DELETE') { delete chat.set.v.qwAuth; chat.set.save(); return json(res, 200, pubSettings(chat)); }
+      break;
     case '/api/chat': {
       if (M !== 'POST') break;
       const b = await jbody(req, 40 * 2 ** 20);
@@ -705,6 +737,7 @@ export function startServer() {
   for (const u of A.listUsers()) X.warmExt(u);
   loadPage();
   U.initUpdates();
+  setInterval(qwenKeepAlive, +process.env.PERSONALCOMPUTER_QWEN_KEEPALIVE_MS || 60000).unref();
   const srv = http.createServer({ requestTimeout: 0, headersTimeout: 30000 }, handle);
   srv.on('upgrade', upgrade);
   srv.keepAliveTimeout = 65000;

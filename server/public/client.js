@@ -125,6 +125,8 @@ async function api(p, o = {}) {
 }
 const post = (p, json = {}) => api(p, { method: 'POST', json });
 
+/* «Токен в один клик»: chat.qwen.ai вернул нас сюда с токеном после # — забираем его из адреса сразу (в историю браузера он не попадёт) */
+const qwHash = (() => { const m = /[#&]qwen-token=([^&]+)/.exec(location.hash); if (!m) return ''; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} try { return decodeURIComponent(m[1]); } catch (e) { return ''; } })();
 let me = null, es = null, running = false, view = null, busyElse = null, srvSet = null, bubble = null, hideT = 0, connected = false, replaying = false, olderNow = false;
 /* событие журнала → компьютер в шапке (при перерисовке истории — только в его журнал, без реакций; старую историю «Показать раньше» не трогаем) */
 const room = (k, e) => { if (olderNow) return; try { window.personalComputerRoom && personalComputerRoom[k](e, replaying); } catch (x) { console.error(x); } };
@@ -486,6 +488,19 @@ async function started() {
   connect();
   initPane();
   updBoot(true);
+  if (qwHash) qwCatch(qwHash);
+}
+/* токен пришёл из chat.qwen.ai: подтверждение (ссылку с чужим токеном мог подсунуть кто угодно), сохранение, модель из списка */
+async function qwCatch(t) {
+  if (!/^eyJ[\w-]+\.[\w-]+\.[\w-]*$/.test(t) && !/token=/.test(t)) return;
+  if (!await ask('Qwen', 'Пришёл токен с chat.qwen.ai. Подключить этот аккаунт Qwen к Personal Computer? Подтверждай, только если сам только что нажал «Токен в один клик».', null, 'Подключить')) return;
+  try {
+    const QB = 'https://chat.qwen.ai', was = isQw(srvSet && srvSet.base) ? srvSet.model : (provSaved[QB] && provSaved[QB].model) || '';
+    const r = await post('api/models', { base: QB, key: t });
+    srvSet = await api('api/settings', { method: 'PUT', json: { base: QB, key: t, model: r.models.includes(was) ? was : r.models[0] } }); mirror(); save();
+    bt('ok', 'set', srvSet.model);
+    window.__keepForm = false; openSet('ai');
+  } catch (e) { add('e', esc('Токен Qwen не подключился: ' + e.message)); }
 }
 function mirror() {
   if (!srvSet) return;
@@ -590,7 +605,30 @@ function qwThink() {
 }
 mi().addEventListener('input', qwThink); mi().addEventListener('change', qwThink);
 $('#ml').addEventListener('click', () => setTimeout(qwThink));
-const qwDate = ms => new Date(ms).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+/* вход в Qwen по email и паролю: сервер сам получает токен и обновляет его до истечения */
+function qwAcct(email) {
+  $('#c-qin').hidden = !!email; $('#c-qme').hidden = !email;
+  $('#c-qmet').textContent = email ? 'Вход выполнен: ' + email + '. Токен Qwen обновляется сам — вставлять его не нужно.' : '';
+}
+const qst = (t, s) => { const h = $('#c-qst'); h.textContent = t; if (s) h.dataset.s = s; else delete h.dataset.s; };
+$('#c-qlogin').onclick = async () => {
+  const email = $('#c-qmail').value.trim(), password = $('#c-qpass').value;
+  if (!email || !password) { qst('Впиши email и пароль от chat.qwen.ai', 'err'); return; }
+  const b = $('#c-qlogin'); b.disabled = true; qst('Вхожу в Qwen…', 'wait');
+  try {
+    await post('api/qwen/login', { email, password });
+    $('#c-qpass').value = ''; $('#c-key').value = '';
+    srvSet = await api('api/settings'); provSaved = Object.fromEntries((srvSet.provs || []).map(p => [p.base, p])); provOpts();
+    qst('', ''); keyHint(); loadModels();
+  } catch (e) { qst(e.message, 'err'); }
+  finally { b.disabled = false; }
+};
+$('#c-qpass').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('#c-qlogin').click(); } };
+$('#c-qout').onclick = async () => {
+  if (!await ask('Qwen', 'Выйти из Qwen? Email и хеш пароля сотрутся с сервера, токен перестанет обновляться сам.', null, 'Выйти')) return;
+  try { srvSet = await api('api/qwen/login', { method: 'DELETE' }); qwAcct(''); qst('', ''); } catch (e) { qst(e.message, 'err'); }
+};
+const qwDate = ms => ms - Date.now() < 864e5 ? new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : new Date(ms).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 loadModels = async function () {
   const base = $('#c-base').value.trim().replace(/\/+$/, ''), key = $('#c-key').value.trim(), h = $('#mh'), t = ++mt;
   if (!base) { h.textContent = ''; delete h.dataset.s; return; }
@@ -602,12 +640,14 @@ loadModels = async function () {
       mdl = r.models.slice(); qwInfo = Object.fromEntries((r.qwen || []).map(m => [m.id, m]));
       const left = r.exp ? r.exp - Date.now() : 0;
       h.textContent = 'Связь с Qwen есть, моделей: ' + mdl.length + ' — нажми на поле, чтобы выбрать'
-        + (r.exp ? (left < 0 ? '. Токен истёк — вставь новый' : '. Токен действует до ' + qwDate(r.exp) + (left < 3 * 864e5 ? ' — скоро понадобится новый' : '')) : '');
-      h.dataset.s = r.exp && left < 0 ? 'err' : 'ok';
+        + (r.login || !r.exp ? '' : left < 0 ? '. Токен истёк — войди в Qwen выше или возьми новый' : '. Токен действует до ' + qwDate(r.exp) + (left < 36e5 ? ' — он короткий: войди по email и паролю, и он будет обновляться сам' : ''));
+      h.dataset.s = r.exp && left < 0 && !r.login ? 'err' : 'ok';
       const cur = mi().value.trim(); if (mdl.length && (!cur || !mdl.includes(cur))) mi().value = mdl[0];
-      provNew = false; qwThink();
+      provNew = false; qwThink(); qwAcct(r.login);
+      if (r.login) h.textContent += '. Вход: ' + r.login + ' — токен обновляется сам';
     } catch (e) {
       if (t !== mt) return; mdl = [];
+      qwAcct(srvSet && srvSet.qwEmail);
       if (e.j && e.j.needKey && !(provSaved[base] && provSaved[base].hasKey)) { h.textContent = 'Вставь токен Qwen — после этого загружу список моделей'; delete h.dataset.s; return; }
       h.textContent = e.message; h.dataset.s = 'err';
     }
