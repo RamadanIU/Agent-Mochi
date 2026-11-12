@@ -599,6 +599,9 @@ body{background:var(--bg) conic-gradient(var(--chk) 25%,transparent 0 50%,var(--
 .m.fz:not(.np) .mfold{animation:ipop .4s var(--ezb)}
 @media(prefers-reduced-motion:reduce){.m.fa .mb,.mfold svg{transition:none}}
 .snote{box-shadow:var(--sh2),4px 4px 0 0 var(--dsh)}
+/* размышления модели: свёрнутый блок над ответом */
+.rz{margin:0 0 8px;font-size:.85em;opacity:.8}.rz summary{cursor:pointer;user-select:none}.rzb{white-space:pre-wrap;margin-top:6px;padding-left:10px;border-left:2px solid currentColor;max-height:320px;overflow:auto}
+.rzn{text-align:left}.rzn .rz{margin:0}
 .day span{box-shadow:var(--sh2),3px 3px 0 0 var(--dsh)}
 .fc{box-shadow:var(--sh4),8px 8px 0 0 var(--dsh)}
 .fc .fb button{box-shadow:var(--sh4),var(--bevA2);transition:transform .15s var(--ez),background-color .2s}
@@ -1778,6 +1781,7 @@ const tick=setInterval(paint,100);paint();
     </div>
     <div class="grp" data-i="abil"><h3 class="gh">Возможности</h3>
     <label class="sw" id="f-think" data-help="think" hidden><span>Размышление<small>Думает перед ответом: умнее, но медленнее</small></span><button class="qm" type="button" data-help="think" aria-label="Подробнее">?</button><input type="checkbox" role="switch" id="c-think"></label>
+    <label class="f" id="f-effort" hidden><span class="fl">Уровень размышления<button class="qm" type="button" data-help="effort" aria-label="Подробнее">?</button></span><select id="c-effort"><option value="">Как решит модель</option></select></label>
     <label class="sw" id="f-vis" data-help="vis"><span>Показывать файлы модели<small>Картинки и PDF — прямо в модель</small></span><button class="qm" type="button" data-help="vis" aria-label="Подробнее">?</button><input type="checkbox" role="switch" id="c-vis"></label>
     </div>
     <div class="grp" data-i="steps"><h3 class="gh">Шаги агента</h3>
@@ -4335,7 +4339,7 @@ $('#ask-ok').onclick=()=>$('#ask').close('ok');$('#ask-no').onclick=()=>$('#ask'
 $('#ask-i').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#ask').close('ok')}};
 $('#ask').addEventListener('click',e=>{if(e.target===$('#ask'))$('#ask').close('')});
 /* свой Ollama и другие OpenAI-совместимые серверы — через «Другой» */
-const PRESETS={OpenAI:'https://api.openai.com/v1','Qwen (chat.qwen.ai)':'https://chat.qwen.ai','DeepSeek (chat.deepseek.com)':'https://chat.deepseek.com',OpenRouter:'https://openrouter.ai/api/v1','Ollama Cloud':'https://ollama.com/v1',JustWoker:'https://api.justwoker.icu/v1','LM Studio':'http://localhost:1234/v1'};
+const PRESETS={OpenAI:'https://api.openai.com/v1',Coarena:'https://coarena.ai/api/v1','Qwen (chat.qwen.ai)':'https://chat.qwen.ai','DeepSeek (chat.deepseek.com)':'https://chat.deepseek.com',OpenRouter:'https://openrouter.ai/api/v1','Ollama Cloud':'https://ollama.com/v1',JustWoker:'https://api.justwoker.icu/v1','LM Studio':'http://localhost:1234/v1'};
 const LOCAL=['LM Studio'],CUSTOM='Другой';
 const prov=$('#c-prov');
 /* сохранённые на сервере провайдеры: адрес API → {model, hasKey} (заполняет client.js; сами ключи в браузер не приходят).
@@ -4355,6 +4359,8 @@ const F={base:'#c-base',key:'#c-key',model:'#c-model',sys:'#c-sys'};
 /* Qwen (chat.qwen.ai) и DeepSeek (chat.deepseek.com): вместо ключа — аккаунт сайта (карточка #wa), из настроек — модель и размышление */
 const isQw=b=>{try{return new URL(nb(b)).hostname==='chat.qwen.ai'}catch(e){return false}};
 const isDs=b=>{try{return new URL(nb(b)).hostname==='chat.deepseek.com'}catch(e){return false}};
+/* Coarena (coarena.ai): обычный ключ coa_…, но у каждой модели свои уровни размышления — выбор под моделью */
+const isCo=b=>{try{return /(^|\.)coarena\.ai$/i.test(new URL(nb(b)).hostname)}catch(e){return false}};
 /* что экран знает о веб-чате: имя, сайт, где на сайте лежит токен, ручная команда, есть ли вход по паролю */
 const WEB={qw:{k:'qw',name:'Qwen',site:'chat.qwen.ai',url:'https://chat.qwen.ai',hash:'qwen-token',take:'localStorage.token',manual:'copy(localStorage.token)',pw:true},
   ds:{k:'ds',name:'DeepSeek',site:'chat.deepseek.com',url:'https://chat.deepseek.com',hash:'deepseek-token',take:'(()=>{try{return JSON.parse(localStorage.userToken).value}catch(e){return localStorage.userToken}})()',manual:'copy(JSON.parse(localStorage.userToken).value)',pw:true,
@@ -4368,7 +4374,7 @@ const bmHref=w=>'javascript:void('+encodeURIComponent(webCmd(w))+')';
 /* подпись под «Размышлением» — коротко, подробности под «?» (client.js уточняет её по выбранной модели) */
 const THINK_SUB='Думает перед ответом: умнее, но медленнее';
 function keyHint(){const b=nb($('#c-base').value),sv=provSaved[b],w=webOf(b),wa=$('#wa');
-  $('#c-key').placeholder=sv&&sv.hasKey?'сохранён на сервере · пусто = не менять':w?'вставь токен с '+w.site:'sk-…';
+  $('#c-key').placeholder=sv&&sv.hasKey?'сохранён на сервере · пусто = не менять':w?'вставь токен с '+w.site:isCo(b)?'coa_… (coarena.ai/account/api)':'sk-…';
   $('#f-key').firstChild.nodeValue=w?'Токен '+w.name:'API ключ';$('#c-forget').hidden=!sv||!!w;
   /* у веб-чата поле токена живёт в папке «Токен вручную», у остальных провайдеров — на своём месте */
   const fk=$('#f-key');if(w){if(fk.parentNode!==$('#wa-tokb'))$('#wa-tokb').append(fk)}else if(fk.previousElementSibling!==$('#f-key-home'))$('#f-key-home').after(fk);
@@ -4377,14 +4383,16 @@ function keyHint(){const b=nb($('#c-base').value),sv=provSaved[b],w=webOf(b),wa=
   if(w){$('#wa-n').textContent='Аккаунт '+w.name;$('#wa-pw').hidden=!w.pw;
     /* DeepSeek пускает и по телефону */
     const ds=w===WEB.ds,q=$('#c-qmail');$('#f-qmail').firstChild.nodeValue=ds?'Email или телефон':'Email';q.type=ds?'text':'email';q.inputMode=ds?'email':'';q.placeholder=ds?'you@mail.com или +7 900 000-00-00':'you@mail.com'}
-  $('#f-think').hidden=!w;$('#f-vis').hidden=!!w;
+  $('#f-think').hidden=!w;$('#f-vis').hidden=!!w;$('#f-effort').hidden=!isCo(b);
   $('#f-think').querySelector('span').firstChild.nodeValue=isDs(b)?'DeepThink':'Размышление'}
 function syncSet(){const p=prov.value;$('#f-steps').hidden=!$('#c-lim').checked;$('#sh').hidden=true;$('#f-base').hidden=!!PRESETS[p];$('#f-key').hidden=LOCAL.includes(p);keyHint()}
 function fill(s){
   for(const k in F)$(F[k]).value=s[k]||'';
   const b=nb(s.base);prov.value=Object.keys(PRESETS).find(k=>PRESETS[k]===b)||(provSaved[b]?b:CUSTOM);
-  $('#c-sfx').checked=s.sfx!==false;$('#c-room').checked=s.room!==false;$('#c-vol').value=Number.isFinite(+s.vol)&&s.vol!==''?s.vol:60;$('#c-crt').value=s.crt||'';$('#c-key').type='password';$('#c-eye').setAttribute('aria-pressed','false');$('#c-vis').checked=s.vis!==false;$('#c-think').checked=!!s.think;$('#c-lim').checked=s.stepLimit!==false;$('#c-steps').value=s.maxSteps||DEF.maxSteps;$('#c-tts').checked=s.tts!==false;$('#c-vlang').value=s.vlang||(window.personalComputerGuess?personalComputerGuess():'ru-RU');
+  $('#c-sfx').checked=s.sfx!==false;$('#c-room').checked=s.room!==false;$('#c-vol').value=Number.isFinite(+s.vol)&&s.vol!==''?s.vol:60;$('#c-crt').value=s.crt||'';$('#c-key').type='password';$('#c-eye').setAttribute('aria-pressed','false');$('#c-vis').checked=s.vis!==false;$('#c-think').checked=!!s.think;effortVal=s.effort||'';window.coEffort&&coEffort();$('#c-lim').checked=s.stepLimit!==false;$('#c-steps').value=s.maxSteps||DEF.maxSteps;$('#c-tts').checked=s.tts!==false;$('#c-vlang').value=s.vlang||(window.personalComputerGuess?personalComputerGuess():'ru-RU');
   syncSet()}
+/* выбранный уровень размышления Coarena: список под моделью строит client.js (coEffort) — у каждой модели свои уровни */
+let effortVal='';
 /* сменили провайдера — модель из старого списка там, скорее всего, не найдётся: loadModels подберёт новую */
 let provNew=false;
 /* сохранённый провайдер — подставляем его последнюю модель, ключ сервер возьмёт свой; «Другой» — пустой адрес для нового */
@@ -4428,6 +4436,10 @@ function helpOf(k){const w=webOf($('#c-base').value)||WEB.qw,n=w.name,s=w.site,d
     return{t:isDs($('#c-base').value)?'DeepThink':'Размышление',h:(m&&m.must?'<p>Эта модель всегда сначала думает — выключить нельзя.</p>':m&&!m.think?'<p>Эта модель не умеет размышлять — отвечает сразу.</p>':'')
       +'<p>Модель сначала думает, потом отвечает: умнее, но медленнее.'+(ds?' Размышления у DeepSeek съедают часть длины ответа; если ответ оборвётся, Personal Computer сам попросит его продолжить.':'')+'</p>'
       +'<p>'+(ds?'Поиск в интернете самого DeepSeek выключен':'Поиск, код и картинки самого Qwen выключены')+' — у Personal Computer свои инструменты: сервер, файлы, MCP.</p>'}}
+  if(k==='effort'){const m=window.coInfoOf?coInfoOf():null;
+    return{t:'Уровень размышления',h:'<p>Модели Coarena сначала думают, потом отвечают. Чем выше уровень, тем дольше думает модель и тем больше тратится дневного лимита — зато сложные задачи она решает лучше.</p>'
+      +(m&&m.efforts&&m.efforts.length?'<p>У '+esc(m.name||m.id)+' уровни: '+m.efforts.map(e=>esc((window.coNames||{})[e]||e)).join(', ')+'.</p>':'')
+      +'<p>«Как решит модель» — уровень по умолчанию у самой модели. Если выбранного уровня у модели нет, берётся ближайший.</p><p>Размышления видны в чате свёрнутым блоком «Размышления» над ответом. Если модель потратит на них весь ответ, Personal Computer сам повторит запрос уровнем ниже.</p>'}}
   if(k==='vis')return{t:'Показывать файлы модели',h:'<p>Картинки и PDF из твоих сообщений уходят прямо в модель — она видит их сама.</p><p>Выключи, если модель не умеет их читать: файлы всё равно лягут на сервер в inbox/, и Personal Computer откроет их своими инструментами.</p>'};
   if(k==='lim')return{t:'Ограничение шагов',h:'<p>Personal Computer останавливается после стольких шагов подряд, чтобы не зациклиться, — продолжить можно кнопкой «Повторить».</p><p>Выключи — будет работать до конца задачи или до «Стоп».</p>'};
   return null}
