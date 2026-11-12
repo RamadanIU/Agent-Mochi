@@ -848,6 +848,7 @@ case "${1:-help}" in
     if [ "$INIT" = systemd ]; then shift; exec journalctl -u 'personalcomputer*' -n 200 "${@:--f}"; else exec tail -n 200 -f /var/log/personalcomputer/*.log; fi ;;
   update) need_root "$@"; exec "$APP/bin/personalcomputer-update" cli ;;
   root) need_root "$@"; exec "$APP/bin/personalcomputer-access" cli "${2:-status}" ;;
+  browser) [ "${2:-install}" = status ] || need_root "$@"; exec "$APP/bin/personalcomputer-browser" "${2:-install}" ;;
   uninstall) need_root "$@"; shift; curl -fsSL "https://raw.githubusercontent.com/$REPO/$REF/install.sh" | bash -s -- --uninstall "$@" ;;
   status)
     for s in $SERVICES; do
@@ -867,6 +868,7 @@ personalcomputer status | logs     — состояние и журнал
 personalcomputer start | stop | restart
 personalcomputer update            — обновить Personal Computer (данные сохраняются; то же — кнопка в настройках → Сервер)
 personalcomputer root [on|off]     — полный доступ агента: root через sudo без пароля (то же — настройки → Сервер)
+personalcomputer browser [status|remove] — браузер для окна проверки DeepSeek («я не робот», вход по паролю)
 personalcomputer uninstall [--purge]
 Коротко — pc: например, sudo pc root on
 H

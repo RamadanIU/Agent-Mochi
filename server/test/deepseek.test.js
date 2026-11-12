@@ -112,7 +112,7 @@ before(async () => {
     res.writeHead(404); res.end('{}');
   });
   await new Promise(ok => srv.listen(0, '127.0.0.1', ok));
-  m = await startPersonalComputer({ PERSONALCOMPUTER_DEEPSEEK_URL: 'http://127.0.0.1:' + srv.address().port, PERSONALCOMPUTER_DEEPSEEK_GAP_MS: '0' });
+  m = await startPersonalComputer({ PERSONALCOMPUTER_DEEPSEEK_URL: 'http://127.0.0.1:' + srv.address().port, PERSONALCOMPUTER_DEEPSEEK_GAP_MS: '0', PERSONALCOMPUTER_DEEPSEEK_RPM: '0' });
 });
 after(async () => { await m?.stop(); srv?.close(); });
 

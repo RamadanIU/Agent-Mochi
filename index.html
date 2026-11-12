@@ -1758,13 +1758,13 @@ const tick=setInterval(paint,100);paint();
         <span class="wa-who"><b id="wa-who"></b><small id="wa-sub"></small></span>
         <span class="wa-act"><button class="wl" id="wa-swap" type="button" aria-expanded="false">Другой аккаунт</button><button class="wl wd" id="wa-out" type="button">Отключить</button></span>
       </div>
-      <p class="wa-msg" id="wa-msg" hidden></p></div>
+      <p class="wa-msg" id="wa-msg" hidden></p><div class="wa-do" id="wa-do" hidden></div></div>
       <div class="wa-ways" id="wa-ways">
         <details class="fold" data-k="pw" id="wa-pw"><summary><span class="ft">Вход по email и паролю</span><button class="qm" type="button" data-help="pw" aria-label="Как это работает">?</button></summary><div class="fb">
-          <label class="f">Email<input id="c-qmail" type="email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="you@mail.com"></label>
+          <label class="f" id="f-qmail">Email<input id="c-qmail" type="email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="you@mail.com"></label>
           <label class="f">Пароль<input id="c-qpass" type="password" autocomplete="current-password"></label>
           <button class="pbtn" id="c-qlogin" type="button"><i class="pi"></i><span>Войти</span></button>
-          <small class="wst" id="c-qst"></small>
+          <small class="wst" id="c-qst"></small><div class="wa-do" id="c-qdo" hidden></div>
         </div></details>
         <div class="wa-g"><button class="pbtn gbtn" id="c-gin" type="button"><i class="gi" aria-hidden="true"></i><span>Войти через Google</span></button><button class="qm" type="button" data-help="google" aria-label="Как войти через Google">?</button></div>
         <small class="wst" id="c-gst"></small>
@@ -4357,11 +4357,13 @@ const isQw=b=>{try{return new URL(nb(b)).hostname==='chat.qwen.ai'}catch(e){retu
 const isDs=b=>{try{return new URL(nb(b)).hostname==='chat.deepseek.com'}catch(e){return false}};
 /* что экран знает о веб-чате: имя, сайт, где на сайте лежит токен, ручная команда, есть ли вход по паролю */
 const WEB={qw:{k:'qw',name:'Qwen',site:'chat.qwen.ai',url:'https://chat.qwen.ai',hash:'qwen-token',take:'localStorage.token',manual:'copy(localStorage.token)',pw:true},
-  ds:{k:'ds',name:'DeepSeek',site:'chat.deepseek.com',url:'https://chat.deepseek.com',hash:'deepseek-token',take:'(()=>{try{return JSON.parse(localStorage.userToken).value}catch(e){return localStorage.userToken}})()',manual:'copy(JSON.parse(localStorage.userToken).value)',pw:false}};
+  ds:{k:'ds',name:'DeepSeek',site:'chat.deepseek.com',url:'https://chat.deepseek.com',hash:'deepseek-token',take:'(()=>{try{return JSON.parse(localStorage.userToken).value}catch(e){return localStorage.userToken}})()',manual:'copy(JSON.parse(localStorage.userToken).value)',pw:true,
+    /* вместе с токеном — отпечаток устройства (SDK защиты сайта) и User-Agent: по ним сайт узнаёт «твой» браузер при входе по паролю */
+    more:"+'&deepseek-device='+encodeURIComponent((()=>{try{const d=window.SMSdk&&SMSdk.getDeviceId&&SMSdk.getDeviceId();return typeof d==='string'?d:''}catch(e){return ''}})())+'&deepseek-ua='+encodeURIComponent(navigator.userAgent)"}};
 const webOf=b=>isQw(b)?WEB.qw:isDs(b)?WEB.ds:null;
 /* «Войти через Google»: команда в консоли сайта открывает это приложение с токеном после # (на сервер не уходит),
    client.js его подхватывает и сохраняет с подтверждением. Закладка — тот же код как javascript:-ссылка */
-const webCmd=w=>"(t=>t?location.href='"+location.origin+location.pathname+"#"+w.hash+"='+encodeURIComponent(t):alert('Сначала войди в "+w.site+"'))("+w.take+")";
+const webCmd=w=>"(t=>t?location.href='"+location.origin+location.pathname+"#"+w.hash+"='+encodeURIComponent(t)"+(w.more||'')+":alert('Сначала войди в "+w.site+"'))("+w.take+")";
 const bmHref=w=>'javascript:void('+encodeURIComponent(webCmd(w))+')';
 /* подпись под «Размышлением» — коротко, подробности под «?» (client.js уточняет её по выбранной модели) */
 const THINK_SUB='Думает перед ответом: умнее, но медленнее';
@@ -4370,9 +4372,11 @@ function keyHint(){const b=nb($('#c-base').value),sv=provSaved[b],w=webOf(b),wa=
   $('#f-key').firstChild.nodeValue=w?'Токен '+w.name:'API ключ';$('#c-forget').hidden=!sv||!!w;
   /* у веб-чата поле токена живёт в папке «Токен вручную», у остальных провайдеров — на своём месте */
   const fk=$('#f-key');if(w){if(fk.parentNode!==$('#wa-tokb'))$('#wa-tokb').append(fk)}else if(fk.previousElementSibling!==$('#f-key-home'))$('#f-key-home').after(fk);
-  if(wa.dataset.p!==(w?w.k:'')){wa.dataset.p=w?w.k:'';wa.classList.remove('swap');$('#wa-swap').setAttribute('aria-expanded','false');$('#c-gst').textContent='';$('#c-qst').textContent=''}
+  if(wa.dataset.p!==(w?w.k:'')){wa.dataset.p=w?w.k:'';wa.classList.remove('swap');$('#wa-swap').setAttribute('aria-expanded','false');$('#c-gst').textContent='';$('#c-qst').textContent='';$('#c-qdo').hidden=true}
   wa.hidden=!w;$('#mh').hidden=!!w;$('#f-model').hidden=isDs(b);
-  if(w){$('#wa-n').textContent='Аккаунт '+w.name;$('#wa-pw').hidden=!w.pw}
+  if(w){$('#wa-n').textContent='Аккаунт '+w.name;$('#wa-pw').hidden=!w.pw;
+    /* DeepSeek пускает и по телефону */
+    const ds=w===WEB.ds,q=$('#c-qmail');$('#f-qmail').firstChild.nodeValue=ds?'Email или телефон':'Email';q.type=ds?'text':'email';q.inputMode=ds?'email':'';q.placeholder=ds?'you@mail.com или +7 900 000-00-00':'you@mail.com'}
   $('#f-think').hidden=!w;$('#f-vis').hidden=!!w;
   $('#f-think').querySelector('span').firstChild.nodeValue=isDs(b)?'DeepThink':'Размышление'}
 function syncSet(){const p=prov.value;$('#f-steps').hidden=!$('#c-lim').checked;$('#sh').hidden=true;$('#f-base').hidden=!!PRESETS[p];$('#f-key').hidden=LOCAL.includes(p);keyHint()}
@@ -4409,11 +4413,14 @@ function helpOf(k){const w=webOf($('#c-base').value)||WEB.qw,n=w.name,s=w.site,d
   const steps='<ol><li>Нажми «Войти через Google» — откроется '+s+' (войди там, если нужно), а команда уже скопирована.</li><li>На '+s+' нажми F12, открой вкладку «Console», вставь команду (Ctrl+V) и нажми Enter. Chrome при первой вставке попросит набрать <code>allow pasting</code> — набери и вставь ещё раз.</li><li>Вкладка сама вернётся сюда — нажми «Подключить».</li></ol>';
   if(k==='wa')return{t:'Аккаунт '+n,h:(waNote?'<p class="hbad">'+esc(waNote)+'</p>':'')
     +'<p>Personal Computer говорит с '+s+' от имени твоего аккаунта: модели бесплатно, запросы идут с твоего сервера прямо на сайт — без сторонних прокси.</p>'
-    +(ds?'<p>Подключить — «Войти через Google» (подходит для любого входа на сайте: Google, почта, телефон) или токеном вручную. Вход по паролю прямо отсюда DeepSeek не пускает: сайт проверяет устройство.</p><p>Токен сайта со временем истекает — бывает, через несколько часов. Тогда в чате появится просьба подключить заново: это пара секунд.</p>'
+    +(ds?'<p>Подключить можно по email (или телефону) и паролю — тогда токен обновляется сам, — через «Войти через Google» (для входа через Google) или токеном вручную.</p><p>Запросы идут так же, как из одной вкладки браузера: тот же «браузер», cookies сайта, без спешки. Если защита сайта всё же попросит подтвердить, что ты не робот, в чате появится «Пройти проверку»: откроется окно с настоящей страницей сайта, ты пройдёшь проверку — и работа продолжится сама.</p>'
       :'<p>Подключить можно по email и паролю — тогда токен обновляется сам, — через «Войти через Google» (для входа через Google или GitHub) или токеном вручную.</p>')};
-  if(k==='pw')return{t:'Вход по email и паролю',h:'<p>Сервер сам войдёт на '+s+', получит токен и будет обновлять его до истечения — вставлять токен не придётся.</p><p>Пароль не хранится: на твоём сервере лежит только его хеш SHA-256 — именно его и принимает '+s+'. «Отключить» стирает и его.</p><p>Входишь через Google или GitHub? Пароля у такого аккаунта нет — нажми «Войти через Google».</p>'};
+  if(k==='pw')return ds?{t:'Вход по email и паролю',h:'<p>Сервер сам войдёт на '+s+' и сохранит токен, а когда тот истечёт — войдёт заново: подключать аккаунт снова не придётся. Можно и по телефону: +код страны и номер.</p><p>'+s+' принимает только сам пароль, поэтому он лежит на твоём сервере зашифрованным (AES-256) и никуда, кроме '+s+', не уходит. «Отключить» стирает его.</p><p>Вход по паролю сайт пускает только из браузера, который знает. Если устройство незнакомое, Personal Computer возьмёт отпечаток из браузера на сервере, а не выйдет — попросит один раз войти в окне DeepSeek: там настоящая страница сайта.</p><p>Входишь только через Google? Пароля у такого аккаунта нет — нажми «Войти через Google».</p>'}
+    :{t:'Вход по email и паролю',h:'<p>Сервер сам войдёт на '+s+', получит токен и будет обновлять его до истечения — вставлять токен не придётся.</p><p>Пароль не хранится: на твоём сервере лежит только его хеш SHA-256 — именно его и принимает '+s+'. «Отключить» стирает и его.</p><p>Входишь через Google или GitHub? Пароля у такого аккаунта нет — нажми «Войти через Google».</p>'};
+  if(k==='check')return{t:'Проверка «я не робот»',h:'<p>Защита '+WEB.ds.site+' иногда просит доказать, что запросы шлёт человек. Personal Computer её не обходит: он открывает сайт в браузере на твоём сервере — с тем же адресом и cookies, что у запросов модели, — и показывает его экран в окне. Проверку проходишь ты сам, а сайт выдаёт отметку, с которой пускает дальше.</p><p>Пока проверка не пройдена, задача ждёт и сама пробует снова через 5, 15 и 30 минут. После проверки запросы ещё какое-то время идут реже — чтобы защита успокоилась.</p><p>Если проверка нужна постоянно, дело обычно в адресе сервера: включи прокси с «домашним» адресом в настройках → Сервер → «Прокси».</p>'};
   if(k==='google')return{t:'Войти через Google',h:'<p>'+(ds?'Подходит для любого входа на '+s+' — через Google, почту или телефон.':'Для аккаунтов, которые входят на '+s+' через Google или GitHub.')+' С компьютера:</p>'+steps
     +'<p>Без консоли: один раз перетащи эту ссылку на панель закладок, а потом просто нажимай её на '+s+':</p><p><a class="hbm" draggable="true" href="'+bmHref(w)+'">Токен '+n+' в Personal Computer</a></p>'
+    +(ds?'<p>Вместе с токеном придёт отпечаток этого браузера — после этого '+s+' пустит и вход по паролю отсюда.</p>':'')
     +(touchUI()?'<p class="hnote">С телефона консоли нет — подключи аккаунт с компьютера: токен сохранится на сервере и будет работать отовсюду.</p>':'<p class="hnote">Токен приходит после # в адресе и в логи сервера не попадает; сохранится только после твоего подтверждения.</p>')};
   if(k==='tok')return{t:'Токен вручную',h:'<p>На '+s+' нажми F12, открой вкладку «Console» и выполни команду — токен окажется в буфере обмена:</p>'+cmdBox(w.manual)
     +'<p>Вставь его в поле «Токен '+n+'» и нажми «Сохранить». Подойдёт и с «Bearer»'+(ds?', и целиком JSON из localStorage.userToken.':', и строкой cookie.')+'</p>'};
