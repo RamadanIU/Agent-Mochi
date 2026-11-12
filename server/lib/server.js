@@ -361,7 +361,7 @@ async function kiroSave(c, token, auth) {
 }
 async function kiroLogin(c, b) {
   const how = String(b.how || '');
-  if (!['google', 'github', 'builder'].includes(how)) throw new HttpErr(400, 'Неизвестный способ входа');
+  if (!['google', 'github', 'email', 'builder'].includes(how)) throw new HttpErr(400, 'Неизвестный способ входа');
   try { return await KR.loginStart(c.u.id, how, (t, d) => kiroSave(c, t.access, KR.authFrom(t, d))); }
   catch (e) { throw new HttpErr(e.status === 400 ? 400 : 502, e.human || e.message, { human: true }); }
 }

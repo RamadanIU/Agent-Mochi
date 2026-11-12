@@ -13,7 +13,7 @@ const MODELS = [
   { modelId: 'glm-5', modelName: 'GLM-5', rateMultiplier: 0, supportedInputTypes: ['TEXT'] },
 ];
 let m, srv, url;
-const S = { gen: [], refresh: 0, polls: 0, oidcPolls: 0, script: [], access: 'aoaACCESS1', gone: false };
+const S = { gen: [], refresh: 0, polls: 0, oidcPolls: 0, script: [], access: 'aoaACCESS1', gone: false, ver: '2.0.0', need: '', providers: [] };
 
 before(async () => {
   srv = http.createServer(async (q, s) => {
@@ -22,6 +22,9 @@ before(async () => {
     const json = (st, o) => { s.writeHead(st, { 'content-type': 'application/json' }); s.end(JSON.stringify(o)); };
     const authed = () => q.headers.authorization === 'Bearer ' + S.access;
     /* вход через Google/GitHub: первый опрос — «ещё нет», второй — вошёл */
+    /* файл обновлений Kiro IDE: отсюда сервер узнаёт, какая версия сейчас свежая */
+    if (p === '/meta.json') return json(200, { currentRelease: S.ver, releases: [{ version: S.ver }] });
+    if (p === '/oauth/device/authorization') S.providers.push(j.loginProvider);
     if (p === '/oauth/device/authorization') return json(200, { deviceCode: 'DC-' + j.loginProvider, userCode: 'ABCD-EFGH', verificationUri: 'https://app.kiro.dev/account/device', verificationUriComplete: 'https://app.kiro.dev/account/device?user_code=ABCD-EFGH&login_provider=' + j.loginProvider, expiresInMilliseconds: 300000, intervalInMilliseconds: 1000 });
     if (p === '/oauth/device/poll') {
       if (j.clientId !== 'kiro-cli') return json(400, { message: 'bad client' });
@@ -54,6 +57,8 @@ before(async () => {
       S.gen.push({ body: j, auth: q.headers.authorization, ua: q.headers['user-agent'] });
       if (step.expire) { S.access += 'X'; }
       if (!authed()) return json(403, { message: 'The bearer token included in the request is invalid.', reason: null });
+      /* как у настоящего Kiro: старой версии IDE — отказ */
+      if (S.need && !String(q.headers['user-agent']).includes('KiroIDE-' + S.need + '-')) { S.script.unshift(step); return json(400, { message: 'This version of Kiro is no longer supported. Please update to the latest version of Kiro to continue.', reason: null }); }
       if (step.err) return json(step.err, { message: step.msg || 'x', reason: step.reason || null });
       s.writeHead(200, { 'content-type': 'application/vnd.amazon.eventstream' });
       const fr = [];
@@ -71,7 +76,7 @@ before(async () => {
   });
   await new Promise(ok => srv.listen(0, '127.0.0.1', ok));
   url = 'http://127.0.0.1:' + srv.address().port;
-  m = await startPersonalComputer({ PERSONALCOMPUTER_KIRO_AUTH_URL: url, PERSONALCOMPUTER_KIRO_OIDC_URL: url, PERSONALCOMPUTER_KIRO_API_URL: url, PERSONALCOMPUTER_KIRO_Q_URL: url });
+  m = await startPersonalComputer({ PERSONALCOMPUTER_KIRO_AUTH_URL: url, PERSONALCOMPUTER_KIRO_OIDC_URL: url, PERSONALCOMPUTER_KIRO_API_URL: url, PERSONALCOMPUTER_KIRO_Q_URL: url, PERSONALCOMPUTER_KIRO_VERSION_URL: url + '/meta.json' });
 });
 after(async () => { await m?.stop(); srv?.close(); });
 
@@ -145,7 +150,7 @@ test('чат: родные инструменты, размышление с у�
   assert.equal(S.gen.length, 2);
   const [b0, b1] = S.gen.map(x => x.body);
   assert.equal(S.gen[0].auth, 'Bearer ' + S.access);
-  assert.match(S.gen[0].ua, /KiroIDE-/);
+  assert.match(S.gen[0].ua, /KiroIDE-2\.0\.0-[0-9a-f]{64}$/, 'версия Kiro IDE — свежая, из файла обновлений');
   assert.equal(b0.profileArn, ARN);
   const cm0 = b0.conversationState.currentMessage.userInputMessage;
   assert.equal(cm0.modelId, 'claude-sonnet-5');
@@ -221,4 +226,35 @@ test('AWS Builder ID и «токен вручную»; «Отключить» с
   const st = (await c.json('/api/settings', undefined, 'GET')).j;
   assert.equal(st.krLogin, null);
   assert.ok(!st.provs.some(p => p.base === KB));
+});
+
+test('Kiro сказал «версия устарела» — сервер узнаёт свежую версию и повторяет; не помогло — объясняем, что делать', async () => {
+  const c = await registered(m, 'kr6');
+  await loginGoogle(c);
+  await c.json('/api/settings', { base: KB, model: 'claude-sonnet-4.5', think: false }, 'PUT');
+  S.gen.length = 0; S.ver = '3.1.0'; S.need = '3.1.0';
+  S.script = [{ text: 'Ответ новой версии' }];
+  let done = c.events(evs => logOf(evs).some(e => (e.kind === 'assistant' && e.text === 'Ответ новой версии') || e.kind === 'error'), 30000);
+  await c.json('/api/chat', { text: 'привет' });
+  const e = logOf(await done).find(x => x.kind === 'error');
+  assert.equal(e, undefined, e?.text);
+  assert.match(S.gen.at(-1).ua, /KiroIDE-3\.1\.0-/);
+  S.need = '9.0.0';
+  S.script = [{ text: 'не дойдёт' }];
+  done = c.events(evs => logOf(evs).some(x => x.kind === 'error'), 30000);
+  await c.json('/api/chat', { text: 'ещё' });
+  assert.match(logOf(await done).find(x => x.kind === 'error').text, /Обнови Personal Computer/);
+  S.need = ''; S.script = [];
+});
+
+test('вход по email — аккаунт Kiro (Cognito) тем же окном', async () => {
+  const c = await registered(m, 'kr7');
+  let r = await c.json('/api/kiro/login', { how: 'email' });
+  assert.equal(r.status, 200, JSON.stringify(r.j));
+  assert.match(r.j.url, /login_provider=Cognito/);
+  assert.equal(S.providers.at(-1), 'Cognito');
+  for (let i = 0; i < 60 && r.j.state !== 'ok'; i++) { await sleep(200); r = await c.json('/api/kiro/login', undefined, 'GET'); }
+  assert.equal(r.j.state, 'ok', r.j.msg);
+  assert.equal((await c.json('/api/settings', undefined, 'GET')).j.krLogin.how, 'email');
+  assert.equal((await c.json('/api/kiro/login', { how: 'bogus' })).status, 400);
 });

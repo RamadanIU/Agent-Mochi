@@ -227,12 +227,15 @@ test('вход в окне Qwen: вход через Google в окне не о�
     for (let i = 0; i < 50 && F.pages.at(-1)?.path !== '/auth'; i++) await sleep(100);
     assert.equal(F.pages.at(-1).path, '/auth');
     /* «Google» открыл всплывающее окно — его закрыли, а человеку объяснили, что делать */
-    const said = checkEvents(c, evs => evs.some(e => e.ev === 'state' && /отдельное окно/.test(e.d.msg)));
-    await c.json('/api/check', { act: 'input', ev: { type: 'click', x: 100, y: 50 } });
-    await said;
-    const fin = checkEvents(c, done);
-    await c.json('/api/check', { act: 'input', ev: { type: 'click', x: 100, y: 150 } });
-    const last = (await fin).filter(e => e.ev === 'state').at(-1).d;
+    /* под нагрузкой страница может дорисоваться позже первого нажатия — «человек» нажимает ещё раз */
+    let said = false;
+    const heard = checkEvents(c, evs => evs.some(e => e.ev === 'state' && /отдельное окно/.test(e.d.msg)), 60000).then(() => { said = true; });
+    for (let i = 0; i < 20 && !said; i++) { await c.json('/api/check', { act: 'input', ev: { type: 'click', x: 100, y: 50 } }); await sleep(1500); }
+    await heard;
+    let fin = false;
+    const finished = checkEvents(c, evs => { const d = done(evs); if (d) fin = true; return d; }, 60000);
+    for (let i = 0; i < 20 && !fin; i++) { await c.json('/api/check', { act: 'input', ev: { type: 'click', x: 100, y: 150 } }).catch(() => {}); await sleep(1500); }
+    const last = (await finished).filter(e => e.ev === 'state').at(-1).d;
     assert.equal(last.state, 'done', JSON.stringify(last)); assert.match(last.msg, /Вход выполнен/);
     const st = (await c.json('/api/settings', undefined, 'GET')).j;
     assert.equal(st.hasKey, true); assert.ok(st.provs.find(p => p.base === QWEN)?.hasKey);

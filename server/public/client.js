@@ -862,7 +862,7 @@ loadModels = async function () {
 const kst = (t, s) => { const h = $('#c-kst'); h.textContent = t || ''; if (s) h.dataset.s = s; else delete h.dataset.s; };
 let krT = 0, krGen = 0;
 window.krReset = () => { clearTimeout(krT); krGen++; $('#wa-kw').hidden = true; kst(''); document.querySelectorAll('[data-kr]').forEach(b => { b.disabled = false; }); };
-const KR_WAYS = { google: 'Google', github: 'GitHub', builder: 'AWS Builder ID' };
+const KR_WAYS = { google: 'Google', github: 'GitHub', email: 'email', builder: 'AWS Builder ID' };
 async function krStart(how) {
   krReset();
   const g = krGen, btns = document.querySelectorAll('[data-kr]');
@@ -871,7 +871,7 @@ async function krStart(how) {
      opener обнуляем: странице входа незачем доступ к приложению */
   let win = null;
   try { win = window.open('', 'kiro-login', 'popup,width=540,height=780'); if (win) { win.opener = null; try { win.document.title = 'Вход в Kiro…'; win.document.body.style.cssText = 'font:16px system-ui;padding:24px;color:#555'; win.document.body.textContent = 'Открываю вход в Kiro…'; } catch (e) {} } } catch (e) { win = null; }
-  kst('Открываю вход через ' + KR_WAYS[how] + '…', 'wait');
+  kst(how === 'email' ? 'Открываю вход в Kiro по email…' : 'Открываю вход через ' + KR_WAYS[how] + '…', 'wait');
   let r;
   try { r = await post('api/kiro/login', { how }); }
   catch (e) { try { win && win.close(); } catch (x) {} if (g === krGen) { btns.forEach(b => { b.disabled = false; }); kst(e.message, 'err'); } return; }
@@ -883,7 +883,7 @@ async function krStart(how) {
 }
 function krShow(r, opened) {
   $('#wa-kw').hidden = false; kst('');
-  $('#wa-kt').textContent = (opened ? 'В окне ' : 'Открой окно входа и ') + (r.how === 'builder' ? 'войди в AWS Builder ID (или зарегистрируйся) и разреши доступ' : 'войди через ' + (KR_WAYS[r.how] || r.way) + ' и подтверди вход в Kiro') + ' — дальше я всё сделаю сам.';
+  $('#wa-kt').textContent = (opened ? 'В окне ' : 'Открой окно входа и ') + (r.how === 'email' ? 'войди в Kiro по email (или зарегистрируйся) и подтверди вход' : r.how === 'builder' ? 'войди в AWS Builder ID и разреши доступ' : 'войди через ' + (KR_WAYS[r.how] || r.way) + ' и подтверди вход в Kiro') + ' — дальше я всё сделаю сам.';
   $('#wa-kc').textContent = r.code || '—';
   const a = $('#wa-kopen'); a.href = r.url; a.lastChild.textContent = opened ? 'Открыть окно снова' : 'Открыть окно входа';
 }
