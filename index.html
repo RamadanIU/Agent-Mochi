@@ -156,7 +156,7 @@ body{font-family:var(--pf);font-size:11px;line-height:1.5}
 .pbtn span{min-width:0}
 #c-full .pi{--ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9' shape-rendering='crispEdges'%3E%3Cpath fill='%23000' d='M0 0h3v1H0zM6 0h3v1H6zM0 1h2v1H0zM7 1h2v1H7zM0 2h1v1H0zM8 2h1v1H8zM0 6h1v1H0zM8 6h1v1H8zM0 7h2v1H0zM7 7h2v1H7zM0 8h3v1H0zM6 8h3v1H6z'/%3E%3C/svg%3E")}#c-full.fs-on .pi{--ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9' shape-rendering='crispEdges'%3E%3Cpath fill='%23000' d='M2 0h1v1H2zM6 0h1v1H6zM2 1h1v1H2zM6 1h1v1H6zM0 2h3v1H0zM6 2h3v1H6zM0 6h3v1H0zM6 6h3v1H6zM2 7h1v1H2zM6 7h1v1H6zM2 8h1v1H2zM6 8h1v1H6z'/%3E%3C/svg%3E")}
 #c-test .pi{--ico:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 8' shape-rendering='crispEdges'%3E%3Cpath fill='%23000' d='M3 0h1v1H3zM2 1h2v1H2zM6 1h1v1H6zM0 2h4v1H0zM7 2h1v1H7zM0 3h4v1H0zM5 3h1v1H5zM7 3h1v1H7zM0 4h4v1H0zM5 4h1v1H5zM7 4h1v1H7zM0 5h4v1H0zM7 5h1v1H7zM2 6h2v1H2zM6 6h1v1H6zM3 7h1v1H3z'/%3E%3C/svg%3E")}
-.hint{display:block;margin-top:-6px;margin-left:4px;font-size:16px;line-height:1.3;color:var(--mut)}.hint:empty{display:none}
+.hint{display:block;margin-top:-6px;margin-left:4px;font-size:16px;line-height:1.3;color:var(--mut)}.hint:empty{display:none}.hint[hidden]{display:none}
 
 html.isfs,html.isfs body{height:var(--app-h,100%)}
 html.isfs body{padding-top:0}
@@ -312,7 +312,7 @@ background:var(--card) repeating-linear-gradient(var(--ink) 0 2px,transparent 2p
 #mh::before,#sh::before{content:"";flex:none;width:8px;height:8px;background:var(--mut)}
 #mh[data-s=ok]::before{background:var(--ok)}#mh[data-s=err]::before,#sh[data-s=err]::before{background:var(--err)}#mh[data-s=wait]::before{background:var(--acc);animation:blk .5s steps(1) infinite}
 #mh[data-s=err],#sh[data-s=err]{color:var(--err)}
-#c-qst{display:block;margin-top:6px;color:var(--mut)}#c-qst:empty{display:none}#c-qst[data-s=err]{color:var(--err)}#f-qwen .brow{margin:4px 0 10px}#c-qme .lnk{margin-bottom:8px}
+#c-qst{display:block;margin-top:6px;color:var(--mut)}#c-qst:empty{display:none}#c-qst[data-s=err]{color:var(--err)}#f-qwen .brow,#f-ds .brow{margin:4px 0 10px}#c-qme .lnk{margin-bottom:8px}
 .note{display:block;margin-top:22px;padding:10px 12px;background:var(--bg);color:var(--mut);font-size:8px;line-height:1.8;box-shadow:var(--sh2)}
 .wfoot{flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px calc(14px + env(safe-area-inset-bottom,0px));background:var(--card);border-top:4px solid var(--ink)}
 .wfoot .lnk{margin:0;padding:8px 2px}
@@ -1676,9 +1676,16 @@ const tick=setInterval(paint,100);paint();
       <a id="c-qbm" class="lnk" href="#" draggable="true">Токен Qwen в Personal Computer</a>
       <small id="c-qst"></small>
     </div>
+    <div id="f-ds" hidden>
+      <small class="hint">Подключи свой аккаунт chat.deepseek.com — нужен только токен из браузера, он живёт долго. Нажми кнопку ниже — с компьютера:<br>1. откроется chat.deepseek.com (войди, если нужно), а команда уже скопирована;<br>2. там нажми F12, открой вкладку «Console», вставь команду (Ctrl+V) и нажми Enter. Chrome при первой вставке пишет предупреждение — впиши <code>allow pasting</code>, Enter, и вставь команду ещё раз;<br>3. вкладка сама вернётся сюда — нажми «Подключить».</small>
+      <div class="brow"><button class="pbtn" id="c-dcopy" type="button"><i class="pi"></i><span>Токен в один клик</span></button></div>
+      <small class="hint">Без консоли: перетащи ссылку ниже мышкой на панель закладок. Потом на chat.deepseek.com просто нажми эту закладку — вернёшься сюда с токеном.</small>
+      <a id="c-dbm" class="lnk" href="#" draggable="true">Токен DeepSeek в Personal Computer</a>
+    </div>
     <label class="f" id="f-base" hidden>Адрес API<input id="c-base" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="https://…/v1"></label>
     <label class="f" id="f-key">API ключ<span class="fx"><input id="c-key" type="password" autocomplete="off" spellcheck="false"><button type="button" class="eye" id="c-eye" aria-label="Показать ключ" aria-pressed="false"><i class="pi"></i></button></span></label>
     <small class="hint" id="c-qh" hidden>Или вставь токен вручную: на chat.qwen.ai нажми F12, вкладка «Console», команда <code>copy(localStorage.token)</code> — токен в буфере обмена.</small>
+    <small class="hint" id="c-dh" hidden>Или вставь токен вручную: на chat.deepseek.com нажми F12, вкладка «Console», команда <code>copy(JSON.parse(localStorage.userToken).value)</code> — токен в буфере обмена.</small>
     <button class="lnk" id="c-forget" type="button" hidden>Забыть этого провайдера</button>
     <label class="f">Модель<input id="c-model" autocapitalize="off" autocomplete="off" spellcheck="false"></label><div id="ml" hidden></div><small id="mh"></small>
     </div>
@@ -4236,7 +4243,7 @@ $('#ask-ok').onclick=()=>$('#ask').close('ok');$('#ask-no').onclick=()=>$('#ask'
 $('#ask-i').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#ask').close('ok')}};
 $('#ask').addEventListener('click',e=>{if(e.target===$('#ask'))$('#ask').close('')});
 /* свой Ollama и другие OpenAI-совместимые серверы — через «Другой» */
-const PRESETS={OpenAI:'https://api.openai.com/v1','Qwen (chat.qwen.ai)':'https://chat.qwen.ai',OpenRouter:'https://openrouter.ai/api/v1','Ollama Cloud':'https://ollama.com/v1',JustWoker:'https://api.justwoker.icu/v1','LM Studio':'http://localhost:1234/v1'};
+const PRESETS={OpenAI:'https://api.openai.com/v1','Qwen (chat.qwen.ai)':'https://chat.qwen.ai','DeepSeek (chat.deepseek.com)':'https://chat.deepseek.com',OpenRouter:'https://openrouter.ai/api/v1','Ollama Cloud':'https://ollama.com/v1',JustWoker:'https://api.justwoker.icu/v1','LM Studio':'http://localhost:1234/v1'};
 const LOCAL=['LM Studio'],CUSTOM='Другой';
 const prov=$('#c-prov');
 /* сохранённые на сервере провайдеры: адрес API → {model, hasKey} (заполняет client.js; сами ключи в браузер не приходят).
@@ -4255,10 +4262,16 @@ const F={base:'#c-base',key:'#c-key',model:'#c-model',sys:'#c-sys'};
 /* ключ этого провайдера уже на сервере — поле можно оставить пустым */
 /* Qwen (chat.qwen.ai): вместо ключа — токен аккаунта, из настроек — только модель и размышление */
 const isQw=b=>{try{return new URL(nb(b)).hostname==='chat.qwen.ai'}catch(e){return false}};
-function keyHint(){const b=nb($('#c-base').value),sv=provSaved[b],q=isQw(b);
-  $('#c-key').placeholder=sv&&sv.hasKey?'сохранён на сервере · пусто = не менять':q?'eyJhbGciOi… (токен с chat.qwen.ai)':'sk-…';$('#c-forget').hidden=!sv;
-  $('#f-key').firstChild.nodeValue=q?'Токен Qwen':'API ключ';$('#c-qh').hidden=$('#f-qwen').hidden=!q;
-  $('#f-think').hidden=!q;$('#f-vis').hidden=q}
+/* DeepSeek (chat.deepseek.com): так же — токен аккаунта из браузера, из настроек — только DeepThink */
+const isDs=b=>{try{return new URL(nb(b)).hostname==='chat.deepseek.com'}catch(e){return false}};
+/* подпись под «Размышлением»: у каждого сайта своя (client.js уточняет её по выбранной модели) */
+const thinkHint=b=>isDs(b)?'DeepSeek сначала думает, потом отвечает: умнее, но медленнее, и размышления съедают часть длины ответа. Поиск самого DeepSeek выключен — у Personal Computer свои инструменты'
+  :'Qwen сначала думает, потом отвечает: умнее, но медленнее. Поиск, код и картинки самого Qwen выключены — у Personal Computer свои инструменты';
+function keyHint(){const b=nb($('#c-base').value),sv=provSaved[b],q=isQw(b),d=isDs(b);
+  $('#c-key').placeholder=sv&&sv.hasKey?'сохранён на сервере · пусто = не менять':q?'eyJhbGciOi… (токен с chat.qwen.ai)':d?'токен с chat.deepseek.com':'sk-…';$('#c-forget').hidden=!sv;
+  $('#f-key').firstChild.nodeValue=q?'Токен Qwen':d?'Токен DeepSeek':'API ключ';$('#c-qh').hidden=$('#f-qwen').hidden=!q;$('#c-dh').hidden=$('#f-ds').hidden=!d;
+  $('#f-think').hidden=!(q||d);$('#f-vis').hidden=q||d;
+  const tn=$('#f-think').querySelector('span').firstChild;tn.nodeValue=d?'DeepThink':'Размышление';$('#f-think small').textContent=thinkHint(b)}
 function syncSet(){const p=prov.value;$('#f-steps').hidden=!$('#c-lim').checked;$('#sh').hidden=true;$('#f-base').hidden=!!PRESETS[p];$('#f-key').hidden=LOCAL.includes(p);keyHint()}
 function fill(s){
   for(const k in F)$(F[k]).value=s[k]||'';
@@ -4269,7 +4282,7 @@ function fill(s){
 let provNew=false;
 /* сохранённый провайдер — подставляем его последнюю модель, ключ сервер возьмёт свой; «Другой» — пустой адрес для нового */
 prov.onchange=()=>{const b=provBase(prov.value),sv=provSaved[b];$('#c-base').value=b;$('#c-key').value='';
-  if(sv&&sv.model){mi().value=sv.model;provNew=false}else provNew=true;
+  if(sv&&sv.model){mi().value=sv.model;provNew=false}else{provNew=true;if(isDs(b))mi().value='deepseek'}
   syncSet();if(b)loadModels();else{$('#mh').textContent='';$('#c-base').focus()}};
 $('#c-lim').onchange=syncSet;
 /* «Токен в один клик»: команда в консоли chat.qwen.ai открывает это приложение с токеном в адресе (#qwen-token=…, после # — на сервер не уходит),
@@ -4280,6 +4293,12 @@ const qwCmd=()=>"localStorage.token?location.href='"+location.origin+location.pa
 $('#c-qcopy').onclick=async()=>{const c=qwCmd(),b=$('#c-qcopy');
   try{await navigator.clipboard.writeText(c);b.lastChild.textContent='Скопировано — вставь в консоль chat.qwen.ai'}catch(e){await ask('Токен Qwen','Скопируй команду и вставь её в консоль (F12 → Console) на chat.qwen.ai:',c,'Готово')}
   window.open('https://chat.qwen.ai','_blank','noopener')};
+/* то же для DeepSeek: токен лежит в localStorage.userToken как JSON {"value": "…"}; #deepseek-token=… подхватывает client.js */
+const dsCmd=()=>"(t=>t?location.href='"+location.origin+location.pathname+"#deepseek-token='+encodeURIComponent(t):alert('Сначала войди в chat.deepseek.com'))((()=>{try{return JSON.parse(localStorage.userToken).value}catch(e){return localStorage.userToken}})())";
+{const a=$('#c-dbm');a.href='javascript:void('+encodeURIComponent(dsCmd())+')';a.onclick=e=>{e.preventDefault();ask('Токен DeepSeek','Эту ссылку не нажимают здесь: перетащи её мышкой на панель закладок браузера (Ctrl+Shift+B — показать панель). Потом открой chat.deepseek.com, войди и нажми эту закладку — вернёшься сюда с токеном.',null,'Понятно')}}
+$('#c-dcopy').onclick=async()=>{const c=dsCmd(),b=$('#c-dcopy');
+  try{await navigator.clipboard.writeText(c);b.lastChild.textContent='Скопировано — вставь в консоль chat.deepseek.com'}catch(e){await ask('Токен DeepSeek','Скопируй команду и вставь её в консоль (F12 → Console) на chat.deepseek.com:',c,'Готово')}
+  window.open('https://chat.deepseek.com','_blank','noopener')};
 /* лимит шагов: пустое или вне 1…10000 не сохраняем, а показываем ошибку у поля */
 function readSteps(){const n=stepsOk($('#c-steps').value),h=$('#sh');
   if(n||!$('#c-lim').checked){h.hidden=true;return{stepLimit:$('#c-lim').checked,maxSteps:n||undefined}}

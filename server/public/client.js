@@ -126,7 +126,8 @@ async function api(p, o = {}) {
 const post = (p, json = {}) => api(p, { method: 'POST', json });
 
 /* «Токен в один клик»: chat.qwen.ai вернул нас сюда с токеном после # — забираем его из адреса сразу (в историю браузера он не попадёт) */
-const qwHash = (() => { const m = /[#&]qwen-token=([^&]+)/.exec(location.hash); if (!m) return ''; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} try { return decodeURIComponent(m[1]); } catch (e) { return ''; } })();
+const hashToken = k => { const m = new RegExp('[#&]' + k + '-token=([^&]+)').exec(location.hash); if (!m) return ''; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} try { return decodeURIComponent(m[1]); } catch (e) { return ''; } };
+const qwHash = hashToken('qwen'), dsHash = hashToken('deepseek');
 let me = null, es = null, running = false, view = null, busyElse = null, srvSet = null, bubble = null, hideT = 0, connected = false, replaying = false, olderNow = false;
 /* событие журнала → компьютер в шапке (при перерисовке истории — только в его журнал, без реакций; старую историю «Показать раньше» не трогаем) */
 const room = (k, e) => { if (olderNow) return; try { window.personalComputerRoom && personalComputerRoom[k](e, replaying); } catch (x) { console.error(x); } };
@@ -489,6 +490,7 @@ async function started() {
   initPane();
   updBoot(true);
   if (qwHash) qwCatch(qwHash);
+  if (dsHash) dsCatch(dsHash);
 }
 /* токен пришёл из chat.qwen.ai: подтверждение (ссылку с чужим токеном мог подсунуть кто угодно), сохранение, модель из списка */
 async function qwCatch(t) {
@@ -501,6 +503,17 @@ async function qwCatch(t) {
     bt('ok', 'set', srvSet.model);
     window.__keepForm = false; openSet('ai');
   } catch (e) { add('e', esc('Токен Qwen не подключился: ' + e.message)); }
+}
+/* то же для DeepSeek: токен с chat.deepseek.com (из localStorage.userToken) — подтверждение и сохранение; модель у сайта одна */
+async function dsCatch(t) {
+  if (!/^[\w.+\/=:-]{16,4096}$/.test(t)) return;
+  if (!await ask('DeepSeek', 'Пришёл токен с chat.deepseek.com. Подключить этот аккаунт DeepSeek к Personal Computer? Подтверждай, только если сам только что нажал «Токен в один клик».', null, 'Подключить')) return;
+  try {
+    const DB = 'https://chat.deepseek.com', r = await post('api/models', { base: DB, key: t });
+    srvSet = await api('api/settings', { method: 'PUT', json: { base: DB, key: t, model: r.models[0] } }); mirror(); save();
+    bt('ok', 'set', srvSet.model);
+    window.__keepForm = false; openSet('ai');
+  } catch (e) { add('e', esc('Токен DeepSeek не подключился: ' + e.message)); }
 }
 function mirror() {
   if (!srvSet) return;
@@ -520,8 +533,8 @@ window.srvSubmit = async () => {
   if (fs.length) {
     upBusy = true; $('#send').disabled = true;
     try {
-      /* Qwen картинок не видит — файлы только на сервер, без копии для модели */
-      if (!srvSet || (srvSet.vis !== false && !isQw(srvSet.base))) parts = (await Promise.all(fs.map(toPart))).filter(Boolean);
+      /* Qwen и DeepSeek получают файлы сами (сервер загружает их на сайт) — без копии для модели */
+      if (!srvSet || (srvSet.vis !== false && !isQw(srvSet.base) && !isDs(srvSet.base))) parts = (await Promise.all(fs.map(toPart))).filter(Boolean);
       for (const [k, f] of fs.entries()) {
         setSt('загружаю файлы ' + (k + 1) + '/' + fs.length + '…', 'on');
         files.push(await api('api/upload?name=' + encodeURIComponent(f.name), { method: 'POST', body: f, headers: { 'content-type': 'application/octet-stream' } }));
@@ -594,14 +607,14 @@ $('#c-save').onclick = async () => {
     const w = $('#msgs .empty'); if (w && !w.dataset.cleared) { w.remove(); welcomeS(); }
   } catch (e) { stab('ai'); const h = $('#mh'); h.textContent = 'Не сохранилось: ' + e.message; h.dataset.s = 'err'; }
 };
-/* Qwen: умеет ли выбранная модель размышлять — переключатель следует за моделью (must — без размышления не работает) */
+/* Qwen и DeepSeek: умеет ли выбранная модель размышлять — переключатель следует за моделью (must — без размышления не работает) */
 let qwInfo = {};
 function qwThink() {
   const m = qwInfo[mi().value.trim()], c = $('#c-think'), s = c.closest('label').querySelector('small');
   c.disabled = !!m && (m.must || !m.think);
   if (m && m.must) c.checked = true; else if (m && !m.think) c.checked = false;
   s.textContent = m && m.must ? 'Эта модель всегда сначала думает — выключить нельзя' : m && !m.think ? 'Эта модель не умеет размышлять — отвечает сразу'
-    : 'Qwen сначала думает, потом отвечает: умнее, но медленнее. Поиск, код и картинки самого Qwen выключены — у Personal Computer свои инструменты';
+    : thinkHint($('#c-base').value);
 }
 mi().addEventListener('input', qwThink); mi().addEventListener('change', qwThink);
 $('#ml').addEventListener('click', () => setTimeout(qwThink));
@@ -649,6 +662,23 @@ loadModels = async function () {
       if (t !== mt) return; mdl = [];
       qwAcct(srvSet && srvSet.qwEmail);
       if (e.j && e.j.needKey && !(provSaved[base] && provSaved[base].hasKey)) { h.textContent = 'Вставь токен Qwen — после этого загружу список моделей'; delete h.dataset.s; return; }
+      h.textContent = e.message; h.dataset.s = 'err';
+    }
+    return;
+  }
+  /* DeepSeek: токен рабочий и чей это аккаунт; модель у сайта одна, DeepThink — переключателем */
+  if (isDs(base)) {
+    qwInfo = {};
+    try {
+      const r = await post('api/models', { base, key }); if (t !== mt) return;
+      mdl = r.models.slice(); qwInfo = Object.fromEntries((r.info || []).map(m => [m.id, m]));
+      h.textContent = 'Связь с DeepSeek есть' + (r.login ? ', аккаунт: ' + r.login : '') + '. Токен живёт долго — вставлять заново нужно, только если выйдешь из аккаунта на сайте';
+      h.dataset.s = 'ok';
+      const cur = mi().value.trim(); if (mdl.length && (!cur || !mdl.includes(cur))) mi().value = mdl[0];
+      provNew = false; qwThink();
+    } catch (e) {
+      if (t !== mt) return; mdl = [];
+      if (e.j && e.j.needKey && !(provSaved[base] && provSaved[base].hasKey)) { h.textContent = 'Вставь токен DeepSeek — после этого проверю связь'; delete h.dataset.s; return; }
       h.textContent = e.message; h.dataset.s = 'err';
     }
     return;

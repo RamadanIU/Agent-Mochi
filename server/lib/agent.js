@@ -12,6 +12,9 @@ import { userDir, pullFile, storeFile, dropFids, sz } from './files.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
 import { agentNote } from './proxy.js';
 import { isQwen, turn as qwenTurn, ask as qwenAsk, renew as qwenRenew, tokenLeft, parseToken, QWEN_BASE } from './qwen.js';
+import { isDeepSeek, turn as dsTurn, ask as dsAsk, parseToken as dsParse, DS_BASE } from './deepseek.js';
+/* веб-чаты по токену аккаунта (Qwen, DeepSeek): свой протокол, история живёт на сайте, файлы уходят туда целиком */
+const isWeb = base => isQwen(base) || isDeepSeek(base);
 import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens, setPresetSeed, presetsOff } from './ext.js';
 
 export const DEF_SYS = 'Тебя зовут Personal Computer — ты ламповый пиксельный компьютер-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
@@ -19,7 +22,7 @@ export const DEF_SYS = 'Тебя зовут Personal Computer — ты ламп�
 export const OLD_SYS = new Set(['Тебя зовут Мочи — ты милый пиксельный зверёк-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. В поле action кратко и по-человечески пиши, что делаешь. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.']);
 /* что умеет показывать веб-чат — модель должна знать, чтобы рисовать таблицы и схемы, а не ASCII-картинки */
 const FMT = 'Оформление: чат показывает Markdown — заголовки, списки, таблицы, цитаты и врезки (> [!NOTE], > [!TIP], > [!WARNING]), `код` и блоки кода с языком, формулы LaTeX ($…$, $$…$$), схемы и графики в блоке ```mermaid (flowchart, sequenceDiagram, classDiagram, stateDiagram, erDiagram, gantt, pie, xychart-beta, quadrantChart, radar-beta, sankey-beta, treemap-beta, timeline, mindmap, journey, gitGraph, kanban, block-beta, packet-beta, architecture-beta, requirementDiagram, C4Context). Пользуйся этим, только когда правда помогает: сравнение — таблицей, процесс или связи — схемой, числа и динамика — графиком (xychart-beta, pie), сроки — gantt, вычисления — формулой. Короткий ответ оставляй простым текстом.';
-/* think — размышление у Qwen (у остальных провайдеров не используется) */
+/* think — размышление у Qwen и DeepThink у DeepSeek (у остальных провайдеров не используется) */
 export const DEF_SETTINGS = { base: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', sys: DEF_SYS, vis: true, stepLimit: true, maxSteps: CFG.maxSteps, think: false };
 /* лимит шагов подряд (настройки → Модель): число от 1 до MAX_STEPS */
 export const MAX_STEPS = 10000;
@@ -356,9 +359,10 @@ export class Chat extends EventEmitter {
       const log = this.peek(id).log.filter(e => (e.kind === 'user' || e.kind === 'assistant') && e.text).slice(0, 8);
       if (!log.length) return;
       const text = log.map(e => (e.kind === 'user' ? 'Пользователь: ' : 'Ассистент: ') + oneLine(e.text, 600)).join('\n');
-      /* Qwen: короткий вопрос во временном чате (он сразу удаляется), а не в чате разговора */
-      if (isQwen(S.base)) {
-        const t = cleanTitle(await qwenAsk({ key: await this.qwenKey(), model: S.model, prompt: TITLE_SYS + '\n\n' + text, signal: AbortSignal.timeout(60000) }));
+      /* Qwen и DeepSeek: короткий вопрос во временном чате (он сразу удаляется), а не в чате разговора */
+      if (isWeb(S.base)) {
+        const q = { model: S.model, prompt: TITLE_SYS + '\n\n' + text, signal: AbortSignal.timeout(90000) };
+        const t = cleanTitle(isQwen(S.base) ? await qwenAsk({ key: await this.qwenKey(), ...q }) : await dsAsk({ key: this.dsToken(), ...q }));
         if (t && !m.named && !m.del) { Object.assign(m, { title: t, named: 1 }); this.metaChanged(); }
         return;
       }
@@ -386,7 +390,7 @@ export class Chat extends EventEmitter {
   ctxSize() {
     const v = this.doc.v;
     if (typeof v.ctx === 'number') return v.ctx;
-    return v.hist.length ? tokens(v.hist.map(({ _pf, _vi, _mid, _qw, _fl, ...m }) => m)) : 0;
+    return v.hist.length ? tokens(v.hist.map(({ _pf, _vi, _mid, _qw, _ds, _fl, ...m }) => m)) : 0;
   }
   /* c — какой чат показываем (не обязательно тот, где работает агент) */
   snapshot(id = this.cid) {
@@ -431,7 +435,7 @@ export class Chat extends EventEmitter {
     const us = H.map((m, i) => m.role === 'user' ? i : -1).filter(i => i >= 0), from = us.length > 40 ? us[us.length - 40] : 0;
     const out = [];
     for (let i = from; i < H.length; i++) {
-      const { _pf, _vi, _mid, _qw, _fl, ...m } = H[i];
+      const { _pf, _vi, _mid, _qw, _ds, _fl, ...m } = H[i];
       /* Ollama не принимает историю, где аргументы вызова — не JSON-объект (обрезаны или пустые): шлём {} — модель и так получила ошибку */
       if (m.tool_calls) m.tool_calls = m.tool_calls.map(c => argsOk(c.function.arguments) ? c : { ...c, function: { ...c.function, arguments: '{}' } });
       if (_pf && lvl < 2 && rec.has(i)) {
@@ -476,7 +480,7 @@ export class Chat extends EventEmitter {
       ? '\n\n[Пользователь загрузил файлы на сервер:\n' + files.map(f => '- ' + f.path + ' (' + sz(f.size) + ')').join('\n') + ']' : '');
     const m = busy ? { role: 'user', content: MID + content, _mid: 1 } : { role: 'user', content };
     if (parts.length) m._pf = this.saveParts(parts);
-    /* сами файлы (путь на сервере) — для провайдеров, которые принимают файлы целиком (Qwen); модели не показывается */
+    /* сами файлы (путь на сервере) — для провайдеров, которые принимают файлы целиком (Qwen, DeepSeek); модели не показывается */
     if (files.length) m._fl = files.map(f => ({ path: f.path, name: f.name, size: f.size }));
     const pub = { text, origin, files: files.map(f => ({ name: f.name, size: f.size, fid: f.fid || null })) };
     if (busy) {
@@ -612,7 +616,7 @@ export class Chat extends EventEmitter {
       + (tgOn ? '\n' + (hooks.tg?.statusLine(this.u) || 'Telegram не подключён.') + ' Если пользователь хочет управлять тобой из Telegram или получать уведомления: попроси создать бота у @BotFather (команда /newbot) и прислать токен, затем вызови telegram_connect и дай пользователю ссылку из ответа.' : '')
       + (offB.length ? '\nВыключено пользователем: ' + offB.join(', ') + '. Включить их может только он сам в настройках — ты не можешь.' : '')
       + extra
-      + ((isQwen(S.base) ? this.doc.v.hist.some(m => m._fl) : this.wire().some(m => Array.isArray(m.content))) ? '\nКартинки и PDF из сообщений пользователя ты видишь напрямую; те же файлы лежат в inbox/, если их нужно обработать.' : '')
+      + ((isWeb(S.base) ? this.doc.v.hist.some(m => m._fl) : this.wire().some(m => Array.isArray(m.content))) ? '\nКартинки и PDF из сообщений пользователя ты видишь напрямую; те же файлы лежат в inbox/, если их нужно обработать.' : '')
       + (has('view_image') ? '\nЧтобы увидеть картинку с сервера (фото, скриншот, график), вызови view_image — не гадай по имени файла и не читай её через read_file.' : '')
       + (this.doc.v.hist.some(m => m._mid) ? MID_SYS : '');
   }
@@ -654,9 +658,9 @@ export class Chat extends EventEmitter {
     const { tools, said } = withAction([...builtins().filter(on), ...X.defs]), names = new Set(tools.map(t => t.function.name));
     const ctx = { X, names };
     const sys = await until(this.system(names, X.prompt, offB), sig); chk();
-    const { text, calls, used, qw: mark } = await until(this.callModel(sys, tools, sig), sig); chk();
-    /* _qw — скрытая метка чата Qwen под ответом: следующий шаг продолжит тот же чат (см. qwen.js) */
-    H.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}), ...(mark ? { _qw: mark } : {}) });
+    const { text, calls, used, qw, ds } = await until(this.callModel(sys, tools, sig), sig); chk();
+    /* _qw / _ds — скрытая метка чата Qwen / DeepSeek под ответом: следующий шаг продолжит тот же чат (см. webchat.js) */
+    H.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}), ...(qw ? { _qw: qw } : {}), ...(ds ? { _ds: ds } : {}) });
     /* контекст: модель назвала usage — верим ей, нет — оценка по запросу и ответу */
     this.doc.v.ctx = used || tokens([sys, tools, this.wire(), H.at(-1)]);
     this.emit('ctx', this.doc.v.ctx);
@@ -710,7 +714,7 @@ export class Chat extends EventEmitter {
     }
     if (FILE_TOOLS.has(nm)) return await this.fileTool(nm, a, sig);
     if (nm === 'view_image') {
-      if (!isQwen(this.settings().base) && (this.settings().vis === false || this.noVis >= 2)) return 'Ошибка: эта модель не видит картинки (или зрение выключено в настройках) — смотреть нечем. Опиши файл по метаданным (run_command: file, identify) или скажи пользователю, что нужна модель со зрением.';
+      if (!isWeb(this.settings().base) && (this.settings().vis === false || this.noVis >= 2)) return 'Ошибка: эта модель не видит картинки (или зрение выключено в настройках) — смотреть нечем. Опиши файл по метаданным (run_command: file, identify) или скажи пользователю, что нужна модель со зрением.';
       if (!String(a.path || '').trim()) return 'Ошибка: нет параметра path';
       if (imgs.length >= 5) return 'Ошибка: за один шаг — не больше 5 картинок; остальные открой следующим шагом';
       const r = await fileCmd({ fop: 'image', path: String(a.path), cwd: this.doc.v.cwd || userDir(this.u) }, sig);
@@ -797,7 +801,7 @@ export class Chat extends EventEmitter {
     /* Qwen (chat.qwen.ai): свой протокол, история живёт в чате Qwen — отправляется только новое */
     if (isQwen(S.base)) {
       const go = key => { this.partial = ''; return qwenTurn({ key, model: S.model, think: !!S.think, sys, tools, hist: this.doc.v.hist, signal: sig,
-        onText: d => { this.partial += d; this.emit('delta', d, this.cid); }, getFiles: m => this.qwenFiles(m) }); };
+        onText: d => { this.partial += d; this.emit('delta', d, this.cid); }, getFiles: m => this.webFiles(m) }); };
       /* обновить заранее не вышло — пробуем с тем, что есть: вдруг ещё жив */
       const key = await this.qwenKey().catch(() => this.qwenToken());
       try { return await go(key); }
@@ -808,6 +812,12 @@ export class Chat extends EventEmitter {
         if (k2 === key) throw e;
         return go(k2);
       }
+    }
+    /* DeepSeek (chat.deepseek.com): так же, как Qwen, — свой протокол, отправляется только новое; токен долгоживущий */
+    if (isDeepSeek(S.base)) {
+      this.partial = '';
+      return dsTurn({ key: this.dsToken(), model: S.model, think: !!S.think, sys, tools, hist: this.doc.v.hist, signal: sig,
+        onText: d => { this.partial += d; this.emit('delta', d, this.cid); }, getFiles: m => this.webFiles(m) });
     }
     for (let attempt = 0; ; attempt++) {
       const msgs = this.wire(), hasM = msgs.some(m => Array.isArray(m.content));
@@ -870,8 +880,11 @@ export class Chat extends EventEmitter {
     this.set.save();
   }
 
-  /* файлы сообщения для Qwen: загруженные пользователем — с диска (как есть, любой формат), картинки view_image — из вложений */
-  async qwenFiles(m) {
+  /* токен DeepSeek: активный провайдер — его ключ, иначе сохранённый (для названия чата после переключения) */
+  dsToken() { const S = this.settings(); return dsParse(isDeepSeek(S.base) ? S.key : (S.provs || {})[DS_BASE]?.key || ''); }
+
+  /* файлы сообщения для Qwen и DeepSeek: загруженные пользователем — с диска (как есть, любой формат), картинки view_image — из вложений */
+  async webFiles(m) {
     if (m._fl) {
       const out = [];
       for (const f of m._fl) try { const r = await pullFile(f.path); out.push({ name: f.name || r.name, data: r.data, at: f.path }); } catch {}
