@@ -118,8 +118,8 @@ css.textContent = `
 .m.e.ck .ei{background:var(--acc);-webkit-mask-image:var(--j-shield);mask-image:var(--j-shield)}
 .ck-s{display:block;margin-top:8px;color:var(--mut);font:7px/1.8 var(--pf)}.ck-s:empty{display:none}
 .m.e.ck .ea{margin-top:12px}
-.m.e.ck [data-act=dscheck]{background:var(--acc);color:var(--onacc)}
-[data-act=dscheck] .pi{--ico:var(--j-shield)}
+.m.e.ck [data-act=webcheck]{background:var(--acc);color:var(--onacc)}
+[data-act=webcheck] .pi{--ico:var(--j-shield)}
 .m.e.ck[data-s=try] .ei{animation:blk .5s steps(1) infinite}
 .m.e.ck:is([data-s=ok],[data-s=stop],[data-s=fail]) :is(.ck-s,.ea){display:none}
 .m.e.ck[data-s=ok] .et{background:var(--ok);color:#fff}.m.e.ck[data-s=ok] .ei{background:var(--ok);-webkit-mask-image:var(--j-check);mask-image:var(--j-check)}
@@ -437,7 +437,7 @@ function setRun(r, snap) {
   if (!snap) try { window.personalComputerRoom && personalComputerRoom.run({ ...r, running }); } catch (x) { console.error(x); }
   /* ждёт проверку DeepSeek — не «думает», а ждёт тебя (карточка в чате) */
   const wait = running && r.wait === 'check';
-  if (wait) { think(false); setSt('жду проверку DeepSeek', 'on'); } else if (waitCk && running) setSt(READY, 'on');
+  if (wait) { think(false); setSt('жду проверку «я не робот»', 'on'); } else if (waitCk && running) setSt(READY, 'on');
   waitCk = wait;
   if (running && !bubble && !wait) think(true);
   if (!running) { think(false); if (was) setSt(READY, 'on'); }
@@ -718,7 +718,7 @@ $('#c-qlogin').onclick = async () => {
     const j = e.j || {};
     /* DeepSeek: проверка «я не робот» — пройти и войти снова; незнакомое устройство — войти один раз в окне сайта
        (логин и пароль сервер запомнил — сохранит их после входа), а без браузера на сервере — закладкой из своего браузера */
-    if (ds && j.captcha) doBtn($('#c-qdo'), { label: 'Пройти проверку', fn: () => openCheck('check', () => $('#c-qlogin').click()) });
+    if (j.captcha) doBtn($('#c-qdo'), { label: 'Пройти проверку', fn: () => openCheck('check', () => $('#c-qlogin').click(), ds ? 'deepseek' : 'qwen', j.url || '') });
     else if (ds && j.device && j.browser) doBtn($('#c-qdo'), { label: 'Войти в окне DeepSeek', fn: () => openCheck('login', () => loggedIn()) });
     else if (ds && j.device) qst('DeepSeek не узнал устройство. Один раз нажми «Войти через Google» с компьютера — закладка принесёт и отпечаток браузера, — а потом снова «Войти». Или поставь браузер на сервер: тогда вход откроется прямо здесь.', 'err');
   }
@@ -759,7 +759,7 @@ loadModels = async function () {
       if (t !== mt) return; mdl = [];
       if (e.j && e.j.needKey && !(provSaved[base] && provSaved[base].hasKey)) { waState('none'); return; }
       /* DeepSeek попросил проверку — пройти её прямо отсюда и проверить связь снова */
-      waState('bad', { msg: e.message, act: e.j && e.j.captcha ? { label: 'Пройти проверку', fn: () => openCheck('check', () => loadModels()) } : null });
+      waState('bad', { msg: e.message, act: e.j && e.j.captcha ? { label: 'Пройти проверку', fn: () => openCheck('check', () => loadModels(), w === WEB.qw ? 'qwen' : 'deepseek', e.j.url || '') } : null });
     }
     return;
   }
@@ -801,17 +801,19 @@ const dswSt = (t, s) => { const p = $('#dsw-st'); p.dataset.s = s || 'live'; p.l
 /* размер — по раскладке (clientWidth), а не по getBoundingClientRect: окно в этот момент ещё «въезжает» с уменьшением */
 const scrSize = () => { const e = $('#dsw-scr'); return { w: Math.max(320, e.clientWidth), h: Math.max(400, e.clientHeight) }; };
 /* окно поменяло размер (повернули телефон, перенеслась строка статуса) — страница подстраивается, чтобы не было полей */
-const fitScr = () => { clearTimeout(D.rz); D.rz = setTimeout(() => { if (!dsw.open || D.state !== 'live') return; const z = scrSize(); if (Math.abs(z.w - D.w) > 2 || Math.abs(z.h - D.h) > 2) post('api/deepseek/check', { act: 'size', ...z }).catch(() => {}); }, 300); };
+const fitScr = () => { clearTimeout(D.rz); D.rz = setTimeout(() => { if (!dsw.open || D.state !== 'live') return; const z = scrSize(); if (Math.abs(z.w - D.w) > 2 || Math.abs(z.h - D.h) > 2) post('api/check', { act: 'size', ...z }).catch(() => {}); }, 300); };
 /* why: 'check' — проверка; 'login' — вход на сайте. onDone — что сделать, когда получилось */
-window.openCheck = async function (why = 'check', onDone) {
-  D.why = why; D.done = onDone || null; D.state = '';
-  $('#dsw-t').textContent = why === 'login' ? 'Вход в DeepSeek' : 'Проверка DeepSeek';
+/* prov — сайт ('deepseek' | 'qwen'), url — страница проверки, если сайт её назвал (слайдер Qwen) */
+const PROVN = { deepseek: 'DeepSeek', qwen: 'Qwen' };
+window.openCheck = async function (why = 'check', onDone, prov = 'deepseek', url = '') {
+  D.why = why; D.done = onDone || null; D.state = ''; D.prov = PROVN[prov] ? prov : 'deepseek'; D.url = url || '';
+  $('#dsw-t').textContent = (why === 'login' ? 'Вход в ' : 'Проверка ') + PROVN[D.prov];
   $('#dsw-img').removeAttribute('src'); $('#dsw-ph').hidden = false; $('#dsw-done').hidden = true;
   $('#dsw-scr').hidden = false; $('#dsw-no').hidden = true; $('#dsw-re').hidden = false; $('#dsw-ok').textContent = 'Закрыть'; dsw.classList.remove('nob');
   dswSt(why === 'login' ? 'Открываю страницу входа…' : 'Открываю сайт…', 'wait');
   if (!dsw.open) dsw.showModal();
   await new Promise(r => requestAnimationFrame(r));
-  try { await post('api/deepseek/check', { act: 'open', why, ...scrSize() }); }
+  try { await post('api/check', { act: 'open', why, prov: D.prov, url: D.url, ...scrSize() }); }
   catch (e) {
     if (e.j && e.j.nobrowser) return noBrowser();
     dswSt('Не открылось: ' + e.message, 'fail'); $('#dsw-ph').hidden = true; return;
@@ -820,7 +822,7 @@ window.openCheck = async function (why = 'check', onDone) {
 };
 function dswListen() {
   D.es?.close();
-  const es = D.es = new EventSource('api/deepseek/check');
+  const es = D.es = new EventSource('api/check');
   es.addEventListener('frame', e => {
     const f = JSON.parse(e.data); D.w = f.w; D.h = f.h;
     $('#dsw-img').src = 'data:image/jpeg;base64,' + f.data; $('#dsw-ph').hidden = true;
@@ -845,7 +847,7 @@ async function noBrowser() {
   $('#dsw-scr').hidden = true; $('#dsw-re').hidden = true; dsw.classList.add('nob');
   const box = $('#dsw-no'); box.hidden = false;
   dswSt('Окну проверки нужен браузер на сервере', 'fail');
-  let b = {}; try { b = await api('api/deepseek/browser'); } catch (e) {}
+  let b = {}; try { b = await api('api/browser'); } catch (e) {}
   const can = b.admin && b.root, cmd = 'sudo personalcomputer browser';
   box.innerHTML = '<b>Поставь на сервер браузер — и проверка будет открываться прямо здесь</b>'
     + '<p>Проверку «я не робот» проходят в настоящем браузере. Personal Computer откроет сайт в Chromium на сервере и покажет его экран в этом окне. Браузер займёт около 300 МБ и запускается только на время проверки.</p>'
@@ -854,31 +856,31 @@ async function noBrowser() {
         + (b.admin ? '<p class="hnote">Или включи агенту полный доступ (настройки → Сервер → «Доступ агента») — тогда браузер поставится кнопкой отсюда.</p>' : ''))
     + '<p class="dsw-alt">А пока не страшно: задача ждёт, и я сам пробую снова через 5, 15 и 30 минут — защита сайта часто отпускает сама. Если проверка появляется постоянно, включи прокси с «домашним» адресом: настройки → Сервер → «Прокси».</p>';
   if (b.job && b.job.state === 'run') instWatch();
-  const ib = $('#dsw-inst'); if (ib) ib.onclick = async () => { ib.disabled = true; try { await post('api/deepseek/browser'); instWatch(); } catch (e) { ib.disabled = false; const t = $('#dsw-ist'); t.textContent = e.message; t.dataset.s = 'err'; } };
+  const ib = $('#dsw-inst'); if (ib) ib.onclick = async () => { ib.disabled = true; try { await post('api/browser'); instWatch(); } catch (e) { ib.disabled = false; const t = $('#dsw-ist'); t.textContent = e.message; t.dataset.s = 'err'; } };
 }
 function instWatch() {
   const t = $('#dsw-ist'), ib = $('#dsw-inst'); if (ib) ib.disabled = true;
   if (t) { t.textContent = 'Ставлю браузер… обычно это пара минут'; t.dataset.s = 'wait'; }
   const tick = async () => {
     if (!dsw.open) return;
-    let b = {}; try { b = await api('api/deepseek/browser'); } catch (e) { return setTimeout(tick, 3000); }
+    let b = {}; try { b = await api('api/browser'); } catch (e) { return setTimeout(tick, 3000); }
     const j = b.job || {};
     if (j.state === 'run') return setTimeout(tick, 2500);
-    if (j.state === 'ok' && b.ok) { if (t) { t.textContent = 'Браузер на месте — открываю проверку'; t.dataset.s = 'ok'; } setTimeout(() => openCheck(D.why, D.done), 900); return; }
+    if (j.state === 'ok' && b.ok) { if (t) { t.textContent = 'Браузер на месте — открываю проверку'; t.dataset.s = 'ok'; } setTimeout(() => openCheck(D.why, D.done, D.prov, D.url), 900); return; }
     if (t) { t.textContent = 'Не поставился: ' + (String(j.log || '').trim().split('\n').pop() || 'ошибка') + '. Попробуй командой на сервере: sudo personalcomputer browser'; t.dataset.s = 'err'; }
     if (ib) ib.disabled = false;
   };
   setTimeout(tick, 2000);
 }
-const dswClose = () => { D.es?.close(); if (D.state !== 'done' && D.state !== 'none') post('api/deepseek/check', { act: 'close' }).catch(() => {}); D.state = ''; };
+const dswClose = () => { D.es?.close(); if (D.state !== 'done' && D.state !== 'none') post('api/check', { act: 'close' }).catch(() => {}); D.state = ''; };
 dsw.addEventListener('close', dswClose);
 $('#dsw-x').onclick = () => dsw.close();
-$('#dsw-ok').onclick = () => { if ($('#dsw-ok').textContent === 'Открыть снова') openCheck(D.why, D.done); else dsw.close(); };
-$('#dsw-re').onclick = () => post('api/deepseek/check', { act: 'reload' }).catch(() => {});
+$('#dsw-ok').onclick = () => { if ($('#dsw-ok').textContent === 'Открыть снова') openCheck(D.why, D.done, D.prov, D.url); else dsw.close(); };
+$('#dsw-re').onclick = () => post('api/check', { act: 'reload' }).catch(() => {});
 /* размер окна поменялся — страница подстраивается */
 addEventListener('resize', fitScr);
 /* ---------- ввод: экран → координаты страницы ---------- */
-const dsIn = ev => { if (D.state === 'live') post('api/deepseek/check', { act: 'input', ev }).catch(() => {}); };
+const dsIn = ev => { if (D.state === 'live') post('api/check', { act: 'input', ev }).catch(() => {}); };
 const ptAt = e => { const r = $('#dsw-img').getBoundingClientRect(); if (!r.width || !D.w) return null; return { x: Math.round((e.clientX - r.left) * D.w / r.width), y: Math.round((e.clientY - r.top) * D.h / r.height) }; };
 {
   const img = $('#dsw-img'), kb = $('#dsw-kb');
@@ -886,25 +888,29 @@ const ptAt = e => { const r = $('#dsw-img').getBoundingClientRect(); if (!r.widt
   img.addEventListener('pointerdown', e => {
     const p = ptAt(e); if (!p) return;
     e.preventDefault(); img.setPointerCapture(e.pointerId);
-    down = { ...p, x0: e.clientX, y0: e.clientY, touch: e.pointerType !== 'mouse', scroll: false, ly: e.clientY };
+    down = { ...p, x0: e.clientX, y0: e.clientY, touch: e.pointerType !== 'mouse', mode: '', ly: e.clientY };
     if (!down.touch) dsIn({ type: 'down', ...p });
   });
   img.addEventListener('pointermove', e => {
     if (!down) return;
     const p = ptAt(e); if (!p) return;
-    if (down.touch) {
-      /* палец пошёл вверх-вниз — это прокрутка страницы, а не нажатие */
-      if (!down.scroll && Math.hypot(e.clientX - down.x0, e.clientY - down.y0) > 10) down.scroll = true;
-      if (down.scroll && Date.now() - mt > 50) { const dy = (down.ly - e.clientY) * D.h / img.getBoundingClientRect().height; down.ly = e.clientY; mt = Date.now(); dsIn({ type: 'wheel', x: down.x, y: down.y, dx: 0, dy: Math.round(dy) }); }
+    if (down.touch && !down.mode && Math.hypot(e.clientX - down.x0, e.clientY - down.y0) > 10) {
+      /* палец пошёл вбок — тянем (слайдер «я не робот»), вверх-вниз — прокручиваем страницу */
+      down.mode = Math.abs(e.clientX - down.x0) >= Math.abs(e.clientY - down.y0) ? 'drag' : 'scroll';
+      if (down.mode === 'drag') dsIn({ type: 'down', x: down.x, y: down.y });
+    }
+    if (down.touch && down.mode === 'scroll') {
+      if (Date.now() - mt > 50) { const dy = (down.ly - e.clientY) * D.h / img.getBoundingClientRect().height; down.ly = e.clientY; mt = Date.now(); dsIn({ type: 'wheel', x: down.x, y: down.y, dx: 0, dy: Math.round(dy) }); }
       return;
     }
+    if (down.touch && !down.mode) return;
     if (Date.now() - mt > 33) { mt = Date.now(); dsIn({ type: 'move', ...p }); }
   });
   const up = e => {
     if (!down) return;
     const p = ptAt(e) || down, d = down; down = null;
-    if (d.touch) { if (!d.scroll) dsIn({ type: 'click', ...p }); }
-    else dsIn({ type: 'up', ...p });
+    if (d.touch && !d.mode) dsIn({ type: 'click', ...p });
+    else if (!d.touch || d.mode === 'drag') dsIn({ type: 'up', ...p });
     /* после нажатия — ввод с клавиатуры идёт на страницу (на телефоне — откроется клавиатура) */
     kb.focus({ preventScroll: true });
   };
@@ -924,7 +930,7 @@ const ptAt = e => { const r = $('#dsw-img').getBoundingClientRect(); if (!r.widt
   kb.addEventListener('compositionend', e => { if (e.data) dsIn({ type: 'text', text: e.data }); kb.value = ''; });
 }
 /* кнопка «Пройти проверку» в карточке в чате */
-$('#msgs').addEventListener('click', e => { if (e.target.closest('[data-act=dscheck]')) { e.stopPropagation(); openCheck('check'); } }, true);
+$('#msgs').addEventListener('click', e => { const b = e.target.closest('[data-act=webcheck]'); if (b) { e.stopPropagation(); openCheck('check', null, b.dataset.prov, b.dataset.url || ''); } }, true);
 
 /* ---------- карточка проверки в чате ----------
    wait — ждёт тебя (и сама попробует снова в at), try — пробую снова, ok — пустили, stop/fail — больше не ждёт */
@@ -933,13 +939,15 @@ const hhmmOf = t => new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', m
 function ckCard(e) {
   let d = ckEls.get(e.seq);
   if (!d || !d.isConnected) {
-    d = add('e', '<span class="ck-t"></span><small class="ck-s"></small><div class="ea"><button class="pbtn sm" data-act="dscheck" type="button"><i class="pi"></i><span>Пройти проверку</span></button></div>');
+    d = add('e', '<span class="ck-t"></span><small class="ck-s"></small><div class="ea"><button class="pbtn sm" data-act="webcheck" type="button"><i class="pi"></i><span>Пройти проверку</span></button></div>');
     d.classList.add('ck'); d.setAttribute('role', 'status');
     stamp(d, e); ckEls.set(e.seq, d);
   }
   d.dataset.s = e.state || 'wait';
+  const n = PROVN[e.prov] || 'DeepSeek', b = d.querySelector('[data-act=webcheck]');
+  b.dataset.prov = PROVN[e.prov] ? e.prov : 'deepseek'; b.dataset.url = e.url || '';
   d.querySelector('.et').textContent = { ok: 'Проверка пройдена', stop: 'Проверка', fail: 'Проверка', try: 'Пробую снова…' }[e.state] || 'Нужна проверка';
-  d.querySelector('.ck-t').textContent = e.state === 'ok' ? 'DeepSeek снова пускает — продолжаю.' : e.state === 'stop' ? 'DeepSeek просил проверку — задача остановлена.' : e.state === 'fail' ? 'DeepSeek так и не пустил без проверки — задача остановлена. Нажми «Повторить», когда будешь рядом.' : 'DeepSeek просит подтвердить, что ты не робот.';
+  d.querySelector('.ck-t').textContent = e.state === 'ok' ? n + ' снова пускает — продолжаю.' : e.state === 'stop' ? n + ' просил проверку — задача остановлена.' : e.state === 'fail' ? n + ' так и не пустил без проверки — задача остановлена. Нажми «Повторить», когда будешь рядом.' : n + ' просит подтвердить, что ты не робот.';
   d.querySelector('.ck-s').textContent = e.state === 'try' ? 'Пробую отправить запрос ещё раз.' : e.at ? 'Пройди проверку — и я сразу продолжу. Или подожди: сам попробую снова в ' + hhmmOf(e.at) + '.' : '';
 }
 

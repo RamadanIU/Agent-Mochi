@@ -163,12 +163,12 @@ class Bot {
       const text = d.text || 'Готово.';
       await this.say(tgRun ? text : '✅ Personal Computer закончил задачу (' + dur(d.ms) + '):\n\n' + text);
     };
-    /* DeepSeek попросил проверку «я не робот»: задача ждёт человека — зовём его, если он не смотрит в чат */
+    /* DeepSeek или Qwen попросил проверку «я не робот»: задача ждёт человека — зовём его, если он не смотрит в чат */
     const onCheck = d => {
       const r = chat.doc.v.run;
       if (!this.v.chatId || !(r?.origin === 'tg' || r?.tg || this.wants(chat))) return;
       const at = d.at ? new Date(d.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '';
-      this.say('🧩 DeepSeek просит подтвердить, что ты не робот. Открой Personal Computer и нажми «Пройти проверку» — я сразу продолжу.' + (at ? ' Сам попробую снова в ' + at + '.' : '') + (CFG.publicUrl ? '\n' + CFG.publicUrl + '/' : ''));
+      this.say('🧩 ' + (d.prov === 'qwen' ? 'Qwen' : 'DeepSeek') + ' просит подтвердить, что ты не робот. Открой Personal Computer и нажми «Пройти проверку» — я сразу продолжу.' + (at ? ' Сам попробую снова в ' + at + '.' : '') + (CFG.publicUrl ? '\n' + CFG.publicUrl + '/' : ''));
     };
     chat.on('run', onRun); chat.on('tool', onTool); chat.on('file', onFile); chat.on('done', onDone); chat.on('aside', onAside); chat.on('check', onCheck);
     this.unwatch = () => { chat.off('run', onRun); chat.off('tool', onTool); chat.off('file', onFile); chat.off('done', onDone); chat.off('aside', onAside); chat.off('check', onCheck); };
