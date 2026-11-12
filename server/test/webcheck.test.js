@@ -109,7 +109,7 @@ function checkEvents(c, until, ms = 40000) {
     const ac = new AbortController(), evs = [];
     const t = setTimeout(() => { ac.abort(); no(new Error('таймаут окна проверки: ' + JSON.stringify(evs.filter(e => e.ev === 'state').slice(-4)))); }, ms);
     try {
-      const r = await fetch(m.base + '/api/deepseek/check', { headers: { cookie: c.cookie() }, signal: ac.signal });
+      const r = await fetch(m.base + '/api/check', { headers: { cookie: c.cookie() }, signal: ac.signal });
       const dec = new TextDecoder(); let buf = '';
       for await (const ch of r.body) {
         buf += dec.decode(ch, { stream: true }); let i;
@@ -126,6 +126,9 @@ function checkEvents(c, until, ms = 40000) {
   });
 }
 const live = evs => evs.some(e => e.ev === 'frame') && evs.some(e => e.ev === 'state' && e.d.state === 'live');
+/* человек нажимает, когда видит головоломку: окно её уже распознало */
+const puzzle = evs => live(evs) && evs.some(e => e.ev === 'state' && /Пройди проверку/.test(e.d.msg));
+const pageIs = async p => { for (let i = 0; i < 100 && F.pages.at(-1)?.path !== p; i++) await sleep(100); await sleep(600); };
 const done = evs => evs.some(e => e.ev === 'state' && /done|fail|closed|none/.test(e.d.state));
 
 test('«браузер»: sec-ch-ua как у Chromium, cookies по правилам, страница защиты распознаётся точно', () => {
@@ -202,9 +205,9 @@ test('проверка в окне: настоящая страница в бр�
   try {
     const run = say(c, 'проверь сервер', doneRun, 90000);
     await c.events(evs => evs.some(e => e.ev === 'run' && e.d.wait === 'check'), 20000);
-    const o = await c.json('/api/deepseek/check', { act: 'open', w: 900, h: 700 });
+    const o = await c.json('/api/check', { act: 'open', w: 900, h: 700 });
     assert.equal(o.status, 200, JSON.stringify(o.j));
-    const evs = await checkEvents(c, live);
+    const evs = await checkEvents(c, puzzle);
     const fr = evs.find(e => e.ev === 'frame').d;
     assert.ok(fr.data.length > 500 && fr.w === 900, 'кадр экрана: ' + fr.w + '×' + fr.h);
     /* страница открылась с тем же User-Agent, что у запросов модели */
@@ -212,7 +215,7 @@ test('проверка в окне: настоящая страница в бр�
     assert.equal(F.pages.at(-1).ua, ua);
     /* «человек» нажимает кнопку головоломки */
     const fin = checkEvents(c, done);
-    await c.json('/api/deepseek/check', { act: 'input', ev: { type: 'click', x: 150, y: 80 } });
+    await c.json('/api/check', { act: 'input', ev: { type: 'click', x: 150, y: 80 } });
     const end = await fin;
     assert.equal(end.filter(e => e.ev === 'state').at(-1).d.state, 'done', JSON.stringify(end.filter(e => e.ev === 'state').map(e => e.d)));
     const after = await run;
@@ -221,7 +224,7 @@ test('проверка в окне: настоящая страница в бр�
     /* после проверки запрос модели пришёл с отметкой сайта и тем же User-Agent, что у браузера */
     const h = F.calls.at(-1).headers;
     assert.match(h.cookie, /aws-waf-token=solved-\d+/); assert.equal(h['user-agent'], ua);
-  } finally { F.waf = false; await c.json('/api/deepseek/check', { act: 'close' }); }
+  } finally { F.waf = false; await c.json('/api/check', { act: 'close' }); }
 });
 
 test('вход по email и паролю: неверный пароль — понятно; незнакомое устройство — отпечаток из браузера на сервере; пароль хранится зашифрованным', async () => {
@@ -267,11 +270,12 @@ test('вход в окне DeepSeek: сайт не пустил по парол�
   await c.json('/api/settings', { base: DEEPSEEK, model: 'deepseek' }, 'PUT');
   const r = await c.json('/api/deepseek/login', { login: 'strict@ds.test', password: 'strict-pass' });
   assert.equal(r.status, 403); assert.equal(r.j.device, true); assert.equal(r.j.browser, true); assert.match(r.j.error, /не узнал устройство/);
-  assert.equal((await c.json('/api/deepseek/check', { act: 'open', why: 'login', w: 800, h: 600 })).status, 200);
+  assert.equal((await c.json('/api/check', { act: 'open', why: 'login', w: 800, h: 600 })).status, 200);
   await checkEvents(c, live);
+  await pageIs('/sign_in');
   assert.equal(F.pages.at(-1).path, '/sign_in');
   const fin = checkEvents(c, done);
-  await c.json('/api/deepseek/check', { act: 'input', ev: { type: 'click', x: 150, y: 240 } });
+  await c.json('/api/check', { act: 'input', ev: { type: 'click', x: 150, y: 240 } });
   const end = await fin, last = end.filter(e => e.ev === 'state').at(-1).d;
   assert.equal(last.state, 'done', JSON.stringify(last)); assert.match(last.msg, /Вход выполнен/);
   const s = (await c.json('/api/settings', undefined, 'GET')).j;

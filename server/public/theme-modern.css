@@ -561,9 +561,9 @@
 :root[data-theme=modern] .m.e.ck:is([data-s=stop],[data-s=fail]) .et{background:none;color:var(--mut)}
 :root[data-theme=modern] .m.e.ck:is([data-s=stop],[data-s=fail]) .ei{background:var(--mut)}
 :root[data-theme=modern] .ck-s{margin-top:6px;font:400 12.5px/1.45 var(--sans)}
-:root[data-theme=modern] [data-act=dscheck]{background:var(--acc);color:var(--onacc);box-shadow:none}
-@media(hover:hover){:root[data-theme=modern] [data-act=dscheck]:hover:not(:disabled){background:color-mix(in srgb,var(--acc) 85%,var(--bg));color:var(--onacc)}}
-:root[data-theme=modern] [data-act=dscheck] .pi{--ico:var(--m-shield)}
+:root[data-theme=modern] [data-act=webcheck]{background:var(--acc);color:var(--onacc);box-shadow:none}
+@media(hover:hover){:root[data-theme=modern] [data-act=webcheck]:hover:not(:disabled){background:color-mix(in srgb,var(--acc) 85%,var(--bg));color:var(--onacc)}}
+:root[data-theme=modern] [data-act=webcheck] .pi{--ico:var(--m-shield)}
 :root[data-theme=modern] .dsw-b{gap:12px;padding:14px 18px 18px;background:var(--card)}
 :root[data-theme=modern] .dsw-st{gap:8px;margin:0;font:400 13px/1.4 var(--sans)}
 :root[data-theme=modern] .dsw-st i{width:7px;height:7px;border-radius:50%}

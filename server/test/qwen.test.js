@@ -91,7 +91,7 @@ before(async () => {
   });
   await new Promise(ok => srv.listen(0, '127.0.0.1', ok));
   const qurl = 'http://127.0.0.1:' + srv.address().port;
-  m = await startPersonalComputer({ PERSONALCOMPUTER_QWEN_URL: qurl, PERSONALCOMPUTER_QWEN_OSS: qurl + '/oss', PERSONALCOMPUTER_QWEN_KEEPALIVE_MS: '200' });
+  m = await startPersonalComputer({ PERSONALCOMPUTER_QWEN_URL: qurl, PERSONALCOMPUTER_QWEN_OSS: qurl + '/oss', PERSONALCOMPUTER_QWEN_KEEPALIVE_MS: '200', PERSONALCOMPUTER_QWEN_GAP_MS: '0', PERSONALCOMPUTER_QWEN_RPM: '0' });
 });
 after(async () => { await m?.stop(); srv?.close(); });
 

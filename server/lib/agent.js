@@ -11,10 +11,10 @@ import { runCmd, fileCmd, agentInfo } from './runner-client.js';
 import { userDir, pullFile, storeFile, dropFids, sz } from './files.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
 import { agentNote } from './proxy.js';
-import { isQwen, turn as qwenTurn, ask as qwenAsk, renew as qwenRenew, tokenLeft, parseToken, QWEN_BASE } from './qwen.js';
+import { isQwen, turn as qwenTurn, ask as qwenAsk, renew as qwenRenew, tokenLeft, parseToken, QWEN_BASE, CHECK as QW_CHECK } from './qwen.js';
 import { isDeepSeek, turn as dsTurn, ask as dsAsk, parseToken as dsParse, signin as dsSignin, forget as dsForget, DS_BASE, CHECK as DS_CHECK } from './deepseek.js';
 import { unseal } from './store.js';
-import { deviceId as dsDeviceId } from './dscheck.js';
+import { deviceId as dsDeviceId } from './webcheck.js';
 /* веб-чаты по токену аккаунта (Qwen, DeepSeek): свой протокол, история живёт на сайте, файлы уходят туда целиком */
 const isWeb = base => isQwen(base) || isDeepSeek(base);
 import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens, setPresetSeed, presetsOff } from './ext.js';
@@ -210,6 +210,8 @@ export class Chat extends EventEmitter {
     this.set = new Doc(path.join(this.dir, 'settings.json'), () => ({ ...DEF_SETTINGS }));
     /* DeepSeek: «браузер», которым сервер ходит на chat.deepseek.com (User-Agent, cookies сайта, отпечаток устройства) — см. deepseek.js */
     this.ds = new Doc(path.join(this.dir, 'deepseek.json'), {});
+    /* то же для chat.qwen.ai (там свои cookies — в том числе отметка о пройденном слайдере) */
+    this.qw = new Doc(path.join(this.dir, 'qwen.json'), {});
     /* act — чат, где работает агент; cur — какой чат открывали последним (с него начинается новая вкладка) */
     this.idx = new Doc(path.join(this.dir, 'chats.json'), { act: null, cur: null, list: {} });
     this.naming = new Set(); this.chatsT = null;
@@ -366,7 +368,7 @@ export class Chat extends EventEmitter {
       /* Qwen и DeepSeek: короткий вопрос во временном чате (он сразу удаляется), а не в чате разговора */
       if (isWeb(S.base)) {
         const q = { model: S.model, prompt: TITLE_SYS + '\n\n' + text, signal: AbortSignal.timeout(90000) };
-        const t = cleanTitle(isQwen(S.base) ? await qwenAsk({ key: await this.qwenKey(), ...q }) : await dsAsk({ key: this.dsToken(), ...this.dsState(), ...q }));
+        const t = cleanTitle(isQwen(S.base) ? await qwenAsk({ key: await this.qwenKey(), ...this.qwState(), ...q }) : await dsAsk({ key: this.dsToken(), ...this.dsState(), ...q }));
         if (t && !m.named && !m.del) { Object.assign(m, { title: t, named: 1 }); this.metaChanged(); }
         return;
       }
@@ -803,19 +805,30 @@ export class Chat extends EventEmitter {
 
   async callModel(sys, tools, sig) {
     const S = this.settings();
-    /* Qwen (chat.qwen.ai): свой протокол, история живёт в чате Qwen — отправляется только новое */
+    /* Qwen (chat.qwen.ai): свой протокол, история живёт в чате Qwen — отправляется только новое.
+       Антибот Alibaba показал слайдер — задача не падает, а ждёт проверку (waitCheck) и продолжает сама */
     if (isQwen(S.base)) {
-      const go = key => { this.partial = ''; return qwenTurn({ key, model: S.model, think: !!S.think, sys, tools, hist: this.doc.v.hist, signal: sig,
+      const go = key => { this.partial = ''; return qwenTurn({ key, ...this.qwState(), model: S.model, think: !!S.think, sys, tools, hist: this.doc.v.hist, signal: sig,
         onText: d => { this.partial += d; this.emit('delta', d, this.cid); }, getFiles: m => this.webFiles(m) }); };
-      /* обновить заранее не вышло — пробуем с тем, что есть: вдруг ещё жив */
-      const key = await this.qwenKey().catch(() => this.qwenToken());
-      try { return await go(key); }
-      catch (e) {
-        /* токен отозвали раньше срока — обновляем и пробуем ещё раз, пока пользователь ничего не увидел */
-        if (e.status !== 401 || sig.aborted || this.partial) throw e;
-        const k2 = await this.qwenKey(true).catch(x => { throw Object.assign(x, { human: 'Токен Qwen истёк, а обновить его не вышло: ' + (x.human || x.message) }); });
-        if (k2 === key) throw e;
-        return go(k2);
+      for (;;) {
+        try {
+          /* обновить заранее не вышло — пробуем с тем, что есть: вдруг ещё жив */
+          const key = await this.qwenKey().catch(x => { if (x.captcha) throw x; return this.qwenToken(); });
+          let r;
+          try { r = await go(key); }
+          catch (e) {
+            /* токен отозвали раньше срока — обновляем и пробуем ещё раз, пока пользователь ничего не увидел */
+            if (e.status !== 401 || sig.aborted || this.partial) throw e;
+            const k2 = await this.qwenKey(true).catch(x => { throw x.captcha ? x : Object.assign(x, { human: 'Токен Qwen истёк, а обновить его не вышло: ' + (x.human || x.message) }); });
+            if (k2 === key) throw e;
+            r = await go(k2);
+          }
+          if (this.chk) this.checkDone('ok');
+          return r;
+        } catch (e) {
+          if (!e.captcha || sig.aborted || this.partial) throw e;
+          await this.waitCheck(e, sig);
+        }
       }
     }
     /* DeepSeek (chat.deepseek.com): так же, как Qwen, — свой протокол, отправляется только новое.
@@ -890,7 +903,7 @@ export class Chat extends EventEmitter {
     if (!force && tokenLeft(key) > 120e3) return key;
     if (!this.qwRenew) this.qwRenew = (async () => {
       try {
-        const t = await qwenRenew({ token: key, ...(this.settings().qwAuth || {}) });
+        const t = await qwenRenew({ token: key, ...(this.settings().qwAuth || {}) }, undefined, this.qw.v, () => this.qw.save());
         if (t) this.setQwenKey(t);
         return t || key;
       } finally { this.qwRenew = null; }
@@ -906,8 +919,9 @@ export class Chat extends EventEmitter {
 
   /* токен DeepSeek: активный провайдер — его ключ, иначе сохранённый (для названия чата после переключения) */
   dsToken() { const S = this.settings(); return dsParse(isDeepSeek(S.base) ? S.key : (S.provs || {})[DS_BASE]?.key || ''); }
-  /* «браузер» DeepSeek этого пользователя: deepseek.js его дополняет (cookies, User-Agent) — сохраняем с задержкой */
+  /* «браузер» DeepSeek и Qwen этого пользователя: deepseek.js и qwen.js его дополняют (cookies, User-Agent) — сохраняем с задержкой */
   dsState() { return { st: this.ds.v, save: () => this.ds.save() }; }
+  qwState() { return { st: this.qw.v, save: () => this.qw.save() }; }
   setDsKey(t) {
     const s = this.set.v, P = s.provs ||= {};
     if (isDeepSeek(s.base)) s.key = t;
@@ -938,24 +952,24 @@ export class Chat extends EventEmitter {
     return this.dsLogin;
   }
 
-  /* ---------- проверка «я не робот» (DeepSeek) ----------
+  /* ---------- проверка «я не робот» (DeepSeek, Qwen) ----------
      Задача не падает: в чате — карточка «Пройти проверку», а агент ждёт. Продолжает сам, как только проверку прошли
-     в окне приложения (checkPassed — его зовёт dscheck.js), или пробует снова через 5, 15, 30 минут и дальше раз в час:
+     в окне приложения (checkPassed — его зовёт webcheck.js), или пробует снова через 5, 15, 30 минут и дальше раз в час:
      защита сайта часто отпускает сама. «Стоп» действует как обычно; после ~4 часов ожидания задача останавливается */
   async waitCheck(e, sig) {
-    const WAITS = [5, 15, 30, 60, 60, 60, 60], n = this.chk?.n || 0;
-    if (n >= WAITS.length) { this.checkDone('fail'); throw Object.assign(e, { human: 'DeepSeek так и не пустил без проверки «я не робот» — задача остановлена. Нажми «Повторить», когда будешь рядом: появится кнопка «Пройти проверку».' }); }
+    const WAITS = [5, 15, 30, 60, 60, 60, 60], n = this.chk?.n || 0, prov = e.prov === 'qwen' ? 'qwen' : 'deepseek', name = prov === 'qwen' ? 'Qwen' : 'DeepSeek';
+    if (n >= WAITS.length) { this.checkDone('fail'); throw Object.assign(e, { human: name + ' так и не пустил без проверки «я не робот» — задача остановлена. Нажми «Повторить», когда будешь рядом: появится кнопка «Пройти проверку».' }); }
     const at = Date.now() + WAITS[n] * 60e3 * (+process.env.PERSONALCOMPUTER_CHECK_WAIT_SCALE || 1);
     let entry = this.chk?.entry;
     if (!entry) {
       /* карточки прошлых ожиданий (сервер перезапускался посреди ожидания) больше не ждут */
       for (const x of this.doc.v.log.slice(-60)) if (x.kind === 'check' && (x.state === 'wait' || x.state === 'try')) { x.state = 'stop'; delete x.at; this.update(x); }
-      entry = this.push({ kind: 'check', prov: 'deepseek', check: e.check || 'captcha', text: DS_CHECK, state: 'wait', at });
+      entry = this.push({ kind: 'check', prov, check: e.check || 'captcha', text: prov === 'qwen' ? QW_CHECK : DS_CHECK, state: 'wait', at, ...(e.url ? { url: e.url } : {}) });
     }
-    else { entry.state = 'wait'; entry.at = at; this.update(entry); }
+    else { entry.state = 'wait'; entry.at = at; if (e.url) entry.url = e.url; this.update(entry); }
     this.chk = { n: n + 1, at, entry, wake: null };
     this.emit('run', this.runState());
-    if (n === 0) this.emit('check', { at, prov: 'deepseek' });
+    if (n === 0) this.emit('check', { at, prov });
     await new Promise(ok => {
       const t = setTimeout(ok, Math.max(0, at - Date.now()));
       this.chk.wake = () => { clearTimeout(t); ok(); };

@@ -30,15 +30,17 @@
    x-device-id), заголовки sec-fetch-* и все cookies, что выдал сайт (в том числе aws-waf-token — отметку о пройденной
    проверке). Это состояние st хранит agent.js (deepseek.json пользователя): { ua, auto, lang, did, dev, ck, calm }.
    Если проверка всё же случилась, ошибка помечена captcha (а не «сломалось»): агент ставит задачу на паузу, человек
-   проходит проверку в окне приложения (dscheck.js — настоящая страница сайта в браузере на этом сервере), выданные
+   проходит проверку в окне приложения (webcheck.js — настоящая страница сайта в браузере на этом сервере), выданные
    сайтом cookies переходят сюда — и работа продолжается. Сами проверки Personal Computer не решает и не обходит.
 
    Вход по email (или телефону) и паролю — как у сайта: POST /api/v0/users/login, токен — data.biz_data.user.token.
    Сайт ждёт отпечаток устройства (device_id — его считает SDK защиты Shumei в браузере): без него или с выдуманным
-   отвечает RISK_DEVICE_DETECTED. Поэтому отпечаток берём только настоящий — из браузера на сервере (dscheck.js)
+   отвечает RISK_DEVICE_DETECTED. Поэтому отпечаток берём только настоящий — из браузера на сервере (webcheck.js)
    или из твоего браузера (закладка «Войти через Google» приносит его вместе с токеном). */
 import crypto from 'node:crypto';
 import { apiFetch, cfBlock } from './net.js';
+import * as W from './webid.js';
+import { ident, locOf } from './webid.js';
 import { callParser, wrapInstr, freshContent, render, anchorOf, names, sysHash, clip, NUDGE, dayOf, attach as attachFiles } from './webchat.js';
 
 export const DS_BASE = 'https://chat.deepseek.com';
@@ -123,103 +125,28 @@ function bizErr(j, status) {
 }
 const netErr = e => dErr('Не достучался до chat.deepseek.com (' + (e.cause?.code || e.message) + '). ' + (e.proxy ? 'Проверь прокси: настройки → Сервер → «Прокси» → «Проверить».' : 'Проверь интернет на сервере или включи прокси в настройках → Сервер.'), { net: true, proxy: !!e.proxy });
 
-/* ---------- кто мы для сайта: одна и та же вкладка браузера ----------
-   st — состояние пользователя (agent.js хранит его в deepseek.json): ua — User-Agent (свой, если пришёл из твоего браузера,
-   иначе обычный Chrome под Windows; auto — придуман нами и сам «обновляется», как настоящий Chrome), lang — Accept-Language,
-   did — постоянный id вкладки (x-device-id), dev — отпечаток устройства Shumei для входа, ck — cookies сайта,
-   calm — до какого времени быть бережнее после проверки. x-client-version — версия веб-клиента, по ней сайт включает
-   возможности (PERSONALCOMPUTER_DEEPSEEK_VERSION) */
+/* ---------- кто мы для сайта: одна и та же вкладка браузера (webid.js) ----------
+   x-client-version — версия веб-клиента, по ней сайт включает возможности (PERSONALCOMPUTER_DEEPSEEK_VERSION) */
 const VER = () => process.env.PERSONALCOMPUTER_DEEPSEEK_VERSION || '2.7.0';
-/* текущий Chrome: выходит раз в 4 недели (142 — 28.10.2025); берём на версию старше — так у большинства людей */
-export const chromeMajor = (now = Date.now()) => Math.max(142, 141 + Math.floor((now - Date.UTC(2025, 9, 28)) / (28 * 864e5)));
-export const defaultUA = (v = chromeMajor()) => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' + v + '.0.0.0 Safari/537.36';
-/* sec-ch-ua — как его собирает сам Chromium (GREASE по номеру версии: components/embedder_support/user_agent_utils.cc).
-   Только у Chrome и Edge; Firefox и Safari этих заголовков не шлют */
-export function hintsOf(ua) {
-  ua = String(ua || '');
-  const m = /Chrome\/(\d+)/.exec(ua);
-  if (!m || /Firefox|FxiOS|CriOS|EdgiOS|OPR\/|YaBrowser|SamsungBrowser|UCBrowser/.test(ua)) return {};
-  const v = +m[1], edge = /Edg\/(\d+)/.exec(ua);
-  const ch = [' ', '(', ':', '-', '.', '/', ')', ';', '=', '?', '_'], order = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]][v % 6];
-  const list = [];
-  list[order[0]] = ['Not' + ch[v % 11] + 'A' + ch[(v + 1) % 11] + 'Brand', ['8', '99', '24'][v % 3]];
-  list[order[1]] = ['Chromium', String(v)];
-  list[order[2]] = [edge ? 'Microsoft Edge' : 'Google Chrome', edge ? edge[1] : String(v)];
-  const plat = /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /CrOS/.test(ua) ? 'Chrome OS' : /Mac OS X|Macintosh/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : 'Unknown';
-  return { 'sec-ch-ua': list.map(([b, x]) => '"' + b + '";v="' + x + '"').join(', '), 'sec-ch-ua-mobile': /Mobile/.test(ua) ? '?1' : '?0', 'sec-ch-ua-platform': '"' + plat + '"' };
-}
-/* состояние «браузера» пользователя: недостающее дополняем, придуманный нами Chrome «обновляем» */
-export function ident(st) {
-  if (!st || typeof st !== 'object') st = {};
-  if (typeof st.ua !== 'string' || !/^Mozilla\/5\.0 /.test(st.ua) || st.ua.length > 400) { st.ua = defaultUA(); st.auto = 1; }
-  else if (st.auto) { const v = +(/Chrome\/(\d+)/.exec(st.ua)?.[1] || 0); if (v < chromeMajor() - 2) st.ua = defaultUA(); }
-  if (typeof st.lang !== 'string' || !/^[\w,;=.\s*-]{2,200}$/.test(st.lang)) st.lang = 'en-US,en;q=0.9';
-  if (typeof st.did !== 'string' || !/^[0-9a-f-]{36}$/.test(st.did)) st.did = crypto.randomUUID();
-  if (!st.ck || typeof st.ck !== 'object' || Array.isArray(st.ck)) st.ck = {};
-  return st;
-}
-const locOf = lang => { const m = /^([a-z]{2,3})(?:-([A-Za-z]{2}))?/.exec(String(lang || '')); return m ? m[1] + '_' + (m[2] || (m[1] === 'en' ? 'US' : m[1])).toUpperCase() : 'en_US'; };
-
-/* ---------- cookies сайта ----------
-   Как у браузера: всё, что сайт выдал через Set-Cookie (своему домену), уходит обратно; истёкшее выбрасываем.
-   Сессионные (без срока) живут сутки — браузер столько обычно и не закрывают */
-const CK_MAX = 60, CK_SESSION = 864e5;
 const myHost = () => { try { return new URL(api()).hostname; } catch { return 'chat.deepseek.com'; } };
-const ckOk = (dom, host = myHost()) => !dom || host === dom || host.endsWith('.' + dom);
-export function takeCookies(st, lines, host = myHost()) {
-  let n = 0;
-  for (const line of lines || []) {
-    const [nv, ...attrs] = String(line).split(';'), i = nv.indexOf('=');
-    if (i <= 0) continue;
-    const name = nv.slice(0, i).trim(), value = nv.slice(i + 1).trim();
-    if (!/^[!#$%&'*+\-.^\w`|~]{1,128}$/.test(name) || value.length > 4096) continue;
-    let exp = 0, age = null, dom = '', dated = false;
-    for (const a of attrs) {
-      const k = a.indexOf('='), key = (k < 0 ? a : a.slice(0, k)).trim().toLowerCase(), v = k < 0 ? '' : a.slice(k + 1).trim();
-      if (key === 'max-age' && /^-?\d+$/.test(v)) age = +v;
-      else if (key === 'expires') { const t = Date.parse(v); if (Number.isFinite(t)) { exp = t; dated = true; } }
-      else if (key === 'domain') dom = v.replace(/^\./, '').toLowerCase();
-    }
-    if (!ckOk(dom, host)) continue;
-    /* Max-Age главнее Expires; срок в прошлом (или Max-Age=0) — сайт удаляет cookie */
-    if (age !== null) { exp = Date.now() + age * 1000; dated = true; }
-    if (dated && exp <= Date.now()) delete st.ck[name];
-    else st.ck[name] = { v: value, e: exp || 0, t: Date.now(), ...(dom ? { d: dom } : {}) };
-    n++;
-  }
-  const ks = Object.keys(st.ck); if (ks.length > CK_MAX) for (const k of ks.slice(0, ks.length - CK_MAX)) delete st.ck[k];
-  return n;
-}
-const live = c => c && typeof c.v === 'string' && (c.e ? c.e > Date.now() : Date.now() - (c.t || 0) < CK_SESSION);
-export const cookieHeader = st => Object.entries(st?.ck || {}).filter(([, c]) => live(c)).map(([k, c]) => k + '=' + c.v).join('; ');
-/* cookies браузера (CDP Network.getCookies) → сюда и обратно (Network.setCookies) */
-export function absorbCookies(st, list) {
-  ident(st);
-  for (const c of list || []) {
-    if (!c?.name || typeof c.value !== 'string' || !ckOk(String(c.domain || '').replace(/^\./, '').toLowerCase())) continue;
-    const e = c.expires > 0 ? Math.round(c.expires * 1000) : 0;
-    if (e && e <= Date.now()) { delete st.ck[c.name]; continue; }
-    st.ck[c.name] = { v: c.value, e, t: Date.now(), ...(/^\./.test(c.domain || '') ? { d: String(c.domain).slice(1) } : {}) };
-  }
-  return st;
-}
-export const cookieList = st => Object.entries(st?.ck || {}).filter(([, c]) => live(c))
-  .map(([name, c]) => ({ name, value: c.v, ...(c.d ? { domain: '.' + c.d } : { url: DS_BASE }), path: '/', secure: true, ...(c.e ? { expires: c.e / 1000 } : {}) }));
+export { chromeMajor, defaultUA, hintsOf, ident } from './webid.js';
+export const takeCookies = (st, lines, host = myHost()) => W.takeCookies(st, lines, host);
+export const cookieHeader = st => W.cookieHeader(st);
+export const absorbCookies = (st, list) => W.absorbCookies(st, list, myHost());
+export const cookieList = st => W.cookieList(st, DS_BASE);
 
 /* ---------- запрос к сайту ----------
    cl — { token, st, save }. Заголовки — как у fetch со страницы сайта: sec-fetch-* same-origin, Origin только у POST,
    Referer — страница, с которой «нажали» (чат, вход) */
 export function client(token, st, save) { return { token: token || '', st: ident(st), save: typeof save === 'function' ? save : () => {} }; }
 function headers(cl, method, ref, extra = {}) {
-  const st = cl.st, ck = cookieHeader(st);
+  const st = cl.st, ck = W.cookieHeader(st);
   return {
-    Accept: '*/*', 'Accept-Language': st.lang, ...(method !== 'GET' ? { 'Content-Type': 'application/json', Origin: DS_BASE } : {}),
+    ...W.browserHeaders(st, { method, base: DS_BASE, ref }), ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}),
     ...(cl.token ? { Authorization: 'Bearer ' + cl.token } : {}),
-    'User-Agent': st.ua, ...hintsOf(st.ua),
-    'sec-fetch-dest': 'empty', 'sec-fetch-mode': 'cors', 'sec-fetch-site': 'same-origin', priority: 'u=1, i',
     'x-app-version': VER(), 'x-client-locale': locOf(st.lang), 'x-client-platform': 'web', 'x-client-version': VER(),
     'x-client-timezone-offset': String(-new Date().getTimezoneOffset() * 60), 'x-device-id': st.did,
-    Referer: DS_BASE + (ref || '/'), ...(ck ? { Cookie: ck } : {}), ...extra };
+    ...(ck ? { Cookie: ck } : {}), ...extra };
 }
 /* ответ сайта до разбора: cookies — в «браузер», страница защиты — ошибкой (проверка или блокировка) */
 async function send(cl, method, p, { body, signal, ref, extra } = {}) {
@@ -453,25 +380,12 @@ async function pow(cl, target, signal, ref) {
    Пауза — случайная в [gap, 2·gap], отсчёт от конца прошлого запроса (пока работают инструменты, она уже идёт).
    И не больше RPM ответов в минуту — так часто человек не пишет даже в спешке. После проверки «я не робот» (calm) —
    пауза втрое длиннее, а в минуту — вдвое меньше: защита сайта ещё присматривается */
-const gates = new Map();
 const num = (k, d) => { const g = process.env[k]; return g !== undefined && g !== '' && Number.isFinite(+g) ? +g : d; };
 const GAP = () => num('PERSONALCOMPUTER_DEEPSEEK_GAP_MS', 1500), RPM = () => num('PERSONALCOMPUTER_DEEPSEEK_RPM', 10);
-const sleep = (ms, signal) => new Promise(ok => { if (ms <= 0) return ok(); const t = setTimeout(ok, ms); signal?.addEventListener('abort', () => { clearTimeout(t); ok(); }, { once: true }); });
-export const calm = st => !!st && +st.calm > Date.now();
-function gated(acct, signal, fn, st) {
-  let g = gates.get(acct);
-  if (!g) { g = { p: Promise.resolve(), last: 0, hits: [] }; gates.set(acct, g); if (gates.size > 50) gates.delete(gates.keys().next().value); }
-  const run = g.p.then(async () => {
-    const c = calm(st), gap = GAP() * (c ? 3 : 1), rpm = RPM() > 0 ? Math.max(1, Math.round(RPM() / (c ? 2 : 1))) : 0;
-    await sleep(g.last + gap + Math.random() * gap - Date.now(), signal);
-    if (rpm) { g.hits = g.hits.filter(t => Date.now() - t < 60e3); if (g.hits.length >= rpm) await sleep(g.hits[0] + 60e3 - Date.now() + Math.random() * gap, signal); }
-    if (signal?.aborted) throw signal.reason;
-    g.hits.push(Date.now());
-    try { return await fn(); } finally { g.last = Date.now(); }
-  });
-  g.p = run.catch(() => {});
-  return run;
-}
+const sleep = W.sleep;
+export const calm = W.calm;
+const pace = W.pacer();
+const gated = (acct, signal, fn, st) => pace(acct, signal, fn, { st, gap: GAP(), rpm: RPM() });
 
 /* ---------- чаты ---------- */
 async function newChat(cl, signal) {
