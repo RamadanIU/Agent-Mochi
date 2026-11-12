@@ -11,6 +11,7 @@ import { runCmd, fileCmd, agentInfo } from './runner-client.js';
 import { userDir, pullFile, storeFile, dropFids, sz } from './files.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
 import { agentNote } from './proxy.js';
+import { isQwen, turn as qwenTurn, ask as qwenAsk } from './qwen.js';
 import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens, setPresetSeed, presetsOff } from './ext.js';
 
 export const DEF_SYS = 'Тебя зовут Personal Computer — ты ламповый пиксельный компьютер-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
@@ -18,7 +19,8 @@ export const DEF_SYS = 'Тебя зовут Personal Computer — ты ламп�
 export const OLD_SYS = new Set(['Тебя зовут Мочи — ты милый пиксельный зверёк-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. В поле action кратко и по-человечески пиши, что делаешь. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.']);
 /* что умеет показывать веб-чат — модель должна знать, чтобы рисовать таблицы и схемы, а не ASCII-картинки */
 const FMT = 'Оформление: чат показывает Markdown — заголовки, списки, таблицы, цитаты и врезки (> [!NOTE], > [!TIP], > [!WARNING]), `код` и блоки кода с языком, формулы LaTeX ($…$, $$…$$), схемы и графики в блоке ```mermaid (flowchart, sequenceDiagram, classDiagram, stateDiagram, erDiagram, gantt, pie, xychart-beta, quadrantChart, radar-beta, sankey-beta, treemap-beta, timeline, mindmap, journey, gitGraph, kanban, block-beta, packet-beta, architecture-beta, requirementDiagram, C4Context). Пользуйся этим, только когда правда помогает: сравнение — таблицей, процесс или связи — схемой, числа и динамика — графиком (xychart-beta, pie), сроки — gantt, вычисления — формулой. Короткий ответ оставляй простым текстом.';
-export const DEF_SETTINGS = { base: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', sys: DEF_SYS, vis: true, stepLimit: true, maxSteps: CFG.maxSteps };
+/* think — размышление у Qwen (у остальных провайдеров не используется) */
+export const DEF_SETTINGS = { base: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', sys: DEF_SYS, vis: true, stepLimit: true, maxSteps: CFG.maxSteps, think: false };
 /* лимит шагов подряд (настройки → Модель): число от 1 до MAX_STEPS */
 export const MAX_STEPS = 10000;
 
@@ -152,6 +154,8 @@ function labelFor(n, a) {
 export function friendly(e) {
   const s = e.status;
   if (e.cf) return e.cf;
+  /* провайдер сам объяснил по-человечески (Qwen: токен истёк, лимит, защита сайта) */
+  if (e.human) return e.human;
   /* шлюзы вроде New API (JustWoker) отвечают 401/403, когда на ключе кончилась квота, — это не «неверный ключ» */
   if ((s === 401 || s === 403) && /quota|额度|余额|balance|credits?\b|insufficient[ _](funds|balance|credits?)/i.test(e.detail || '')) return 'На ключе кончились деньги или квота (HTTP ' + s + '). Пополни баланс у провайдера или выбери модель подешевле.';
   if (s === 401 || s === 403) return 'Ключ API не подошёл (HTTP ' + s + '). Проверь его в настройках.';
@@ -352,6 +356,12 @@ export class Chat extends EventEmitter {
       const log = this.peek(id).log.filter(e => (e.kind === 'user' || e.kind === 'assistant') && e.text).slice(0, 8);
       if (!log.length) return;
       const text = log.map(e => (e.kind === 'user' ? 'Пользователь: ' : 'Ассистент: ') + oneLine(e.text, 600)).join('\n');
+      /* Qwen: короткий вопрос во временном чате (он сразу удаляется), а не в чате разговора */
+      if (isQwen(S.base)) {
+        const t = cleanTitle(await qwenAsk({ key: S.key, model: S.model, prompt: TITLE_SYS + '\n\n' + text, signal: AbortSignal.timeout(60000) }));
+        if (t && !m.named && !m.del) { Object.assign(m, { title: t, named: 1 }); this.metaChanged(); }
+        return;
+      }
       const h = { 'Content-Type': 'application/json' };
       if (S.key) h.Authorization = 'Bearer ' + S.key;
       const r = await apiFetch(S.base.replace(/\/+$/, '') + '/chat/completions', { method: 'POST', headers: h, signal: AbortSignal.timeout(60000),
@@ -376,7 +386,7 @@ export class Chat extends EventEmitter {
   ctxSize() {
     const v = this.doc.v;
     if (typeof v.ctx === 'number') return v.ctx;
-    return v.hist.length ? tokens(v.hist.map(({ _pf, _vi, _mid, ...m }) => m)) : 0;
+    return v.hist.length ? tokens(v.hist.map(({ _pf, _vi, _mid, _qw, ...m }) => m)) : 0;
   }
   /* c — какой чат показываем (не обязательно тот, где работает агент) */
   snapshot(id = this.cid) {
@@ -421,7 +431,7 @@ export class Chat extends EventEmitter {
     const us = H.map((m, i) => m.role === 'user' ? i : -1).filter(i => i >= 0), from = us.length > 40 ? us[us.length - 40] : 0;
     const out = [];
     for (let i = from; i < H.length; i++) {
-      const { _pf, _vi, _mid, ...m } = H[i];
+      const { _pf, _vi, _mid, _qw, ...m } = H[i];
       /* Ollama не принимает историю, где аргументы вызова — не JSON-объект (обрезаны или пустые): шлём {} — модель и так получила ошибку */
       if (m.tool_calls) m.tool_calls = m.tool_calls.map(c => argsOk(c.function.arguments) ? c : { ...c, function: { ...c.function, arguments: '{}' } });
       if (_pf && lvl < 2 && rec.has(i)) {
@@ -600,7 +610,7 @@ export class Chat extends EventEmitter {
       + (tgOn ? '\n' + (hooks.tg?.statusLine(this.u) || 'Telegram не подключён.') + ' Если пользователь хочет управлять тобой из Telegram или получать уведомления: попроси создать бота у @BotFather (команда /newbot) и прислать токен, затем вызови telegram_connect и дай пользователю ссылку из ответа.' : '')
       + (offB.length ? '\nВыключено пользователем: ' + offB.join(', ') + '. Включить их может только он сам в настройках — ты не можешь.' : '')
       + extra
-      + (this.wire().some(m => Array.isArray(m.content)) ? '\nКартинки и PDF из сообщений пользователя ты видишь напрямую; те же файлы лежат в inbox/, если их нужно обработать.' : '')
+      + (!isQwen(S.base) && this.wire().some(m => Array.isArray(m.content)) ? '\nКартинки и PDF из сообщений пользователя ты видишь напрямую; те же файлы лежат в inbox/, если их нужно обработать.' : '')
       + (has('view_image') ? '\nЧтобы увидеть картинку с сервера (фото, скриншот, график), вызови view_image — не гадай по имени файла и не читай её через read_file.' : '')
       + (this.doc.v.hist.some(m => m._mid) ? MID_SYS : '');
   }
@@ -633,17 +643,18 @@ export class Chat extends EventEmitter {
   /* один шаг → текст ответа (модель закончила) или null (были инструменты — нужен следующий шаг) */
   async step(sig, g, H, run, ask) {
     const chk = () => { if (sig.aborted || g !== this.gen) throw abortErr(); };
-    const S = this.settings(), on = t => isOn(S, t.function.name);
+    const S = this.settings(), qw = isQwen(S.base), on = t => isOn(S, t.function.name) && !(qw && t.function.name === 'view_image');
     /* лимит — шагов подряд без сообщений пользователя */
     if (S.stepLimit !== false && run.steps - (run.base || 0) >= S.maxSteps) throw new Error('Personal Computer сделал ' + S.maxSteps + ' шагов подряд и остановился, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить. Лимит шагов меняется в настройках → Модель.');
     run.steps++;
-    const offB = [...builtins(), ...MANAGE_TOOLS].filter(t => !on(t)).map(t => t.function.name);
+    const offB = [...builtins(), ...MANAGE_TOOLS].filter(t => !isOn(S, t.function.name)).map(t => t.function.name);
     const X = await until(agentExt(this, S.tools), sig); chk();
     const { tools, said } = withAction([...builtins().filter(on), ...X.defs]), names = new Set(tools.map(t => t.function.name));
     const ctx = { X, names };
     const sys = await until(this.system(names, X.prompt, offB), sig); chk();
-    const { text, calls, used } = await until(this.callModel(sys, tools, sig), sig); chk();
-    H.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}) });
+    const { text, calls, used, qw: mark } = await until(this.callModel(sys, tools, sig), sig); chk();
+    /* _qw — скрытая метка чата Qwen под ответом: следующий шаг продолжит тот же чат (см. qwen.js) */
+    H.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}), ...(mark ? { _qw: mark } : {}) });
     /* контекст: модель назвала usage — верим ей, нет — оценка по запросу и ответу */
     this.doc.v.ctx = used || tokens([sys, tools, this.wire(), H.at(-1)]);
     this.emit('ctx', this.doc.v.ctx);
@@ -781,6 +792,12 @@ export class Chat extends EventEmitter {
 
   async callModel(sys, tools, sig) {
     const S = this.settings();
+    /* Qwen (chat.qwen.ai): свой протокол, история живёт в чате Qwen — отправляется только новое */
+    if (isQwen(S.base)) {
+      this.partial = '';
+      return qwenTurn({ key: S.key, model: S.model, think: !!S.think, sys, tools, hist: this.doc.v.hist, signal: sig,
+        onText: d => { this.partial += d; this.emit('delta', d, this.cid); } });
+    }
     for (let attempt = 0; ; attempt++) {
       const msgs = this.wire(), hasM = msgs.some(m => Array.isArray(m.content));
       const h = { 'Content-Type': 'application/json' };

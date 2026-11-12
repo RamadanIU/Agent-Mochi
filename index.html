@@ -1663,11 +1663,14 @@ const tick=setInterval(paint,100);paint();
     <label class="f">Провайдер<select id="c-prov"></select></label>
     <label class="f" id="f-base" hidden>Адрес API<input id="c-base" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="https://…/v1"></label>
     <label class="f" id="f-key">API ключ<span class="fx"><input id="c-key" type="password" autocomplete="off" spellcheck="false"><button type="button" class="eye" id="c-eye" aria-label="Показать ключ" aria-pressed="false"><i class="pi"></i></button></span></label>
+    <small class="hint" id="c-qh" hidden>Где взять токен: открой <b>chat.qwen.ai</b> и войди, нажми F12, вкладка «Console», вставь <code>copy(localStorage.token)</code> и нажми Enter — токен скопирован. Вставь его сюда.</small>
+    <button class="lnk" id="c-qcopy" type="button" hidden>Скопировать команду и открыть chat.qwen.ai</button>
     <button class="lnk" id="c-forget" type="button" hidden>Забыть этого провайдера</button>
     <label class="f">Модель<input id="c-model" autocapitalize="off" autocomplete="off" spellcheck="false"></label><div id="ml" hidden></div><small id="mh"></small>
     </div>
     <div class="grp" data-i="abil"><h3 class="gh">Возможности</h3>
-    <label class="sw"><span>Показывать файлы модели<small>Картинки и PDF уходят прямо в модель. Выключи, если она не умеет их читать</small></span><input type="checkbox" role="switch" id="c-vis"></label>
+    <label class="sw" id="f-think" hidden><span>Размышление<small>Qwen сначала думает, потом отвечает: умнее, но медленнее. Поиск, код и картинки самого Qwen выключены — у Personal Computer свои инструменты</small></span><input type="checkbox" role="switch" id="c-think"></label>
+    <label class="sw" id="f-vis"><span>Показывать файлы модели<small>Картинки и PDF уходят прямо в модель. Выключи, если она не умеет их читать</small></span><input type="checkbox" role="switch" id="c-vis"></label>
     </div>
     <div class="grp" data-i="steps"><h3 class="gh">Шаги агента</h3>
     <label class="sw"><span>Ограничение шагов<small>Personal Computer останавливается после стольких шагов подряд, чтобы не зациклиться. Выключи — будет работать до конца или до «Стоп»</small></span><input type="checkbox" role="switch" id="c-lim"></label>
@@ -4167,7 +4170,7 @@ window.md=md;window.hl=hl;
 </script>
 <script>
 const $=s=>document.querySelector(s);
-const DEF={base:'https://api.openai.com/v1',key:'',model:'gpt-4o-mini',
+const DEF={base:'https://api.openai.com/v1',key:'',model:'gpt-4o-mini',think:false,
  sys:'',
  stepLimit:true,maxSteps:40};
 /* лимит шагов подряд: целое от 1 до MAXSTEPS_CAP, иначе null */
@@ -4219,7 +4222,7 @@ $('#ask-ok').onclick=()=>$('#ask').close('ok');$('#ask-no').onclick=()=>$('#ask'
 $('#ask-i').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#ask').close('ok')}};
 $('#ask').addEventListener('click',e=>{if(e.target===$('#ask'))$('#ask').close('')});
 /* свой Ollama и другие OpenAI-совместимые серверы — через «Другой» */
-const PRESETS={OpenAI:'https://api.openai.com/v1',OpenRouter:'https://openrouter.ai/api/v1','Ollama Cloud':'https://ollama.com/v1',JustWoker:'https://api.justwoker.icu/v1','LM Studio':'http://localhost:1234/v1'};
+const PRESETS={OpenAI:'https://api.openai.com/v1','Qwen (chat.qwen.ai)':'https://chat.qwen.ai',OpenRouter:'https://openrouter.ai/api/v1','Ollama Cloud':'https://ollama.com/v1',JustWoker:'https://api.justwoker.icu/v1','LM Studio':'http://localhost:1234/v1'};
 const LOCAL=['LM Studio'],CUSTOM='Другой';
 const prov=$('#c-prov');
 /* сохранённые на сервере провайдеры: адрес API → {model, hasKey} (заполняет client.js; сами ключи в браузер не приходят).
@@ -4236,13 +4239,17 @@ provOpts();
 const provBase=p=>PRESETS[p]||(p!==CUSTOM?p:'');
 const F={base:'#c-base',key:'#c-key',model:'#c-model',sys:'#c-sys'};
 /* ключ этого провайдера уже на сервере — поле можно оставить пустым */
-function keyHint(){const sv=provSaved[nb($('#c-base').value)];
-  $('#c-key').placeholder=sv&&sv.hasKey?'сохранён на сервере · пусто = не менять':'sk-…';$('#c-forget').hidden=!sv}
+/* Qwen (chat.qwen.ai): вместо ключа — токен аккаунта, из настроек — только модель и размышление */
+const isQw=b=>{try{return new URL(nb(b)).hostname==='chat.qwen.ai'}catch(e){return false}};
+function keyHint(){const b=nb($('#c-base').value),sv=provSaved[b],q=isQw(b);
+  $('#c-key').placeholder=sv&&sv.hasKey?'сохранён на сервере · пусто = не менять':q?'eyJhbGciOi… (токен с chat.qwen.ai)':'sk-…';$('#c-forget').hidden=!sv;
+  $('#f-key').firstChild.nodeValue=q?'Токен Qwen':'API ключ';$('#c-qh').hidden=$('#c-qcopy').hidden=!q;
+  $('#f-think').hidden=!q;$('#f-vis').hidden=q}
 function syncSet(){const p=prov.value;$('#f-steps').hidden=!$('#c-lim').checked;$('#sh').hidden=true;$('#f-base').hidden=!!PRESETS[p];$('#f-key').hidden=LOCAL.includes(p);keyHint()}
 function fill(s){
   for(const k in F)$(F[k]).value=s[k]||'';
   const b=nb(s.base);prov.value=Object.keys(PRESETS).find(k=>PRESETS[k]===b)||(provSaved[b]?b:CUSTOM);
-  $('#c-sfx').checked=s.sfx!==false;$('#c-room').checked=s.room!==false;$('#c-vol').value=Number.isFinite(+s.vol)&&s.vol!==''?s.vol:60;$('#c-crt').value=s.crt||'';$('#c-key').type='password';$('#c-eye').setAttribute('aria-pressed','false');$('#c-vis').checked=s.vis!==false;$('#c-lim').checked=s.stepLimit!==false;$('#c-steps').value=s.maxSteps||DEF.maxSteps;$('#c-tts').checked=s.tts!==false;$('#c-vlang').value=s.vlang||(window.personalComputerGuess?personalComputerGuess():'ru-RU');
+  $('#c-sfx').checked=s.sfx!==false;$('#c-room').checked=s.room!==false;$('#c-vol').value=Number.isFinite(+s.vol)&&s.vol!==''?s.vol:60;$('#c-crt').value=s.crt||'';$('#c-key').type='password';$('#c-eye').setAttribute('aria-pressed','false');$('#c-vis').checked=s.vis!==false;$('#c-think').checked=!!s.think;$('#c-lim').checked=s.stepLimit!==false;$('#c-steps').value=s.maxSteps||DEF.maxSteps;$('#c-tts').checked=s.tts!==false;$('#c-vlang').value=s.vlang||(window.personalComputerGuess?personalComputerGuess():'ru-RU');
   syncSet()}
 /* сменили провайдера — модель из старого списка там, скорее всего, не найдётся: loadModels подберёт новую */
 let provNew=false;
@@ -4251,6 +4258,9 @@ prov.onchange=()=>{const b=provBase(prov.value),sv=provSaved[b];$('#c-base').val
   if(sv&&sv.model){mi().value=sv.model;provNew=false}else provNew=true;
   syncSet();if(b)loadModels();else{$('#mh').textContent='';$('#c-base').focus()}};
 $('#c-lim').onchange=syncSet;
+$('#c-qcopy').onclick=async()=>{const c='copy(localStorage.token)',b=$('#c-qcopy');
+  try{await navigator.clipboard.writeText(c);b.textContent='Команда скопирована — вставь её в консоль на chat.qwen.ai'}catch(e){await ask('Токен Qwen','Скопируй команду и вставь её в консоль (F12 → Console) на chat.qwen.ai:',c,'Готово')}
+  window.open('https://chat.qwen.ai','_blank','noopener')};
 /* лимит шагов: пустое или вне 1…10000 не сохраняем, а показываем ошибку у поля */
 function readSteps(){const n=stepsOk($('#c-steps').value),h=$('#sh');
   if(n||!$('#c-lim').checked){h.hidden=true;return{stepLimit:$('#c-lim').checked,maxSteps:n||undefined}}

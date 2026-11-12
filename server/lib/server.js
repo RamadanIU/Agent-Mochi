@@ -14,6 +14,7 @@ import { ensureDir, flushAll } from './store.js';
 import * as A from './auth.js';
 import { getChat, resumeAll, DEF_SETTINGS, MAX_STEPS, toolCatalog, setTools } from './agent.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
+import * as QW from './qwen.js';
 import * as X from './ext.js';
 import { putInbox, storeCopy, getFile, userDir, safeName } from './files.js';
 import * as TG from './telegram.js';
@@ -197,13 +198,15 @@ function putSettings(c, b) {
   const cur = s.base || DEF_SETTINGS.base, moved = cur !== prev;
   /* «Сбросить всё» стирает ключи всех провайдеров */
   if (b.clearKey) { s.key = ''; for (const k in P) delete P[k]; }
-  else if (typeof b.key === 'string' && b.key.trim()) s.key = b.key.trim().slice(0, 500);
+  /* токен Qwen вставляют как попало (Bearer, cookie, JSON) — храним только сам токен; JWT бывает длинным */
+  else if (typeof b.key === 'string' && b.key.trim()) s.key = QW.isQwen(cur) ? QW.parseToken(b.key).slice(0, 8000) : b.key.trim().slice(0, 500);
   else if (moved) s.key = P[cur]?.key || '';
   if (b.model !== undefined) s.model = String(b.model).trim().slice(0, 200) || DEF_SETTINGS.model;
   else if (moved && P[cur]?.model) s.model = P[cur].model;
   if (b.sys !== undefined) s.sys = String(b.sys).trim().slice(0, 20000) || DEF_SETTINGS.sys;
   if (b.vis !== undefined) { s.vis = !!b.vis; c.noVis = 0; }
   if (b.stepLimit !== undefined) s.stepLimit = !!b.stepLimit;
+  if (b.think !== undefined) s.think = !!b.think;
   if (steps !== undefined) s.maxSteps = steps;
   if (!b.clearKey) {
     P[cur] = { key: s.key || '', model: s.model || DEF_SETTINGS.model };
@@ -220,6 +223,11 @@ async function models(c, b) {
   const base = normBase(b.base || S.base);
   if (!/^https?:\/\//i.test(base)) throw new HttpErr(400, 'неверный адрес API');
   const key = String(b.key || '').trim() || provsOf(S)[base]?.key || (base === S.base ? S.key : '');
+  /* Qwen: свой API у chat.qwen.ai — модели, умеют ли размышлять, до какого числа действует токен */
+  if (QW.isQwen(base)) {
+    try { return await QW.check(key); }
+    catch (e) { throw new HttpErr(e.status === 401 ? 401 : 502, e.human || e.message, { human: true, ...(e.needKey ? { needKey: true } : {}) }); }
+  }
   const auth = key ? { Authorization: 'Bearer ' + key } : {};
   const r = await apiFetch(base + '/models', { headers: auth, signal: AbortSignal.timeout(15000) })
     .catch(e => { throw new HttpErr(502, 'сервер модели не отвечает: ' + (e.cause?.code || e.message)); });
@@ -627,7 +635,7 @@ async function handle(req, res) {
     const code = e.status || 500;
     if (code === 500) console.error('http:', req.method, p, e);
     if (res.headersSent) return res.destroy();
-    json(res, code, { error: code === 500 ? 'внутренняя ошибка сервера' : e.message, ...(e.field ? { field: e.field } : {}), ...(e.upstream ? { upstream: e.upstream } : {}), ...(e.fcode ? { code: e.fcode } : {}), ...(e.busy ? { busy: true } : {}) });
+    json(res, code, { error: code === 500 ? 'внутренняя ошибка сервера' : e.message, ...(e.field ? { field: e.field } : {}), ...(e.upstream ? { upstream: e.upstream } : {}), ...(e.fcode ? { code: e.fcode } : {}), ...(e.busy ? { busy: true } : {}), ...(e.human ? { human: true } : {}), ...(e.needKey ? { needKey: true } : {}) });
   }
 }
 
