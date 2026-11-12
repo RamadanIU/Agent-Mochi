@@ -599,9 +599,11 @@ body{background:var(--bg) conic-gradient(var(--chk) 25%,transparent 0 50%,var(--
 .m.fz:not(.np) .mfold{animation:ipop .4s var(--ezb)}
 @media(prefers-reduced-motion:reduce){.m.fa .mb,.mfold svg{transition:none}}
 .snote{box-shadow:var(--sh2),4px 4px 0 0 var(--dsh)}
-/* размышления модели: свёрнутый блок над ответом */
-.rz{margin:0 0 8px;font-size:.85em;opacity:.8}.rz summary{cursor:pointer;user-select:none}.rzb{white-space:pre-wrap;margin-top:6px;padding-left:10px;border-left:2px solid currentColor;max-height:320px;overflow:auto}
-.rzn{text-align:left}.rzn .rz{margin:0}
+/* окно размышлений модели (долгое нажатие на компьютер) */
+.thd{width:min(560px,calc(100vw - 32px))}.thb{max-height:min(60vh,520px);overflow:auto;padding:12px 16px;font-size:13px;line-height:1.5}
+.thb section{padding:10px 0;border-bottom:1px dashed var(--mut,#888)}.thb section:last-child{border-bottom:0}
+.thb h4{margin:0 0 6px;font-size:11px;opacity:.65;font-weight:400}.tht{white-space:pre-wrap;overflow-wrap:anywhere}.thb small{display:block;margin-top:6px;opacity:.65}.thn{opacity:.7;margin:0}
+#room-cv{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
 .day span{box-shadow:var(--sh2),3px 3px 0 0 var(--dsh)}
 .fc{box-shadow:var(--sh4),8px 8px 0 0 var(--dsh)}
 .fc .fb button{box-shadow:var(--sh4),var(--bevA2);transition:transform .15s var(--ez),background-color .2s}
@@ -4439,7 +4441,7 @@ function helpOf(k){const w=webOf($('#c-base').value)||WEB.qw,n=w.name,s=w.site,d
   if(k==='effort'){const m=window.coInfoOf?coInfoOf():null;
     return{t:'Уровень размышления',h:'<p>Модели Coarena сначала думают, потом отвечают. Чем выше уровень, тем дольше думает модель и тем больше тратится дневного лимита — зато сложные задачи она решает лучше.</p>'
       +(m&&m.efforts&&m.efforts.length?'<p>У '+esc(m.name||m.id)+' уровни: '+m.efforts.map(e=>esc((window.coNames||{})[e]||e)).join(', ')+'.</p>':'')
-      +'<p>«Как решит модель» — уровень по умолчанию у самой модели. Если выбранного уровня у модели нет, берётся ближайший.</p><p>Размышления видны в чате свёрнутым блоком «Размышления» над ответом. Если модель потратит на них весь ответ, Personal Computer сам повторит запрос уровнем ниже.</p>'}}
+      +'<p>«Как решит модель» — уровень по умолчанию у самой модели. Если выбранного уровня у модели нет, берётся ближайший.</p><p>В чате размышлений не видно. Если интересно, о чём думала модель, зажми компьютер — откроется окно с размышлениями по шагам. Если модель потратит на размышления весь ответ, Personal Computer сам повторит запрос уровнем ниже.</p>'}}
   if(k==='vis')return{t:'Показывать файлы модели',h:'<p>Картинки и PDF из твоих сообщений уходят прямо в модель — она видит их сама.</p><p>Выключи, если модель не умеет их читать: файлы всё равно лягут на сервер в inbox/, и Personal Computer откроет их своими инструментами.</p>'};
   if(k==='lim')return{t:'Ограничение шагов',h:'<p>Personal Computer останавливается после стольких шагов подряд, чтобы не зациклиться, — продолжить можно кнопкой «Повторить».</p><p>Выключи — будет работать до конца задачи или до «Стоп».</p>'};
   return null}

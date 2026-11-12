@@ -411,6 +411,16 @@ export class Chat extends EventEmitter {
   /* очередь для экрана: без готового сообщения для модели */
   queueView() { return (this.doc.v.queue || []).map(({ id, text, files, origin, t }) => ({ id, text, files, origin, t })); }
 
+  /* ---------- размышления модели: по шагам, отдельно от журнала ----------
+     tools — что модель сделала после размышления (подписи шагов, как в облачке) */
+  thought(text, calls, said) {
+    const th = this.doc.v.th ||= [];
+    const tools = calls.map(c => { let a = {}; try { a = JSON.parse(c.function.arguments || '{}') || {}; } catch {} const n = c.function.name; return (said.has(n) && actionText(a.action)) || labelFor(n, a); });
+    th.push({ t: Date.now(), text: String(text).slice(-20000), ...(tools.length ? { tools } : {}) });
+    if (th.length > 300) th.splice(0, th.length - 300);
+  }
+  thoughts(id = this.cid) { return this.peek(id).th || []; }
+
   /* ---------- журнал для экрана ---------- */
   push(e) {
     const L = this.doc.v.log;
@@ -567,7 +577,7 @@ export class Chat extends EventEmitter {
     this.seen.clear(); this.phKey = null;
     this.dropParts(this.doc.v.hist);
     this.dropParts((this.doc.v.queue || []).map(q => q.msg));
-    Object.assign(this.doc.v, { hist: [], log: [], run: null, sess: rid(16), act: [], queue: [], ctx: 0 });
+    Object.assign(this.doc.v, { hist: [], log: [], th: [], run: null, sess: rid(16), act: [], queue: [], ctx: 0 });
     this.doc.save();
     this.emit('reset', this.cid);
     this.emit('run', this.runState());
@@ -681,9 +691,10 @@ export class Chat extends EventEmitter {
     this.doc.v.ctx = used || tokens([sys, tools, this.wire(), H.at(-1)]);
     this.emit('ctx', this.doc.v.ctx);
     this.partial = '';
-    /* размышления — свёрнутым блоком над ответом (и над шагом с инструментами, если модель думала перед ним) */
-    if (text) this.push({ kind: 'assistant', text, ...(think ? { think: think.slice(-20000) } : {}) });
-    else if (think) this.push({ kind: 'think', text: think.slice(-20000) });
+    /* размышления в чат не попадают: чат — только разговор, а что делает модель, и так видно по облачку компьютера.
+       Они лежат отдельно (th) — их открывает долгое нажатие на компьютер */
+    if (think) this.thought(think, calls, said);
+    if (text) this.push({ kind: 'assistant', text });
     this.doc.save();
     if (!calls.length) return text;
     if (text && ask) this.emit('aside', text);
@@ -1080,7 +1091,10 @@ export class Chat extends EventEmitter {
         if (/^(thinking|reasoning)/.test(p.type || '')) rz('reasoning_content', p.thinking ?? p.text ?? p.reasoning);
         else if (typeof p.text === 'string' && p.text) delta(p.text);
       }
-      rz('reasoning_content', m.reasoning_content); rz('reasoning', m.reasoning); rz('reasoning', m.reasoning_text);
+      /* шлюзы (Coarena, OpenRouter) часто шлют один и тот же кусок сразу в двух полях — берём одно, первое найденное:
+         иначе каждое слово удваивается («я, я, сделаю, сделаю»), а удвоенное уходит модели обратно и сбивает её */
+      const rf = ['reasoning_content', 'reasoning', 'reasoning_text'].find(k => typeof m[k] === 'string' && m[k]);
+      if (rf) rz(rf === 'reasoning_text' ? 'reasoning' : rf, m[rf]);
       if (Array.isArray(m.reasoning_details)) det(m.reasoning_details);
       if (Array.isArray(m.tool_calls)) { if (stream) { for (const t of m.tool_calls) if (t) merge(t); } else calls = m.tool_calls.slice(); }
     };
@@ -1104,8 +1118,7 @@ export class Chat extends EventEmitter {
           if (j?.usage) usage = j.usage;
           const ch = j?.choices?.[0]; if (!ch) continue;
           if (ch.finish_reason) finish = ch.finish_reason;
-          /* некоторые шлюзы шлют в последнем куске message вместо delta */
-          const d = ch.delta || ch.message; if (d) take(d, true);
+          if (ch.delta) take(ch.delta, true);
         }
       };
       for await (const chunk of r.body) {
