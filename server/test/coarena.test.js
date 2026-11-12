@@ -33,7 +33,8 @@ before(async () => {
     s.writeHead(200, { 'content-type': 'text/event-stream', 'x-coarena-model': body.model });
     const ev = (d, fin) => s.write('data: ' + JSON.stringify({ choices: [{ index: 0, delta: d, finish_reason: fin || null }] }) + '\n\n');
     s.write('\n');
-    for (const w of (step.think || '').match(/.{1,6}/gs) || []) ev({ reasoning_content: w });
+    /* как у шлюзов: тот же кусок размышлений сразу в двух полях */
+    for (const w of (step.think || '').match(/.{1,6}/gs) || []) ev(step.both ? { reasoning_content: w, reasoning: w } : { reasoning_content: w });
     if (step.details) ev({ reasoning_details: step.details });
     for (const w of (step.text || '').match(/.{1,6}/gs) || []) ev({ content: w });
     (step.tools || []).forEach((t, i) => ev({ tool_calls: [{ index: i, id: 'call_' + i, type: 'function', function: { name: t.name, arguments: JSON.stringify(t.args) } }] }));
@@ -90,8 +91,8 @@ test('чат: уровень размышления и потолок ответ
   calls.length = 0;
   script = [
     { think: 'Надо посмотреть, что на сервере.', tools: [{ name: 'run_command', args: { action: 'Смотрю', command: 'echo привет' } }],
-      details: [{ type: 'reasoning.text', index: 0, text: '', signature: 'sig-123' }] },
-    { think: 'Команда сработала.', text: 'Готово ^_^' },
+      details: [{ type: 'reasoning.text', index: 0, text: '', signature: 'sig-123' }], both: true },
+    { think: 'Команда сработала.', text: 'Готово ^_^', both: true },
   ];
   const done = c.events(evs => logOf(evs).some(e => e.kind === 'assistant' && e.text === 'Готово ^_^'), 30000);
   assert.equal((await c.json('/api/chat', { text: 'проверь сервер' })).status, 200);
@@ -105,9 +106,17 @@ test('чат: уровень размышления и потолок ответ
   const a = calls[1].body.messages.find(x => x.role === 'assistant' && x.tool_calls);
   assert.equal(a.reasoning_content, 'Надо посмотреть, что на сервере.');
   assert.equal(a.reasoning_details[0].signature, 'sig-123');
+  /* в чате размышлений нет — только ответ */
   const log = logOf(evs);
-  assert.ok(log.some(e => e.kind === 'think' && /Надо посмотреть/.test(e.text)));
-  assert.equal(log.find(e => e.kind === 'assistant').think, 'Команда сработала.');
+  assert.ok(!log.some(e => e.kind === 'think' || 'think' in e));
+  assert.ok(!JSON.stringify(log).includes('Надо посмотреть'));
+  /* окно по долгому нажатию: размышления по шагам, без удвоения слов, с подписью шага после размышления */
+  const th = (await c.json('/api/chat/thoughts', undefined, 'GET')).j.list;
+  assert.equal(th.length, 2);
+  assert.equal(th[0].text, 'Надо посмотреть, что на сервере.');
+  assert.deepEqual(th[0].tools, ['Смотрю']);
+  assert.equal(th[1].text, 'Команда сработала.');
+  assert.equal(th[1].tools, undefined);
 });
 
 test('размышления съели весь ответ — повтор уровнем ниже, без ошибки', async () => {

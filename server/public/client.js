@@ -256,9 +256,7 @@ dayMark = function (box) {
 const HM = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
 const stamp = (el, e) => { const t = el && el.querySelector('.mh time'); if (t && e.t) t.textContent = HM.format(e.t); };
 const btns = '<div class="mf"><button class="cp" data-k="a"><i class="pi"></i>копировать</button><button class="cp" data-k="s"><i class="pi"></i>вслух</button></div>';
-function aText(el, text, th) { el._raw = text; el._b.innerHTML = (th ? thinkBox(th) : '') + md(text) + (text ? btns : ''); }
-/* размышления модели (Coarena и другие думающие модели) — свёрнутым блоком: открыть, если интересно, как она пришла к ответу */
-const thinkBox = th => '<details class="rz"><summary>Размышления</summary><div class="rzb">' + esc(String(th)) + '</div></details>';
+function aText(el, text) { el._raw = text; el._b.innerHTML = md(text) + (text ? btns : ''); }
 
 function fileCardS(e) {
   think(false); const box = $('#msgs'); dayMark(box);
@@ -308,7 +306,7 @@ function render(e) {
     }
     case 'assistant': {
       const el = bubble || add('a', ''); bubble = null;
-      aText(el, e.text || '', e.think); stamp(el, e); foldKeep(el); pin(); room('answer', e);
+      aText(el, e.text || ''); stamp(el, e); foldKeep(el); pin(); room('answer', e);
       if (!replaying) { window.personalComputerSpeak && personalComputerSpeak(e.text); window.sfx && sfx('recv'); }
       break;
     }
@@ -317,7 +315,6 @@ function render(e) {
       if (e.state !== 'run' && running && !replaying) think(true);
       break;
     }
-    case 'think': { const box = $('#msgs'); box.querySelector('.empty')?.remove(); const d = document.createElement('div'); d.className = 'snote rzn'; d.innerHTML = thinkBox(e.text || ''); box.append(d); pin(); break; }
     case 'file': fileCardS(e); room('file', e); break;
     case 'error': stamp(add('e', errBox(e)), e); room('error', e); break;
     case 'note': note(e.text, e.retry); room('note', e); break;
@@ -2204,4 +2201,42 @@ addEventListener('online', () => { if (helloT) hello(); });
 if (window.personalComputerBoot) personalComputerBoot.onRetry = () => { if (helloT) hello(); else if (me && !connected) { if (es) { es.close(); es = null; } connect(); } };
 setSt('подключаюсь к серверу…', 'on');
 hello();
+
+/* ---------- размышления модели: долгое нажатие на компьютер ----------
+   В чате их нет — там только разговор, а что делает модель, видно по облачку. Кому правда интересно, о чём она думала,
+   зажимает компьютер в шапке: открывается окно с размышлениями этого чата по шагам */
+const thd = document.createElement('dialog');
+thd.className = 'win thd'; thd.setAttribute('aria-labelledby', 'thd-h');
+thd.innerHTML = '<div class="wbar"><span></span><b id="thd-h">Размышления</b><span></span></div><div class="thb" id="thd-b"></div><div class="wfoot"><span></span><button class="p" id="thd-ok" type="button">Закрыть</button></div>';
+document.body.append(thd);
+$('#thd-ok').onclick = () => thd.close();
+thd.addEventListener('click', e => { if (e.target === thd) thd.close(); });
+async function openThoughts() {
+  const b = $('#thd-b'); b.textContent = 'Загружаю…'; if (!thd.open) thd.showModal();
+  try {
+    const { list } = await api('api/chat/thoughts' + (view ? '?c=' + encodeURIComponent(view) : ''));
+    b.textContent = '';
+    if (!list.length) { b.innerHTML = '<p class="thn">В этом чате модель ещё не размышляла — или она не показывает свои мысли.</p>'; return; }
+    list.forEach((x, i) => {
+      const s = document.createElement('section'), h = document.createElement('h4'), p = document.createElement('div');
+      h.textContent = 'Шаг ' + (i + 1) + ' · ' + HM.format(x.t); p.className = 'tht'; p.textContent = x.text;
+      s.append(h, p);
+      if (x.tools && x.tools.length) { const t = document.createElement('small'); t.textContent = 'Дальше: ' + x.tools.join(' · '); s.append(t); }
+      b.append(s);
+    });
+    b.scrollTop = b.scrollHeight;
+  } catch (e) { b.textContent = 'Не загрузилось: ' + e.message; }
+}
+/* зажал ~0,6 с, не сдвигая палец — окно; обычное касание (погладить, клавиатура) не трогаем, а «клик» после зажатия глушим */
+function longPress(el) {
+  if (!el) return;
+  let tm = 0, at = null, fired = false;
+  const stop = () => { clearTimeout(tm); tm = 0; };
+  el.addEventListener('pointerdown', e => { if (e.button > 0) return; fired = false; at = [e.clientX, e.clientY]; stop(); tm = setTimeout(() => { tm = 0; fired = true; navigator.vibrate && navigator.vibrate(15); openThoughts(); }, 600); });
+  el.addEventListener('pointermove', e => { if (tm && at && Math.hypot(e.clientX - at[0], e.clientY - at[1]) > 10) stop(); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(k => el.addEventListener(k, stop));
+  el.addEventListener('click', e => { if (fired) { fired = false; e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  el.addEventListener('contextmenu', e => e.preventDefault());
+}
+longPress(document.getElementById('room-cv'));
 })();

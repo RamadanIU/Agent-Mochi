@@ -630,6 +630,8 @@ async function api(req, res, url) {
     }
     case '/api/chat/retry': if (M === 'POST') { try { chat.retry('web', convId((await jbody(req)).c)); } catch (e) { throw new HttpErr(e.status || 400, e.message, e.busy ? { busy: true } : undefined); } return json(res, 200, { ok: true }); } break;
     /* прежняя «Очистить чат»: теперь — новый чат, а прошлый остаётся в истории */
+    /* размышления модели в чате (окно по долгому нажатию на компьютер): c — какой чат, по умолчанию тот, где работает агент */
+    case '/api/chat/thoughts': if (M === 'GET') { const c = url.searchParams.get('c'); return json(res, 200, { list: chat.thoughts(c ? convId(c) : undefined) }); } break;
     case '/api/chat/clear': if (M === 'POST') return json(res, 200, { ok: true, c: await chat.fresh() }); break;
     /* история чатов: список (с поиском), новый чат */
     case '/api/chats':
