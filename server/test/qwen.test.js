@@ -5,7 +5,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { startPersonalComputer, registered, chatFile, sleep } from './helpers.js';
-import { callParser, parseToken, tokenInfo } from '../lib/qwen.js';
+import { callParser, parseToken, tokenInfo, isDashScope, isQwen } from '../lib/qwen.js';
 
 const jwt = (p) => ['eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9', Buffer.from(JSON.stringify(p)).toString('base64url'), 'sig'].join('.');
 const EXP = Math.floor(Date.now() / 1000) + 30 * 86400;
@@ -16,7 +16,7 @@ let m, srv;
 const Q = { chats: new Map(), calls: [], news: [], dels: [], script: null, sts: [], oss: new Map(), parsed: [], polls: 0 };
 const SECRET = 'oss-secret';
 /* выданные токены (вход, продление); истёкшие и отозванные — 401 */
-Q.valid = new Set([TOKEN, TOKEN2]); Q.signins = 0; Q.renews = 0; Q.renewable = false;
+Q.valid = new Set([TOKEN, TOKEN2]); Q.waf = 0; Q.wafHits = 0; Q.signins = 0; Q.renews = 0; Q.renewable = false;
 const PASS = 'мой-пароль', PH = crypto.createHash('sha256').update(PASS).digest('hex');
 const issue = (id, sec) => { const t = jwt({ id, exp: Math.floor(Date.now() / 1000) + sec, n: Math.random() }); Q.valid.add(t); return t; };
 before(async () => {
@@ -71,6 +71,8 @@ before(async () => {
       const chatId = u.searchParams.get('chat_id'), body = JSON.parse(b), ch = Q.chats.get(chatId);
       if (!ch || ch.acct !== auth) return send(200, { success: false, data: { code: 'NotFound', details: 'chat not found' } });
       const msg = body.messages[0];
+      /* антибот-защита Alibaba: слайдер вместо ответа */
+      if (Q.waf > 0) { Q.waf--; Q.wafHits++; return send(200, { ret: ['FAIL_SYS_USER_VALIDATE', 'RGV587_ERROR::SM::哎哟喂,被挤爆啦,请稍后重试'], data: { url: 'https://chat.qwen.ai:443//api/v2/chat/completions/_____tmd_____/punish?x5secdata=x' } }); }
       const call = { chatId, parent: body.parent_id, content: msg.content, files: msg.files, fc: msg.feature_config, model: body.model, headers: req.headers };
       Q.calls.push(call);
       const rid = 'resp-' + Q.calls.length;
@@ -91,7 +93,7 @@ before(async () => {
   });
   await new Promise(ok => srv.listen(0, '127.0.0.1', ok));
   const qurl = 'http://127.0.0.1:' + srv.address().port;
-  m = await startPersonalComputer({ PERSONALCOMPUTER_QWEN_URL: qurl, PERSONALCOMPUTER_QWEN_OSS: qurl + '/oss', PERSONALCOMPUTER_QWEN_KEEPALIVE_MS: '200' });
+  m = await startPersonalComputer({ PERSONALCOMPUTER_QWEN_URL: qurl, PERSONALCOMPUTER_QWEN_OSS: qurl + '/oss', PERSONALCOMPUTER_QWEN_KEEPALIVE_MS: '200', PERSONALCOMPUTER_QWEN_GAP_MS: '0', PERSONALCOMPUTER_QWEN_COOL_MS: '400' });
 });
 after(async () => { await m?.stop(); srv?.close(); });
 
@@ -355,4 +357,35 @@ test('без пароля: живой токен продлевается до �
     for (let i = 0; i < 60 && Q.renews === r0; i++) await sleep(50);
     assert.ok(Q.renews > r0, 'фоновое продление не случилось');
   } finally { Q.renewable = false; }
+});
+
+test('антибот-защита: пауза и один повтор; не прошло — понятный выход и никаких повторов подряд', async () => {
+  const c = await registered(m, 'qwaf');
+  await c.json('/api/settings', { base: QWEN, key: TOKEN, model: 'qwen3-max' }, 'PUT');
+  Q.script = () => ({ text: 'прорвался' });
+  Q.waf = 1;
+  let L = logs(await say(c, 'привет'));
+  assert.match(L.find(e => e.kind === 'note')?.text || '', /попросил паузу \(антибот-защита\) — подожду \d+ с и повторю/);
+  assert.equal(L.filter(e => e.kind === 'assistant').at(-1)?.text, 'прорвался');
+  /* защита не отпускает: после паузы — второй и последний запрос, затем ошибка с выходом */
+  await sleep(500);
+  Q.waf = 100; const h0 = Q.wafHits;
+  L = logs(await say(c, 'ещё'));
+  assert.equal(Q.wafHits - h0, 2);
+  const err = L.find(e => e.kind === 'error');
+  assert.match(err.text, /антибот-защита Alibaba Cloud/);
+  assert.match(err.text, /«Qwen API \(Alibaba Cloud\)»/);
+  /* пока аккаунт «остывает», запросы на сайт не уходят вовсе */
+  const h1 = Q.wafHits;
+  L = logs(await say(c, 'и ещё'));
+  assert.ok(Q.wafHits - h1 <= 1, 'во время паузы запросов к сайту быть не должно: ' + (Q.wafHits - h1));
+  Q.waf = 0;
+});
+
+test('официальный API Qwen (DashScope) отличается от chat.qwen.ai', () => {
+  for (const b of ['https://dashscope-intl.aliyuncs.com/compatible-mode/v1', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'https://dashscope-us.aliyuncs.com/compatible-mode/v1']) {
+    assert.equal(isDashScope(b), true, b); assert.equal(isQwen(b), false, b);
+  }
+  assert.equal(isDashScope('https://chat.qwen.ai'), false);
+  assert.equal(isDashScope('https://evil.example/dashscope.aliyuncs.com'), false);
 });

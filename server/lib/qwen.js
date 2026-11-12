@@ -24,6 +24,9 @@ import { apiFetch } from './net.js';
 export const QWEN_BASE = 'https://chat.qwen.ai';
 /* куда ходим на самом деле: в тестах — фальшивый Qwen */
 const api = () => (process.env.PERSONALCOMPUTER_QWEN_URL || QWEN_BASE).replace(/\/+$/, '');
+/* официальный API тех же моделей — Alibaba Cloud Model Studio (DashScope), OpenAI-совместимый, по ключу; антибот-проверок у него нет.
+   Работает как обычный провайдер, от Qwen берёт только переключатель «Размышление» (enable_thinking) */
+export const isDashScope = base => { try { return /(^|\.)dashscope[\w-]*\.aliyuncs\.com$/i.test(new URL(String(base)).hostname); } catch { return false; } };
 export const isQwen = base => { try { return new URL(String(base)).hostname === 'chat.qwen.ai'; } catch { return false; } };
 
 /* ---------- токен ----------
@@ -48,7 +51,9 @@ const account = t => tokenInfo(t).id || crypto.createHash('sha256').update(Strin
 /* ---------- ошибки: человеческий текст сразу (agent.friendly берёт его как есть) ---------- */
 const qErr = (human, extra = {}) => Object.assign(new Error(human), { human, detail: '', ...extra });
 const EXPIRED = 'Токен Qwen не подошёл или истёк. Открой chat.qwen.ai, войди, скопируй новый токен (как — подсказка в настройках → Модель) и вставь его.';
-const WAF = 'chat.qwen.ai не пустил запрос с этого сервера: антибот-защита Alibaba Cloud потребовала проверку «я не робот» (слайдер). Токен тут ни при чём — он рабочий. Так защита реагирует на IP-адрес сервера (часто — на адреса хостингов): включи прокси с «домашним» адресом в настройках → Сервер → «Прокси» или повтори позже.';
+const WAF = 'chat.qwen.ai не пустил запрос с этого сервера: антибот-защита Alibaba Cloud потребовала проверку «я не робот» (слайдер), а пройти её может только человек в браузере. Токен рабочий. Защита смотрит на IP-адрес сервера (адреса хостингов — под подозрением) и на частоту запросов. Что поможет: '
+  + '1) провайдер «Qwen API (Alibaba Cloud)» в настройках → Модель — официальный API тех же моделей Qwen по ключу, без антибот-проверок (у новых аккаунтов есть бесплатная квота); '
+  + '2) прокси с «домашним» адресом: настройки → Сервер → «Прокси»; 3) подождать и нажать «Повторить».';
 const isWafBody = t => /<html|<!doctype/i.test(t) && /captcha|punish|x5sec|nocaptcha|aliyun|baxia|unusual traffic|blocked/i.test(t);
 /* {success:false,data:{code,details}} / {error:{…}} / {detail} — во что бы ни завернули */
 const isWafJson = j => !!j && typeof j === 'object' && (/FAIL_SYS_USER_VALIDATE|RGV587|punish|x5sec|captcha/i.test(JSON.stringify(j.ret || '')) || /punish|x5sec|captcha/i.test(String(j.data?.url || '')));
@@ -92,7 +97,26 @@ function headers(token, chatId, accept = 'application/json') {
 }
 
 /* JSON-запрос к API; ответ — data или ошибка с человеческим текстом */
-async function call(token, method, p, body, signal, chatId) {
+/* ---------- бережно к защите сайта ----------
+   Не чаще одного запроса в GAP на аккаунт (агент шагает быстро — человек так не кликает).
+   Защита ответила слайдером — аккаунт «остывает» COOL: запросы в это время не уходят вовсе (их бы тоже отклонили и только
+   продлили блокировку), а шаг агента один раз ждёт конца паузы и повторяет. Слайдер мы не обходим — его проходит только человек */
+const GAP = () => +(process.env.PERSONALCOMPUTER_QWEN_GAP_MS ?? 1500), COOL = () => +(process.env.PERSONALCOMPUTER_QWEN_COOL_MS ?? 90000);
+const gates = new Map();
+const gateOf = token => { const k = token ? account(token) : '-'; let g = gates.get(k); if (!g) gates.set(k, g = { next: 0, until: 0 }); return g; };
+export const coolLeft = token => Math.max(0, gateOf(token).until - Date.now());
+const pause = (ms, signal) => new Promise((ok, no) => { if (signal?.aborted) return no(signal.reason); const t = setTimeout(ok, ms); signal?.addEventListener('abort', () => { clearTimeout(t); no(signal.reason); }, { once: true }); });
+async function guarded(token, signal, fn) {
+  const g = gateOf(token), left = g.until - Date.now();
+  if (left > 0) throw qErr(WAF, { status: 403, waf: true, cool: left });
+  const now = Date.now(), at = Math.max(now, g.next);
+  g.next = at + GAP();
+  if (at > now) await pause(at - now, signal);
+  try { return await fn(); }
+  catch (e) { if (e.waf) g.until = Date.now() + COOL(); throw e; }
+}
+const call = (token, method, p, body, signal, chatId) => guarded(token, signal, () => call0(token, method, p, body, signal, chatId));
+async function call0(token, method, p, body, signal, chatId) {
   for (let again = true; ;) {
     let r;
     try {
@@ -183,7 +207,8 @@ async function newChat(token, model, signal) {
 const features = (think, must) => ({ output_schema: 'phase', thinking_enabled: !!(think || must), auto_thinking: false,
   thinking_mode: think ? 'Thinking' : 'Fast', thinking_format: 'summary', research_mode: 'normal', auto_search: false });
 
-async function complete({ token, chatId, parent, model, content, files = [], think, must, signal, onText, onPoke }) {
+const complete = o => guarded(o.token, o.signal, () => complete0(o));
+async function complete0({ token, chatId, parent, model, content, files = [], think, must, signal, onText, onPoke }) {
   const now = Math.floor(Date.now() / 1000), fid = crypto.randomUUID();
   const msg = { fid, parentId: parent, parent_id: parent, childrenIds: [crypto.randomUUID()], role: 'user', content, user_action: 'chat', files,
     timestamp: now, models: [model], chat_type: 't2t', feature_config: features(think, must), extra: { meta: { subChatType: 't2t' } }, sub_chat_type: 't2t' };
@@ -496,14 +521,14 @@ export function anchorOf(H, acct) {
 
 /* ---------- шаг агента ----------
    hist — история чата (с метками _qw), sys и tools — как для обычной модели. → { text, calls, used, qw } */
-export async function turn({ key, model, think, sys, tools, hist, signal, onText, getFiles, idleMs = 180000 }) {
+export async function turn({ key, model, think, sys, tools, hist, signal, onText, onWait, getFiles, idleMs = 180000 }) {
   const token = parseToken(key);
   if (!token) throw qErr('Вставь токен Qwen в настройках → Модель — без него модель не ответит.', { status: 401 });
   if (!model) throw qErr('Выбери модель Qwen в настройках → Модель.', { status: 400 });
   const acct = account(token), h = sysHash(sys, tools), nm = names(hist), day = /\nСегодня ([^,\n]+),/.exec(sys)?.[1] || '';
   const info = await modelInfo(token, model, signal);
   const must = !!info?.must, th = !!think && (info ? info.think || info.must : true);
-  let fresh = false, shown = false;
+  let fresh = false, shown = false, waited = false;
   for (let attempt = 0; ; attempt++) {
     const an = fresh ? null : anchorOf(hist, acct);
     let content, sent;
@@ -517,9 +542,6 @@ export async function turn({ key, model, think, sys, tools, hist, signal, onText
       if (content.length > MAX_MSG) content = clip(content, MAX_MSG);
     } else { content = freshContent(hist, wrapInstr(sys, tools, false), nm); sent = hist; }
     if (!content.trim()) content = 'Продолжай.';
-    /* файлы из того, что уходит сейчас (в новом чате — и из прежней переписки, сколько влезет) */
-    const att = await attach(token, sent, getFiles, { vision: info?.vision, signal });
-    content += att.note;
     /* «тишина» дольше idleMs — модель зависла */
     const idle = new AbortController();
     let it = setTimeout(() => idle.abort(), idleMs);
@@ -527,6 +549,9 @@ export async function turn({ key, model, think, sys, tools, hist, signal, onText
     const sig = AbortSignal.any([signal, idle.signal]);
     const P = callParser(s => { shown = true; onText?.(s); });
     try {
+      /* файлы из того, что уходит сейчас (в новом чате — и из прежней переписки, сколько влезет) */
+      const att = await attach(token, sent, getFiles, { vision: info?.vision, signal });
+      content += att.note;
       const chatId = an ? an.q.c : await newChat(token, model, sig);
       const r = await complete({ token, chatId, parent: an ? an.q.r : null, model, content, files: att.files, think: th, must, signal: sig, onText: s => P.push(s), onPoke: poke });
       const { text, calls } = P.end();
@@ -534,6 +559,15 @@ export async function turn({ key, model, think, sys, tools, hist, signal, onText
       return { text, calls, used: r.used, qw: r.responseId ? { c: r.chatId || chatId, r: r.responseId, a: acct, h, d: day } : null };
     } catch (e) {
       if (signal.aborted) throw e;
+      /* защита попросила паузу: ждём её конца и пробуем ещё раз — один раз, пока пользователь ничего не увидел */
+      if (e.waf && !shown && !waited) {
+        waited = true;
+        const ms = coolLeft(token) + 500;
+        onWait?.(ms);
+        clearTimeout(it);
+        await pause(ms, signal);
+        continue;
+      }
       if (idle.signal.aborted) e = qErr('Qwen не отвечает уже ' + Math.round(idleMs / 60000) + ' мин. Нажми «Повторить».', { net: true });
       /* продолжить старый чат не вышло (его удалили на сайте, ветка битая) — новый чат со всей перепиской */
       if (an && !shown && !e.net && !e.waf && e.status !== 401 && e.status !== 429 && !fresh) { fresh = true; continue; }
