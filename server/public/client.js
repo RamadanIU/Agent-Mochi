@@ -112,6 +112,50 @@ css.textContent = `
 .snack .pbtn .pi{--ico:var(--i-restore)}
 /* переключение чата: старая переписка гаснет, пока не пришла новая */
 #msgs{transition:opacity .18s var(--ez)}#msgs.sw{opacity:.3;transition:none}
+/* ---------- DeepSeek: проверка «я не робот» ----------
+   карточка в чате — окошко, как у ошибки, но цвета темы: это не поломка, а просьба сайта */
+.m.e.ck .et{background:var(--acc);color:var(--onacc)}
+.m.e.ck .ei{background:var(--acc);-webkit-mask-image:var(--j-shield);mask-image:var(--j-shield)}
+.ck-s{display:block;margin-top:8px;color:var(--mut);font:7px/1.8 var(--pf)}.ck-s:empty{display:none}
+.m.e.ck .ea{margin-top:12px}
+.m.e.ck [data-act=dscheck]{background:var(--acc);color:var(--onacc)}
+[data-act=dscheck] .pi{--ico:var(--j-shield)}
+.m.e.ck[data-s=try] .ei{animation:blk .5s steps(1) infinite}
+.m.e.ck:is([data-s=ok],[data-s=stop],[data-s=fail]) :is(.ck-s,.ea){display:none}
+.m.e.ck[data-s=ok] .et{background:var(--ok);color:#fff}.m.e.ck[data-s=ok] .ei{background:var(--ok);-webkit-mask-image:var(--j-check);mask-image:var(--j-check)}
+.m.e.ck:is([data-s=stop],[data-s=fail]) .et{background:var(--line);color:var(--mut)}.m.e.ck:is([data-s=stop],[data-s=fail]) .ei{background:var(--mut)}
+/* окно проверки: живой экран страницы сайта в браузере на сервере */
+dialog.dsw{width:min(1000px,calc(100% - 24px));max-width:none;height:min(900px,calc(100dvh - 24px));max-height:none;margin:auto}
+.dsw-b{flex:1;min-height:0;display:flex;flex-direction:column;gap:12px;padding:14px 16px 16px;background:var(--bg)}
+.dsw-st{flex:none;display:flex;align-items:center;gap:10px;margin:0 2px;color:var(--fg);font:8px/1.6 var(--pf)}
+.dsw-st i{flex:none;width:8px;height:8px;background:var(--mut)}
+.dsw-st[data-s=wait] i{background:var(--acc);animation:blk .5s steps(1) infinite}.dsw-st[data-s=live] i{background:var(--acc)}
+.dsw-st[data-s=done] i{background:var(--ok)}.dsw-st[data-s=fail] i{background:var(--err)}
+.dsw-st span{flex:1;min-width:0}
+.dsw-scr{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:var(--tbg);box-shadow:var(--sh2);overflow:hidden;outline:none;touch-action:none;-webkit-user-select:none;user-select:none}
+.dsw-scr[hidden]{display:none}
+.dsw-scr img{display:block;max-width:100%;max-height:100%;-webkit-user-drag:none;cursor:default}
+.dsw-scr img:not([src]){visibility:hidden}
+.dsw-kb{position:absolute;left:8px;bottom:8px;width:2px;height:2px;padding:0;border:0;opacity:0;resize:none;pointer-events:none;font-size:16px}
+.dsw-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.dsw-ph[hidden]{display:none}
+.dsw-ph i{width:28px;height:28px;background:var(--acc);-webkit-mask:var(--j-shield) center/contain no-repeat;mask:var(--j-shield) center/contain no-repeat;animation:blk 1s steps(1) infinite}
+.dsw-done{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 70%,transparent);animation:inP .3s var(--ez)}
+.dsw-done[hidden]{display:none}
+.dsw-done i{width:56px;height:56px;background:var(--ok) var(--j-chkw) center/28px 22px no-repeat;box-shadow:var(--sh4);animation:ipop .45s var(--ezb)}
+.dsw-no{flex:1;min-height:0;overflow:auto;padding:4px 2px 2px;font:8px/1.8 var(--pf);color:var(--fg)}
+.dsw-no[hidden]{display:none}
+.dsw-no b{display:block;margin-bottom:10px;font:9px/1.5 var(--pf);font-weight:400}
+.dsw-no p{margin:0 0 12px}.dsw-no .pbtn{width:auto;margin:6px 4px 4px}.dsw-no .pbtn .pi{--ico:var(--j-dl)}
+.dsw-no .dsw-alt{margin-top:18px;padding-top:14px;border-top:2px dashed var(--line);color:var(--mut)}
+#dsw .wfoot{gap:12px}#dsw .wfoot .lnk[hidden]{display:none}#dsw-ok{margin-left:auto}
+#dsw-re{color:var(--mut)}@media(hover:hover){#dsw-re:hover{color:var(--acc)}}
+/* браузера нет — окно по содержимому, без пустого экрана */
+dialog.dsw.nob{width:min(640px,calc(100% - 24px));height:fit-content}.dsw.nob .dsw-st{display:none}.dsw.nob .dsw-no{flex:none}
+@media(max-width:559px){dialog.dsw{width:100%;height:100dvh;margin:0;border-width:0}.dsw-b{padding:10px 10px 12px}}
+/* действие в карточке аккаунта и под входом: «Пройти проверку», «Войти в окне DeepSeek» */
+.wa-do{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 0}.wa-do[hidden]{display:none}
+.wa-do .pbtn{width:auto;margin:2px}.wa-do .pbtn .pi{--ico:var(--j-shield)}
 `;
 document.head.append(css);
 
@@ -126,8 +170,12 @@ async function api(p, o = {}) {
 const post = (p, json = {}) => api(p, { method: 'POST', json });
 
 /* «Войти через Google»: chat.qwen.ai или chat.deepseek.com вернул нас сюда с токеном после # — забираем его из адреса сразу (в историю браузера он не попадёт) */
-const hashToken = k => { const m = new RegExp('[#&]' + k + '-token=([^&]+)').exec(location.hash); if (!m) return ''; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} try { return decodeURIComponent(m[1]); } catch (e) { return ''; } };
-const qwHash = hashToken('qwen'), dsHash = hashToken('deepseek');
+const H0 = location.hash;
+const hashVal = k => { const m = new RegExp('[#&]' + k + '=([^&]*)').exec(H0); if (!m) return ''; try { return decodeURIComponent(m[1]); } catch (e) { return ''; } };
+const qwHash = hashVal('qwen-token'), dsHash = hashVal('deepseek-token');
+/* DeepSeek: вместе с токеном закладка приносит отпечаток устройства и User-Agent твоего браузера */
+const dsDev = dsHash ? { device: hashVal('deepseek-device'), ua: hashVal('deepseek-ua') } : null;
+if (qwHash || dsHash) try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
 let me = null, es = null, running = false, view = null, busyElse = null, srvSet = null, bubble = null, hideT = 0, connected = false, replaying = false, olderNow = false;
 /* событие журнала → компьютер в шапке (при перерисовке истории — только в его журнал, без реакций; старую историю «Показать раньше» не трогаем) */
 const room = (k, e) => { if (olderNow) return; try { window.personalComputerRoom && personalComputerRoom[k](e, replaying); } catch (x) { console.error(x); } };
@@ -270,6 +318,7 @@ function render(e) {
     case 'file': fileCardS(e); room('file', e); break;
     case 'error': stamp(add('e', errBox(e)), e); room('error', e); break;
     case 'note': note(e.text, e.retry); room('note', e); break;
+    case 'check': ckCard(e); break;
   }
   curT = null;
 }
@@ -377,6 +426,7 @@ function onDelta(d) {
   try { window.personalComputerRoom && personalComputerRoom.delta(bubble._raw); } catch (x) {}
 }
 /* snap — состояние пришло с полной перерисовкой: компьютер в шапке обновит personalComputerRoom.snap, без реакций «началась задача» */
+let waitCk = false;
 function setRun(r, snap) {
   /* агент один: работает в этом чате — обычный ход работы; в другом — плашка над полем ввода */
   const was = running; running = !!r.running && (!r.rc || r.rc === view);
@@ -385,7 +435,11 @@ function setRun(r, snap) {
   ctl = running ? { abort: stopNow } : null;
   sendUI(running);
   if (!snap) try { window.personalComputerRoom && personalComputerRoom.run({ ...r, running }); } catch (x) { console.error(x); }
-  if (running && !bubble) think(true);
+  /* ждёт проверку DeepSeek — не «думает», а ждёт тебя (карточка в чате) */
+  const wait = running && r.wait === 'check';
+  if (wait) { think(false); setSt('жду проверку DeepSeek', 'on'); } else if (waitCk && running) setSt(READY, 'on');
+  waitCk = wait;
+  if (running && !bubble && !wait) think(true);
   if (!running) { think(false); if (was) setSt(READY, 'on'); }
 }
 
@@ -509,6 +563,8 @@ async function dsCatch(t) {
   if (!/^[\w.+\/=:-]{16,4096}$/.test(t)) return;
   if (!await ask('DeepSeek', 'Пришёл токен с chat.deepseek.com. Подключить этот аккаунт DeepSeek к Personal Computer? Подтверждай, только если сам только что нажал «Войти через Google».', null, 'Подключить')) return;
   try {
+    /* сначала «браузер» (отпечаток и User-Agent) — проверка токена пойдёт уже от его имени */
+    if (dsDev && (dsDev.device || dsDev.ua)) await post('api/deepseek/device', dsDev).catch(() => {});
     const DB = 'https://chat.deepseek.com', r = await post('api/models', { base: DB, key: t });
     srvSet = await api('api/settings', { method: 'PUT', json: { base: DB, key: t, model: r.models[0] } }); mirror(); save();
     bt('ok', 'set', srvSet.model);
@@ -631,22 +687,41 @@ function waState(st, o = {}) {
   $('#wa-who').textContent = o.who || ''; $('#wa-sub').textContent = o.sub || '';
   const m = $('#wa-msg'); m.textContent = o.msg ? short(o.msg) : ''; m.hidden = !o.msg;
   waNote = o.msg ? String(o.msg).trim() : '';
+  doBtn($('#wa-do'), o.act);
   /* подключён — способы входа прячутся (их показывает «Другой аккаунт») */
   if (st !== 'ok') wa.classList.remove('swap');
   if (w && st !== 'wait') { const tk = $('#wa-tok'); if (o.fresh || (st === 'bad' && $('#c-key').value.trim())) tk.open = true; }
 }
-/* вход в Qwen по email и паролю: сервер сам получает токен и обновляет его до истечения */
-const qst = (t, s) => { const h = $('#c-qst'); h.textContent = t; if (s) h.dataset.s = s; else delete h.dataset.s; };
+/* вход по email и паролю (Qwen; DeepSeek — и по телефону): сервер сам получает токен и обновляет его до истечения */
+const qst = (t, s) => { const h = $('#c-qst'); h.textContent = t; if (s) h.dataset.s = s; else delete h.dataset.s; if (!t) doBtn($('#c-qdo')); };
+/* кнопка действия под сообщением: { label, fn } или ничего */
+function doBtn(box, act) {
+  box.textContent = ''; box.hidden = !act; if (!act) return;
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'pbtn sm';
+  b.innerHTML = '<i class="pi"></i><span></span>'; b.lastChild.textContent = act.label; b.onclick = act.fn; box.append(b);
+}
+const loggedIn = async () => {
+  $('#c-qpass').value = ''; $('#c-key').value = ''; $('#wa-pw').open = false;
+  srvSet = await api('api/settings'); provSaved = Object.fromEntries((srvSet.provs || []).map(p => [p.base, p])); provOpts();
+  qst('', ''); keyHint(); loadModels();
+};
 $('#c-qlogin').onclick = async () => {
-  const email = $('#c-qmail').value.trim(), password = $('#c-qpass').value;
-  if (!email || !password) { qst('Впиши email и пароль от chat.qwen.ai', 'err'); return; }
-  const b = $('#c-qlogin'); b.disabled = true; qst('Вхожу в Qwen…', 'wait');
+  const w = webOf($('#c-base').value), ds = w === WEB.ds;
+  const login = $('#c-qmail').value.trim(), password = $('#c-qpass').value;
+  if (!login || !password) { qst(ds ? 'Впиши email (или телефон) и пароль от chat.deepseek.com' : 'Впиши email и пароль от chat.qwen.ai', 'err'); return; }
+  const b = $('#c-qlogin'); b.disabled = true; qst(ds ? 'Вхожу в DeepSeek…' : 'Вхожу в Qwen…', 'wait');
   try {
-    await post('api/qwen/login', { email, password });
-    $('#c-qpass').value = ''; $('#c-key').value = ''; $('#wa-pw').open = false;
-    srvSet = await api('api/settings'); provSaved = Object.fromEntries((srvSet.provs || []).map(p => [p.base, p])); provOpts();
-    qst('', ''); keyHint(); loadModels();
-  } catch (e) { qst(short(e.message), 'err'); }
+    await post(ds ? 'api/deepseek/login' : 'api/qwen/login', ds ? { login, password } : { email: login, password });
+    await loggedIn();
+  } catch (e) {
+    qst(short(e.message), 'err');
+    const j = e.j || {};
+    /* DeepSeek: проверка «я не робот» — пройти и войти снова; незнакомое устройство — войти один раз в окне сайта
+       (логин и пароль сервер запомнил — сохранит их после входа), а без браузера на сервере — закладкой из своего браузера */
+    if (ds && j.captcha) doBtn($('#c-qdo'), { label: 'Пройти проверку', fn: () => openCheck('check', () => $('#c-qlogin').click()) });
+    else if (ds && j.device && j.browser) doBtn($('#c-qdo'), { label: 'Войти в окне DeepSeek', fn: () => openCheck('login', () => loggedIn()) });
+    else if (ds && j.device) qst('DeepSeek не узнал устройство. Один раз нажми «Войти через Google» с компьютера — закладка принесёт и отпечаток браузера, — а потом снова «Войти». Или поставь браузер на сервер: тогда вход откроется прямо здесь.', 'err');
+  }
   finally { b.disabled = false; }
 };
 $('#c-qpass').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $('#c-qlogin').click(); } };
@@ -655,7 +730,7 @@ $('#c-qmail').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $(
 $('#wa-out').onclick = async () => {
   const base = $('#c-base').value.trim().replace(/\/+$/, ''), w = webOf(base); if (!w) return;
   const act = base === String(srvSet?.base || '').replace(/\/+$/, '');
-  if (!await ask(w.name, 'Отключить аккаунт ' + w.name + '? Токен' + (w.pw ? ', email и хеш пароля' : '') + ' сотрутся с сервера.' + (act ? ' Сейчас Personal Computer работает через него — без аккаунта модель отвечать не будет.' : ''), null, 'Отключить')) return;
+  if (!await ask(w.name, 'Отключить аккаунт ' + w.name + '? Токен' + (w === WEB.ds ? ', логин, пароль и cookies сайта' : w.pw ? ', email и хеш пароля' : '') + ' сотрутся с сервера.' + (act ? ' Сейчас Personal Computer работает через него — без аккаунта модель отвечать не будет.' : ''), null, 'Отключить')) return;
   try {
     srvSet = await api('api/settings', { method: 'PUT', json: { forget: base } });
     provSaved = Object.fromEntries((srvSet.provs || []).map(p => [p.base, p])); provOpts();
@@ -675,15 +750,16 @@ loadModels = async function () {
       const r = await post('api/models', { base, key }); if (t !== mt) return;
       mdl = r.models.slice(); qwInfo = Object.fromEntries((r.qwen || r.info || []).map(m => [m.id, m]));
       const left = r.exp ? r.exp - Date.now() : 0;
-      if (w.pw && r.exp && left < 0 && !r.login) waState('bad', { msg: 'Токен Qwen истёк. Войди по email и паролю или через Google — и он больше не будет истекать сам.' });
+      if (w === WEB.qw && r.exp && left < 0 && !r.login) waState('bad', { msg: 'Токен Qwen истёк. Войди по email и паролю или через Google — и он больше не будет истекать сам.' });
       else waState('ok', { fresh: typed, who: r.login || 'Вход по токену',
-        sub: typed ? 'Нажми «Сохранить», чтобы подключить' : w.pw ? (r.login ? 'Токен обновляется сам' : r.exp ? 'Токен действует до ' + qwDate(r.exp) : '') : '' });
+        sub: typed ? 'Нажми «Сохранить», чтобы подключить' : w === WEB.ds ? (r.pw ? 'Вход по паролю · токен обновляется сам' : '') : r.login ? 'Токен обновляется сам' : r.exp ? 'Токен действует до ' + qwDate(r.exp) : '' });
       const cur = mi().value.trim(); if (mdl.length && (!cur || !mdl.includes(cur))) mi().value = mdl[0];
       provNew = false; qwThink();
     } catch (e) {
       if (t !== mt) return; mdl = [];
       if (e.j && e.j.needKey && !(provSaved[base] && provSaved[base].hasKey)) { waState('none'); return; }
-      waState('bad', { msg: e.message });
+      /* DeepSeek попросил проверку — пройти её прямо отсюда и проверить связь снова */
+      waState('bad', { msg: e.message, act: e.j && e.j.captcha ? { label: 'Пройти проверку', fn: () => openCheck('check', () => loadModels()) } : null });
     }
     return;
   }
@@ -703,6 +779,169 @@ loadModels = async function () {
     h.textContent = e.status === 401 || e.status === 403 || u === 401 || u === 403 ? 'Ключ не подошёл. Проверь его' : e.message === 'format' ? 'Сервер ответил, но не списком моделей. Модель можно вписать вручную' : /^Это не ключ/.test(e.message) ? e.message : 'Список моделей недоступен (' + e.message + '). Впиши модель вручную';
   }
 };
+
+/* ---------- окно проверки DeepSeek ----------
+   Сайт попросил подтвердить, что ты не робот, или не узнал устройство при входе по паролю. Сервер открывает
+   chat.deepseek.com в браузере на себе (тот же адрес и cookies, что у запросов модели), а здесь — живой экран этой
+   страницы: нажатия, прокрутка и ввод уходят туда. Проверку проходишь ты сам; как только сайт пустил (или вход
+   прошёл), окно закрывается само, а ждущая задача продолжается. Браузера на сервере нет — объясняем, как поставить */
+const dsw = document.createElement('dialog');
+dsw.id = 'dsw'; dsw.className = 'win dsw'; dsw.setAttribute('aria-labelledby', 'dsw-t');
+dsw.innerHTML = `<div class="wbar"><button class="wx" id="dsw-x" type="button" aria-label="Закрыть"><i class="pi"></i></button><b id="dsw-t">Проверка DeepSeek</b><span></span></div>
+<div class="dsw-b">
+  <p class="dsw-st" id="dsw-st" data-s="wait"><i></i><span>Открываю сайт…</span></p>
+  <div class="dsw-scr" id="dsw-scr" tabindex="-1"><img id="dsw-img" alt="Страница chat.deepseek.com" draggable="false"><textarea class="dsw-kb" id="dsw-kb" aria-label="Ввод на странице" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go"></textarea><div class="dsw-ph" id="dsw-ph"><i></i></div><div class="dsw-done" id="dsw-done" hidden><i></i></div></div>
+  <div class="dsw-no" id="dsw-no" hidden></div>
+</div>
+<div class="wfoot"><button class="lnk" id="dsw-re" type="button">Обновить страницу</button><button class="p" id="dsw-ok" type="button">Закрыть</button></div>`;
+document.body.append(dsw);
+const D = { why: 'check', es: null, w: 0, h: 0, done: null, state: '', rz: 0 };
+const dswSt = (t, s) => { const p = $('#dsw-st'); p.dataset.s = s || 'live'; p.lastChild.textContent = t; };
+/* размер экрана окна → размер страницы в браузере: без масштабирования, чтобы было чётко */
+/* размер — по раскладке (clientWidth), а не по getBoundingClientRect: окно в этот момент ещё «въезжает» с уменьшением */
+const scrSize = () => { const e = $('#dsw-scr'); return { w: Math.max(320, e.clientWidth), h: Math.max(400, e.clientHeight) }; };
+/* окно поменяло размер (повернули телефон, перенеслась строка статуса) — страница подстраивается, чтобы не было полей */
+const fitScr = () => { clearTimeout(D.rz); D.rz = setTimeout(() => { if (!dsw.open || D.state !== 'live') return; const z = scrSize(); if (Math.abs(z.w - D.w) > 2 || Math.abs(z.h - D.h) > 2) post('api/deepseek/check', { act: 'size', ...z }).catch(() => {}); }, 300); };
+/* why: 'check' — проверка; 'login' — вход на сайте. onDone — что сделать, когда получилось */
+window.openCheck = async function (why = 'check', onDone) {
+  D.why = why; D.done = onDone || null; D.state = '';
+  $('#dsw-t').textContent = why === 'login' ? 'Вход в DeepSeek' : 'Проверка DeepSeek';
+  $('#dsw-img').removeAttribute('src'); $('#dsw-ph').hidden = false; $('#dsw-done').hidden = true;
+  $('#dsw-scr').hidden = false; $('#dsw-no').hidden = true; $('#dsw-re').hidden = false; $('#dsw-ok').textContent = 'Закрыть'; dsw.classList.remove('nob');
+  dswSt(why === 'login' ? 'Открываю страницу входа…' : 'Открываю сайт…', 'wait');
+  if (!dsw.open) dsw.showModal();
+  await new Promise(r => requestAnimationFrame(r));
+  try { await post('api/deepseek/check', { act: 'open', why, ...scrSize() }); }
+  catch (e) {
+    if (e.j && e.j.nobrowser) return noBrowser();
+    dswSt('Не открылось: ' + e.message, 'fail'); $('#dsw-ph').hidden = true; return;
+  }
+  dswListen();
+};
+function dswListen() {
+  D.es?.close();
+  const es = D.es = new EventSource('api/deepseek/check');
+  es.addEventListener('frame', e => {
+    const f = JSON.parse(e.data); D.w = f.w; D.h = f.h;
+    $('#dsw-img').src = 'data:image/jpeg;base64,' + f.data; $('#dsw-ph').hidden = true;
+  });
+  es.addEventListener('state', e => {
+    const s = JSON.parse(e.data); D.state = s.state;
+    if (s.state === 'live') { dswSt(s.msg || 'Пройди проверку на странице — дальше всё сделаю сам.', 'live'); fitScr(); }
+    else if (s.state === 'done') {
+      dswSt(s.msg || 'Готово.', 'done'); $('#dsw-done').hidden = false; $('#dsw-re').hidden = true;
+      es.close(); window.sfx && sfx('recv');
+      const cb = D.done; D.done = null;
+      setTimeout(() => { if (dsw.open && D.state === 'done') dsw.close(); cb && cb(s); }, 1300);
+    } else if (s.state === 'fail' || s.state === 'closed' || s.state === 'none') {
+      es.close();
+      if (dsw.open && D.state !== 'done') { dswSt(s.msg || 'Окно на сервере закрылось.', 'fail'); $('#dsw-ok').textContent = 'Открыть снова'; }
+    }
+  });
+  es.onerror = () => { if (es.readyState === 2 && dsw.open && D.state === 'live') { dswSt('Связь с сервером прервалась — открой окно снова.', 'fail'); $('#dsw-ok').textContent = 'Открыть снова'; } };
+}
+/* браузера нет: поставить отсюда (администратор, у агента полный доступ) или командой на сервере. А пока — подождать */
+async function noBrowser() {
+  $('#dsw-scr').hidden = true; $('#dsw-re').hidden = true; dsw.classList.add('nob');
+  const box = $('#dsw-no'); box.hidden = false;
+  dswSt('Окну проверки нужен браузер на сервере', 'fail');
+  let b = {}; try { b = await api('api/deepseek/browser'); } catch (e) {}
+  const can = b.admin && b.root, cmd = 'sudo personalcomputer browser';
+  box.innerHTML = '<b>Поставь на сервер браузер — и проверка будет открываться прямо здесь</b>'
+    + '<p>Проверку «я не робот» проходят в настоящем браузере. Personal Computer откроет сайт в Chromium на сервере и покажет его экран в этом окне. Браузер займёт около 300 МБ и запускается только на время проверки.</p>'
+    + (can ? '<button class="pbtn" id="dsw-inst" type="button"><i class="pi"></i><span>Поставить браузер</span></button><small class="wst" id="dsw-ist"></small>'
+      : '<p>Поставить его ' + (b.admin ? 'можно' : 'может администратор сервера') + ' одной командой на сервере (по SSH):</p>' + (typeof cmdBox === 'function' ? cmdBox(cmd) : '<code>' + esc(cmd) + '</code>')
+        + (b.admin ? '<p class="hnote">Или включи агенту полный доступ (настройки → Сервер → «Доступ агента») — тогда браузер поставится кнопкой отсюда.</p>' : ''))
+    + '<p class="dsw-alt">А пока не страшно: задача ждёт, и я сам пробую снова через 5, 15 и 30 минут — защита сайта часто отпускает сама. Если проверка появляется постоянно, включи прокси с «домашним» адресом: настройки → Сервер → «Прокси».</p>';
+  if (b.job && b.job.state === 'run') instWatch();
+  const ib = $('#dsw-inst'); if (ib) ib.onclick = async () => { ib.disabled = true; try { await post('api/deepseek/browser'); instWatch(); } catch (e) { ib.disabled = false; const t = $('#dsw-ist'); t.textContent = e.message; t.dataset.s = 'err'; } };
+}
+function instWatch() {
+  const t = $('#dsw-ist'), ib = $('#dsw-inst'); if (ib) ib.disabled = true;
+  if (t) { t.textContent = 'Ставлю браузер… обычно это пара минут'; t.dataset.s = 'wait'; }
+  const tick = async () => {
+    if (!dsw.open) return;
+    let b = {}; try { b = await api('api/deepseek/browser'); } catch (e) { return setTimeout(tick, 3000); }
+    const j = b.job || {};
+    if (j.state === 'run') return setTimeout(tick, 2500);
+    if (j.state === 'ok' && b.ok) { if (t) { t.textContent = 'Браузер на месте — открываю проверку'; t.dataset.s = 'ok'; } setTimeout(() => openCheck(D.why, D.done), 900); return; }
+    if (t) { t.textContent = 'Не поставился: ' + (String(j.log || '').trim().split('\n').pop() || 'ошибка') + '. Попробуй командой на сервере: sudo personalcomputer browser'; t.dataset.s = 'err'; }
+    if (ib) ib.disabled = false;
+  };
+  setTimeout(tick, 2000);
+}
+const dswClose = () => { D.es?.close(); if (D.state !== 'done' && D.state !== 'none') post('api/deepseek/check', { act: 'close' }).catch(() => {}); D.state = ''; };
+dsw.addEventListener('close', dswClose);
+$('#dsw-x').onclick = () => dsw.close();
+$('#dsw-ok').onclick = () => { if ($('#dsw-ok').textContent === 'Открыть снова') openCheck(D.why, D.done); else dsw.close(); };
+$('#dsw-re').onclick = () => post('api/deepseek/check', { act: 'reload' }).catch(() => {});
+/* размер окна поменялся — страница подстраивается */
+addEventListener('resize', fitScr);
+/* ---------- ввод: экран → координаты страницы ---------- */
+const dsIn = ev => { if (D.state === 'live') post('api/deepseek/check', { act: 'input', ev }).catch(() => {}); };
+const ptAt = e => { const r = $('#dsw-img').getBoundingClientRect(); if (!r.width || !D.w) return null; return { x: Math.round((e.clientX - r.left) * D.w / r.width), y: Math.round((e.clientY - r.top) * D.h / r.height) }; };
+{
+  const img = $('#dsw-img'), kb = $('#dsw-kb');
+  let down = null, mt = 0;
+  img.addEventListener('pointerdown', e => {
+    const p = ptAt(e); if (!p) return;
+    e.preventDefault(); img.setPointerCapture(e.pointerId);
+    down = { ...p, x0: e.clientX, y0: e.clientY, touch: e.pointerType !== 'mouse', scroll: false, ly: e.clientY };
+    if (!down.touch) dsIn({ type: 'down', ...p });
+  });
+  img.addEventListener('pointermove', e => {
+    if (!down) return;
+    const p = ptAt(e); if (!p) return;
+    if (down.touch) {
+      /* палец пошёл вверх-вниз — это прокрутка страницы, а не нажатие */
+      if (!down.scroll && Math.hypot(e.clientX - down.x0, e.clientY - down.y0) > 10) down.scroll = true;
+      if (down.scroll && Date.now() - mt > 50) { const dy = (down.ly - e.clientY) * D.h / img.getBoundingClientRect().height; down.ly = e.clientY; mt = Date.now(); dsIn({ type: 'wheel', x: down.x, y: down.y, dx: 0, dy: Math.round(dy) }); }
+      return;
+    }
+    if (Date.now() - mt > 33) { mt = Date.now(); dsIn({ type: 'move', ...p }); }
+  });
+  const up = e => {
+    if (!down) return;
+    const p = ptAt(e) || down, d = down; down = null;
+    if (d.touch) { if (!d.scroll) dsIn({ type: 'click', ...p }); }
+    else dsIn({ type: 'up', ...p });
+    /* после нажатия — ввод с клавиатуры идёт на страницу (на телефоне — откроется клавиатура) */
+    kb.focus({ preventScroll: true });
+  };
+  img.addEventListener('pointerup', up); img.addEventListener('pointercancel', up);
+  img.addEventListener('wheel', e => { e.preventDefault(); const p = ptAt(e); if (!p || Date.now() - mt < 40) return; mt = Date.now(); dsIn({ type: 'wheel', ...p, dx: Math.round(e.deltaX), dy: Math.round(e.deltaY) }); }, { passive: false });
+  img.addEventListener('contextmenu', e => e.preventDefault());
+  const KEYS = new Set(['Enter', 'Backspace', 'Tab', 'Escape', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']);
+  kb.addEventListener('keydown', e => { if (KEYS.has(e.key) && !e.isComposing) { e.preventDefault(); if (e.key === 'Escape') return; dsIn({ type: 'key', key: e.key, shift: e.shiftKey }); } });
+  kb.addEventListener('beforeinput', e => {
+    if (e.isComposing) return;
+    if (e.inputType === 'deleteContentBackward') { e.preventDefault(); dsIn({ type: 'key', key: 'Backspace' }); }
+    else if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') { e.preventDefault(); dsIn({ type: 'key', key: 'Enter' }); }
+  });
+  /* обычный ввод и вставка: что попало в поле — на страницу, поле снова пустое. Набор с подсказками (IME, телефон) —
+     целиком в конце (compositionend) */
+  kb.addEventListener('input', e => { if (e.isComposing || !kb.value) return; dsIn({ type: 'text', text: kb.value }); kb.value = ''; });
+  kb.addEventListener('compositionend', e => { if (e.data) dsIn({ type: 'text', text: e.data }); kb.value = ''; });
+}
+/* кнопка «Пройти проверку» в карточке в чате */
+$('#msgs').addEventListener('click', e => { if (e.target.closest('[data-act=dscheck]')) { e.stopPropagation(); openCheck('check'); } }, true);
+
+/* ---------- карточка проверки в чате ----------
+   wait — ждёт тебя (и сама попробует снова в at), try — пробую снова, ok — пустили, stop/fail — больше не ждёт */
+const ckEls = new Map();
+const hhmmOf = t => new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+function ckCard(e) {
+  let d = ckEls.get(e.seq);
+  if (!d || !d.isConnected) {
+    d = add('e', '<span class="ck-t"></span><small class="ck-s"></small><div class="ea"><button class="pbtn sm" data-act="dscheck" type="button"><i class="pi"></i><span>Пройти проверку</span></button></div>');
+    d.classList.add('ck'); d.setAttribute('role', 'status');
+    stamp(d, e); ckEls.set(e.seq, d);
+  }
+  d.dataset.s = e.state || 'wait';
+  d.querySelector('.et').textContent = { ok: 'Проверка пройдена', stop: 'Проверка', fail: 'Проверка', try: 'Пробую снова…' }[e.state] || 'Нужна проверка';
+  d.querySelector('.ck-t').textContent = e.state === 'ok' ? 'DeepSeek снова пускает — продолжаю.' : e.state === 'stop' ? 'DeepSeek просил проверку — задача остановлена.' : e.state === 'fail' ? 'DeepSeek так и не пустил без проверки — задача остановлена. Нажми «Повторить», когда будешь рядом.' : 'DeepSeek просит подтвердить, что ты не робот.';
+  d.querySelector('.ck-s').textContent = e.state === 'try' ? 'Пробую отправить запрос ещё раз.' : e.at ? 'Пройди проверку — и я сразу продолжу. Или подожди: сам попробую снова в ' + hhmmOf(e.at) + '.' : '';
+}
 
 /* ---------- папки в настройках ----------
    Вкладки «Сервер» и «Инструменты» разложены по темам в сворачиваемые папки: при открытии видны только заголовки

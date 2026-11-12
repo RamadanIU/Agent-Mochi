@@ -10,12 +10,13 @@ import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { CFG } from './config.js';
-import { ensureDir, flushAll } from './store.js';
+import { ensureDir, flushAll, seal } from './store.js';
 import * as A from './auth.js';
 import { getChat, resumeAll, DEF_SETTINGS, MAX_STEPS, toolCatalog, setTools } from './agent.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
 import * as QW from './qwen.js';
 import * as DS from './deepseek.js';
+import * as DC from './dscheck.js';
 import * as X from './ext.js';
 import { putInbox, storeCopy, getFile, userDir, safeName } from './files.js';
 import * as TG from './telegram.js';
@@ -23,7 +24,7 @@ import { TERM_PREFIX, proxyHttp, proxyUpgrade } from './term.js';
 import * as U from './update.js';
 import * as AC from './access.js';
 import * as PX from './proxy.js';
-import { fsCmd, fsGet, fsUpload, agentInfo } from './runner-client.js';
+import { fsCmd, fsGet, fsUpload, agentInfo, runCmd } from './runner-client.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const VERSION = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8')).version;
@@ -176,9 +177,9 @@ function provsOf(S) {
   return P;
 }
 const pubSettings = c => {
-  /* qwAuth — вход в Qwen (email и хеш пароля): наружу только email */
-  const S = c.settings(), { key, provs, qwAuth, ...s } = S;
-  return { ...s, hasKey: !!key, maxStepsDef: DEF_SETTINGS.maxSteps, qwEmail: qwAuth?.email || '',
+  /* qwAuth — вход в Qwen (email и хеш пароля), dsAuth — вход в DeepSeek (логин и зашифрованный пароль): наружу только логин */
+  const S = c.settings(), { key, provs, qwAuth, dsAuth, ...s } = S;
+  return { ...s, hasKey: !!key, maxStepsDef: DEF_SETTINGS.maxSteps, qwEmail: qwAuth?.email || '', dsLogin: dsAuth?.login || '',
     provs: Object.entries(provsOf(S)).map(([base, p]) => ({ base, model: p.model || '', hasKey: !!p.key })) };
 };
 function putSettings(c, b) {
@@ -190,6 +191,8 @@ function putSettings(c, b) {
     delete P[f];
     if (f === prev) s.key = '';
     if (QW.isQwen(f)) delete s.qwAuth;
+    /* DeepSeek: и пароль, и cookies сайта, и профиль браузера на сервере (там тоже вход в аккаунт) */
+    if (DS.isDeepSeek(f)) { delete s.dsAuth; c.ds.v.ck = {}; delete c.ds.v.calm; c.ds.save(); DC.forgetProfile(c.u); }
     return c.set.save();
   }
   if (steps !== undefined && !(steps >= 1 && steps <= MAX_STEPS)) throw new HttpErr(400, 'Лимит шагов — от 1 до ' + MAX_STEPS);
@@ -200,7 +203,7 @@ function putSettings(c, b) {
   }
   const cur = s.base || DEF_SETTINGS.base, moved = cur !== prev;
   /* «Сбросить всё» стирает ключи всех провайдеров */
-  if (b.clearKey) { s.key = ''; for (const k in P) delete P[k]; delete s.qwAuth; }
+  if (b.clearKey) { s.key = ''; for (const k in P) delete P[k]; delete s.qwAuth; delete s.dsAuth; }
   /* токен Qwen и DeepSeek вставляют как попало (Bearer, cookie, JSON из localStorage) — храним только сам токен; JWT бывает длинным */
   else if (typeof b.key === 'string' && b.key.trim()) s.key = QW.isQwen(cur) ? QW.parseToken(b.key).slice(0, 8000) : DS.isDeepSeek(cur) ? DS.parseToken(b.key).slice(0, 8000) : b.key.trim().slice(0, 500);
   else if (moved) s.key = P[cur]?.key || '';
@@ -234,8 +237,14 @@ async function models(c, b) {
   }
   /* DeepSeek: свой API у chat.deepseek.com — рабочий ли токен и чей это аккаунт; модель у сайта одна */
   if (DS.isDeepSeek(base)) {
-    try { return await DS.check(key); }
-    catch (e) { throw new HttpErr(e.status === 401 ? 401 : 502, e.human || e.message, { human: true, ...(e.needKey ? { needKey: true } : {}) }); }
+    const typed = !!String(b.key || '').trim(), chk = k => DS.check(k, c.ds.v, () => c.ds.save());
+    try {
+      let r;
+      /* сохранённый токен истёк, а вход по паролю есть — входим заново прямо сейчас */
+      try { r = await chk(key); } catch (e) { if (e.status !== 401 || typed || !S.dsAuth) throw e; r = await chk(await c.dsRelogin()); }
+      return { ...r, pw: S.dsAuth?.login || '', calm: DS.calm(c.ds.v) };
+    }
+    catch (e) { throw new HttpErr(e.status === 401 ? 401 : 502, e.human || e.message, { human: true, ...(e.needKey ? { needKey: true } : {}), ...(e.captcha ? { captcha: true, browser: DC.available() } : {}) }); }
   }
   const auth = key ? { Authorization: 'Bearer ' + key } : {};
   const r = await apiFetch(base + '/models', { headers: auth, signal: AbortSignal.timeout(15000) })
@@ -288,6 +297,99 @@ async function qwenLogin(c, b) {
   c.setQwenKey(token);
   return { ok: true, email, exp: QW.tokenInfo(token).exp * 1000 || 0 };
 }
+/* ---------- DeepSeek: вход по email (или телефону) и паролю ----------
+   Сервер сам входит на chat.deepseek.com и сохраняет токен, а пароль — зашифрованным (store.seal): когда токен истечёт,
+   агент войдёт заново сам (agent.dsRelogin). Сайт не узнал устройство — берём настоящий отпечаток из браузера
+   на этом сервере (dscheck.deviceId) и пробуем ещё раз; не вышло — окно входа (dscheck, why 'login') */
+async function dsLogin(c, b) {
+  const login = String(b.login || '').trim().slice(0, 200), password = String(b.password || '');
+  if (!DS.isLogin(login) || !password) throw new HttpErr(400, 'Впиши email (или телефон) и пароль от chat.deepseek.com');
+  if (password.length > 200) throw new HttpErr(400, 'Слишком длинный пароль');
+  const st = c.ds.v, save = () => c.ds.save();
+  let r = null, err = null;
+  try { r = await DS.signin(st, { login, password }, null, save); }
+  catch (e) {
+    err = e;
+    if (e.device && DC.available()) {
+      const dev = await DC.deviceId(c).catch(() => '');
+      if (dev) try { r = await DS.signin(st, { login, password, device: dev }, null, save); err = null; } catch (e2) { err = e2; }
+    }
+  }
+  if (err) {
+    /* окну входа понадобятся логин и пароль — чтобы после входа там сохранить их для автообновления */
+    if (err.device) pendingDs.set(c.u.id, { login, pw: seal(password), t: Date.now() });
+    throw new HttpErr(err.badPass || err.status === 400 ? 400 : err.captcha || err.device || err.waf || err.banned ? 403 : err.status === 401 ? 401 : 502, err.human || err.message,
+      { human: true, ...(err.device ? { device: true } : {}), ...(err.captcha ? { captcha: true } : {}), browser: DC.available() });
+  }
+  dsKeep(c, r.token, { login, pw: seal(password) });
+  return { ok: true, login: r.login || login };
+}
+/* вход, который ждёт окна входа (сайт не узнал устройство): 15 минут */
+const pendingDs = new Map();
+function dsKeep(c, token, auth) {
+  if (auth) c.set.v.dsAuth = auth;
+  c.set.v.provs = provsOf(c.settings());
+  c.setDsKey(token);
+}
+/* окно проверки: что сделано — то и сохраняем (вход в окне: токен, а если ждал вход по паролю — и его) */
+function dsWatch(c, s) {
+  if (s.watched) return s;
+  s.watched = true;
+  s.on('done', d => {
+    if (d.why !== 'login' || !d.token) return;
+    const p = pendingDs.get(c.u.id); pendingDs.delete(c.u.id);
+    dsKeep(c, d.token, p && Date.now() - p.t < 15 * 60e3 ? { login: p.login, pw: p.pw } : null);
+  });
+  return s;
+}
+/* поток окна проверки: состояние и кадры экрана (JPEG). Окна нет — сразу «нет» */
+function dsStream(req, res, u) {
+  res.writeHead(200, { ...SEC, 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store, no-transform', 'x-accel-buffering': 'no', connection: 'keep-alive' });
+  const send = (ev, d) => res.write(`event: ${ev}\ndata: ${JSON.stringify(d)}\n\n`);
+  const s = DC.sessionOf(u);
+  if (!s) { send('state', { state: 'none' }); return res.end(); }
+  send('state', s.pub());
+  if (s.frame) send('frame', s.frame);
+  /* кадры — не чаще 12 в секунду, последний не теряется */
+  let last = 0, pend = null, ft = null;
+  const flush = () => { ft = null; if (pend) { last = Date.now(); send('frame', pend); pend = null; } };
+  const on = {
+    state: d => send('state', d),
+    frame: f => { pend = f; if (!ft) ft = setTimeout(flush, Math.max(0, 80 - (Date.now() - last))); },
+    end: () => { flush(); send('state', s.pub()); res.end(); },
+  };
+  for (const k in on) s.on(k, on[k]);
+  const hb = setInterval(() => res.write(': ping\n\n'), 20000);
+  const done = () => { clearInterval(hb); clearTimeout(ft); for (const k in on) s.off(k, on[k]); };
+  req.on('close', done); res.on('error', done);
+}
+async function dsCheckAct(c, u, b) {
+  const act = String(b.act || '');
+  if (act === 'open') {
+    const why = b.why === 'login' ? 'login' : 'check';
+    try { dsWatch(c, await DC.open(c, why, { w: +b.w || 900, h: +b.h || 760 })); }
+    catch (e) { if (e.nobrowser) throw new HttpErr(409, e.message, { nobrowser: true }); throw new HttpErr(502, e.message); }
+    return { ok: true, ...DC.sessionOf(u)?.pub() };
+  }
+  const s = DC.sessionOf(u);
+  if (act === 'close') { DC.close(u); return { ok: true }; }
+  if (!s) throw new HttpErr(404, 'Окно проверки уже закрыто');
+  if (act === 'input') { await s.input(b.ev || {}).catch(() => {}); return { ok: true }; }
+  if (act === 'size') { await s.size(+b.w, +b.h); return { ok: true }; }
+  if (act === 'reload') { await s.reload(); return { ok: true }; }
+  throw new HttpErr(400, 'неизвестное действие');
+}
+/* отпечаток устройства и User-Agent из твоего браузера (закладка «Войти через Google» приносит их вместе с токеном):
+   тогда и вход по паролю, и запросы идут от «твоего» браузера */
+function dsDevice(c, b) {
+  const st = DS.ident(c.ds.v), dev = String(b.device || '').trim(), ua = String(b.ua || '').trim();
+  if (dev && /^[\x21-\x7e]{16,1024}$/.test(dev)) st.dev = dev;
+  if (ua && /^Mozilla\/5\.0 [\x20-\x7e]{20,380}$/.test(ua)) { st.ua = ua; delete st.auto; }
+  if (typeof b.lang === 'string' && /^[\w,;=.\s*-]{2,200}$/.test(b.lang)) st.lang = b.lang;
+  c.ds.save();
+  return { ok: true, device: !!st.dev };
+}
+
 /* фоном: у кого Qwen — токен продлеваем заранее (за 5 минут), чтобы он не истёк между сообщениями.
    Повторный вход по паролю — только по делу (перед запросом), продление сессии — дёшево */
 function qwenKeepAlive() {
@@ -472,6 +574,23 @@ async function api(req, res, url) {
       if (M === 'PUT') { putSettings(chat, await jbody(req)); return json(res, 200, pubSettings(chat)); }
       break;
     case '/api/models': if (M === 'POST') return json(res, 200, await models(chat, await jbody(req))); break;
+    case '/api/deepseek/login':
+      if (M === 'POST') return json(res, 200, await dsLogin(chat, await jbody(req)));
+      break;
+    case '/api/deepseek/device': if (M === 'POST') return json(res, 200, dsDevice(chat, await jbody(req))); break;
+    case '/api/deepseek/check':
+      if (M === 'GET') return dsStream(req, res, u);
+      if (M === 'POST') return json(res, 200, await dsCheckAct(chat, u, await jbody(req)));
+      break;
+    /* браузер для окна проверки: есть ли он и можно ли поставить отсюда (администратор, у агента полный доступ) */
+    case '/api/deepseek/browser':
+      if (M === 'GET') return json(res, 200, { ...DC.browserInfo(), admin: !!u.admin, root: CFG.agentSudo, job: DC.installState() });
+      if (M === 'POST') {
+        if (!u.admin) throw new HttpErr(403, 'Поставить браузер может только администратор');
+        if (!CFG.agentSudo) throw new HttpErr(409, 'У агента нет полного доступа (root) — поставь браузер командой на сервере: sudo personalcomputer browser');
+        return json(res, 200, { job: DC.install(runCmd) });
+      }
+      break;
     case '/api/qwen/login':
       if (M === 'POST') return json(res, 200, await qwenLogin(chat, await jbody(req)));
       if (M === 'DELETE') { delete chat.set.v.qwAuth; chat.set.save(); return json(res, 200, pubSettings(chat)); }
@@ -673,7 +792,9 @@ async function handle(req, res) {
     const code = e.status || 500;
     if (code === 500) console.error('http:', req.method, p, e);
     if (res.headersSent) return res.destroy();
-    json(res, code, { error: code === 500 ? 'внутренняя ошибка сервера' : e.message, ...(e.field ? { field: e.field } : {}), ...(e.upstream ? { upstream: e.upstream } : {}), ...(e.fcode ? { code: e.fcode } : {}), ...(e.busy ? { busy: true } : {}), ...(e.human ? { human: true } : {}), ...(e.needKey ? { needKey: true } : {}) });
+    json(res, code, { error: code === 500 ? 'внутренняя ошибка сервера' : e.message, ...(e.field ? { field: e.field } : {}), ...(e.upstream ? { upstream: e.upstream } : {}), ...(e.fcode ? { code: e.fcode } : {}), ...(e.busy ? { busy: true } : {}), ...(e.human ? { human: true } : {}), ...(e.needKey ? { needKey: true } : {}),
+      /* DeepSeek: нужна проверка, сайт не узнал устройство, есть ли на сервере браузер для окна проверки */
+      ...(e.captcha ? { captcha: true } : {}), ...(e.device ? { device: true } : {}), ...(e.nobrowser ? { nobrowser: true } : {}), ...(typeof e.browser === 'boolean' ? { browser: e.browser } : {}) });
   }
 }
 
@@ -749,7 +870,7 @@ export function startServer() {
   srv.keepAliveTimeout = 65000;
   const adm = adminServer();
   srv.listen(CFG.port, CFG.host, () => console.log(`personalcomputer ${VERSION}: http://${CFG.host}:${CFG.port}  данные: ${CFG.data}  работа: ${CFG.work}${CFG.publicUrl ? '  адрес: ' + CFG.publicUrl : ''}`));
-  const bye = () => { flushAll(); try { fs.unlinkSync(ADMIN_SOCK()); } catch {} process.exit(0); };
+  const bye = () => { flushAll(); DC.shutdown(); try { fs.unlinkSync(ADMIN_SOCK()); } catch {} process.exit(0); };
   process.on('SIGTERM', bye); process.on('SIGINT', bye);
   return { srv, adm };
 }

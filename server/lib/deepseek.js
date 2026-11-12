@@ -21,16 +21,31 @@
      x-ds-pow-response. Алгоритм DeepSeekHashV1 — SHA3-256, у которого перестановка Keccak-f[1600] идёт с 1-го раунда
      по 23-й (нулевой пропущен); проверено на официальном sha3_wasm_bg.wasm сайта (см. тест). Считаем сами, без WASM.
    * Одновременно аккаунт генерирует только один ответ, а слишком частые запросы DeepSeek наказывает временной блокировкой
-     аккаунта («user is muted»). Поэтому запросы одного аккаунта идут строго по очереди и с паузой в пару секунд. */
+     аккаунта («user is muted»). Поэтому запросы одного аккаунта идут строго по очереди, с паузой в пару секунд
+     и не чаще RPM в минуту; после проверки «я не робот» — ещё бережнее (CALM_MS).
+
+   Как сайт нас видит. Перед chat.deepseek.com стоит защита AWS WAF (CloudFront): запрос, не похожий на вкладку браузера
+   (User-Agent «node», без cookies и заголовков, которые браузер ставит сам), она встречает проверкой. Поэтому каждый
+   запрос — как из одной и той же вкладки: постоянный «браузер» у пользователя (User-Agent и подсказки sec-ch-ua, язык,
+   x-device-id), заголовки sec-fetch-* и все cookies, что выдал сайт (в том числе aws-waf-token — отметку о пройденной
+   проверке). Это состояние st хранит agent.js (deepseek.json пользователя): { ua, auto, lang, did, dev, ck, calm }.
+   Если проверка всё же случилась, ошибка помечена captcha (а не «сломалось»): агент ставит задачу на паузу, человек
+   проходит проверку в окне приложения (dscheck.js — настоящая страница сайта в браузере на этом сервере), выданные
+   сайтом cookies переходят сюда — и работа продолжается. Сами проверки Personal Computer не решает и не обходит.
+
+   Вход по email (или телефону) и паролю — как у сайта: POST /api/v0/users/login, токен — data.biz_data.user.token.
+   Сайт ждёт отпечаток устройства (device_id — его считает SDK защиты Shumei в браузере): без него или с выдуманным
+   отвечает RISK_DEVICE_DETECTED. Поэтому отпечаток берём только настоящий — из браузера на сервере (dscheck.js)
+   или из твоего браузера (закладка «Войти через Google» приносит его вместе с токеном). */
 import crypto from 'node:crypto';
-import { apiFetch } from './net.js';
+import { apiFetch, cfBlock } from './net.js';
 import { callParser, wrapInstr, freshContent, render, anchorOf, names, sysHash, clip, NUDGE, dayOf, attach as attachFiles } from './webchat.js';
 
 export const DS_BASE = 'https://chat.deepseek.com';
 /* куда ходим на самом деле: в тестах — фальшивый DeepSeek */
 const api = () => (process.env.PERSONALCOMPUTER_DEEPSEEK_URL || DS_BASE).replace(/\/+$/, '');
 export const isDeepSeek = base => { try { return new URL(String(base)).hostname === 'chat.deepseek.com'; } catch { return false; } };
-const COMPLETION = '/api/v0/chat/completion', UPLOAD = '/api/v0/file/upload_file';
+const COMPLETION = '/api/v0/chat/completion', UPLOAD = '/api/v0/file/upload_file', LOGIN = '/api/v0/users/login';
 
 /* ---------- токен ----------
    Принимаем, как ни скопируют: сам токен, «Bearer …», JSON из localStorage.userToken ({"value": "…", "__version": "0"}),
@@ -54,48 +69,174 @@ export function parseToken(raw) {
 
 /* ---------- ошибки: человеческий текст сразу (agent.friendly берёт его как есть) ---------- */
 const dErr = (human, extra = {}) => Object.assign(new Error(human), { human, detail: '', ...extra });
-const EXPIRED = 'Токен DeepSeek не подошёл или истёк: у сайта токены со временем истекают. Подключи аккаунт заново — настройки → Модель → «Войти через Google» (или токен вручную), это пара секунд.';
-const WAF = 'chat.deepseek.com не пустил запрос с этого сервера: защита сайта ответила страницей блокировки. Токен тут ни при чём. Так защита реагирует на IP-адрес сервера (часто — на адреса хостингов): включи прокси с «домашним» адресом в настройках → Сервер → «Прокси» или повтори позже.';
+const EXPIRED = 'Токен DeepSeek не подошёл или истёк: у сайта токены со временем истекают. Подключи аккаунт заново — настройки → Модель → вход по email и паролю (тогда токен обновляется сам) или «Войти через Google».';
+const WAF = 'chat.deepseek.com не пустил запрос с этого сервера: защита сайта (CloudFront) заблокировала адрес сервера — проверки «я не робот» тут нет, её нечем пройти. Токен ни при чём: так защита отвечает на адреса некоторых хостингов и стран. Включи прокси с «домашним» адресом в настройках → Сервер → «Прокси» или повтори позже.';
 const RATE = 'DeepSeek: слишком частые запросы. Подожди минуту-другую и нажми «Повторить» — если торопить сайт, он может временно заблокировать аккаунт.';
-const CAPTCHA = 'DeepSeek просит пройти проверку «я не робот». Открой chat.deepseek.com в браузере, отправь там любое сообщение (пройди проверку, если покажут) и нажми «Повторить».';
+export const CHECK = 'DeepSeek просит подтвердить, что ты не робот: так защита сайта отвечает на подозрительно частые или «нечеловеческие» запросы. Пройди проверку в окне — и работа продолжится сама.';
 const LONG = 'DeepSeek: сообщение слишком длинное для одного запроса.';
+const BADPASS = 'DeepSeek не пустил: неверный email (телефон) или пароль. Если входишь на chat.deepseek.com только через Google, пароля у аккаунта нет — нажми «Войти через Google».';
+const DEVICE = 'DeepSeek не узнал устройство: вход по паролю сайт пускает только из настоящего браузера. Один раз подтверди вход из браузера — дальше Personal Computer будет входить сам.';
+const BANNED = 'DeepSeek заблокировал этот аккаунт насовсем (USER_IS_BANNED) — войти в него нельзя. Подключи другой аккаунт.';
 const when = ms => { const d = new Date(ms); return ms - Date.now() < 864e5 ? d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : d.toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }); };
 const muted = until => dErr('DeepSeek временно ограничил аккаунт — так сайт отвечает на слишком частые запросы' + (until > Date.now() ? ': ограничение до ' + when(until) : '') + '. Пока оно действует, модель отвечать не будет: подожди или подключи другой аккаунт. Повторять сейчас не нужно — это только продлит блокировку.', { status: 429, muted: true, until });
-const isWafBody = t => /<html|<!doctype/i.test(t) && /blocked|captcha|cloudfront|forbidden|access denied|request could not be satisfied/i.test(t);
-/* ответ сайта: {code, msg, data: {biz_code, biz_msg, biz_data}} — или поток с {"type":"error","content":"…"} */
+/* ---------- защита сайта (AWS WAF перед CloudFront) ----------
+   captcha   — 405 и x-amzn-waf-action: captcha: головоломка, её решает человек;
+   challenge — 202 и x-amzn-waf-action: challenge: проверка браузера (JS), её проходит настоящий браузер;
+   block     — 403 от CloudFront («Request blocked»): запрет по адресу или стране, проверки нет — помогает только прокси.
+   На всякий случай понимаем и страницы Cloudflare (если сайт когда-нибудь переедет) */
+export function wafOf(status, text, h) {
+  const a = String(h?.get?.('x-amzn-waf-action') || '').trim().toLowerCase();
+  if (a === 'captcha' || a === 'challenge') return a;
+  const t = String(text || '');
+  if (!/<html|<!doctype/i.test(t)) return null;
+  if (/awswaf|gokuProps|AwsWafIntegration|captcha-container/i.test(t)) return /captcha/i.test(t) && status !== 202 ? 'captcha' : 'challenge';
+  const cf = cfBlock(status, t, h);
+  if (cf === 'challenge') return 'challenge';
+  if (cf || /blocked|captcha|cloudfront|forbidden|access denied|request could not be satisfied/i.test(t)) return /captcha/i.test(t) ? 'captcha' : 'block';
+  return null;
+}
+/* проверка случилась — дальше с этим аккаунтом бережнее (реже и медленнее), пока она не забудется */
+export const CALM_MS = 45 * 60e3;
+function wafErr(kind, cl) {
+  if (kind === 'block') return dErr(WAF, { status: 403, waf: true });
+  if (cl?.st) { cl.st.calm = Date.now() + CALM_MS; cl.save(); }
+  return dErr(CHECK, { status: 403, captcha: true, check: kind });
+}
+/* ответ сайта: {code, msg, data: {biz_code, biz_msg, biz_data}} — или поток с {"type":"error","content":"…"}.
+   biz и bmsg — как есть (по ним вход различает «неверный пароль», «устройство», «бан») */
 function bizErr(j, status) {
   const d = j?.data && typeof j.data === 'object' ? j.data : {};
   const code = Number.isFinite(+j?.code) ? +j.code : 0, biz = Number.isFinite(+d.biz_code) ? +d.biz_code : 0;
   const msg = String(d.biz_msg || j?.msg || j?.message || (j?.type === 'error' ? j.content : '') || (typeof j?.error === 'string' ? j.error : j?.error?.message) || '').slice(0, 300);
-  if (biz === 5 || /muted/i.test(msg)) { const s = +(d.biz_data?.mute_until ?? 0); return muted(s > 0 ? s * 1000 : 0); }
-  if ([40001, 40002, 40003].includes(code) || status === 401 || /authori[sz]ation failed|invalid token|token.*(expired|invalid)|missing token|not ?login|请先登录|登录.*(过期|失效)/i.test(msg)) return dErr(EXPIRED, { status: 401, code });
-  if (/captcha|人机验证|验证码|安全验证|verify.*human/i.test(msg)) return dErr(CAPTCHA, { status: 403, captcha: true });
-  if (status === 429 || /too many|too frequent|rate.?limit|频繁|频率/i.test(msg)) return dErr(RATE, { status: 429 });
-  if (/too long|过长|超出.*(长度|限制)|length limit|context.*(length|limit|window)|maximum context|上下文/i.test(msg)) return dErr(LONG, { status: 400, long: true });
-  if (/not.?found|不存在|invalid.*(session|parent|message)|session.*(invalid|deleted)/i.test(msg)) return dErr('DeepSeek: чат не найден', { status: 404, gone: true });
-  if (status === 403) return dErr(EXPIRED, { status: 401, code });
+  const tag = e => Object.assign(e, { biz, bmsg: msg, code: e.code ?? code });
+  if (biz === 5 || /muted/i.test(msg)) { const s = +(d.biz_data?.mute_until ?? d.biz_data?.user?.chat?.mute_until ?? 0); return tag(muted(s > 0 ? s * 1000 : 0)); }
+  if (biz === 10 || /USER_IS_BANNED|\bbanned\b|封禁/i.test(msg)) return tag(dErr(BANNED, { status: 403, banned: true }));
+  if ([40001, 40002, 40003].includes(code) || status === 401 || /authori[sz]ation failed|invalid token|token.*(expired|invalid)|missing token|not ?login|请先登录|登录.*(过期|失效)/i.test(msg)) return tag(dErr(EXPIRED, { status: 401, code }));
+  if (/captcha|人机验证|验证码|安全验证|verify.*human/i.test(msg)) return tag(dErr(CHECK, { status: 403, captcha: true, check: 'captcha' }));
+  if (status === 429 || /too many|too frequent|rate.?limit|频繁|频率/i.test(msg)) return tag(dErr(RATE, { status: 429 }));
+  if (/too long|过长|超出.*(长度|限制)|length limit|context.*(length|limit|window)|maximum context|上下文/i.test(msg)) return tag(dErr(LONG, { status: 400, long: true }));
+  if (/not.?found|不存在|invalid.*(session|parent|message)|session.*(invalid|deleted)/i.test(msg)) return tag(dErr('DeepSeek: чат не найден', { status: 404, gone: true }));
+  if (status === 403) return tag(dErr(EXPIRED, { status: 401, code }));
   const e = dErr('DeepSeek ответил ошибкой' + (status ? ' (HTTP ' + status + ')' : '') + (msg || code || biz ? ': ' + (msg || 'код ' + (code || biz)) : '') + '.', { status: status >= 500 ? status : 502, code: code || biz });
   e.detail = JSON.stringify(j || {}).slice(0, 300);
-  return e;
+  return tag(e);
 }
 const netErr = e => dErr('Не достучался до chat.deepseek.com (' + (e.cause?.code || e.message) + '). ' + (e.proxy ? 'Проверь прокси: настройки → Сервер → «Прокси» → «Проверить».' : 'Проверь интернет на сервере или включи прокси в настройках → Сервер.'), { net: true, proxy: !!e.proxy });
 
-/* ---------- заголовки как у сайта ----------
-   x-client-version — версия веб-клиента; сайт по ней включает возможности. Можно задать PERSONALCOMPUTER_DEEPSEEK_VERSION */
+/* ---------- кто мы для сайта: одна и та же вкладка браузера ----------
+   st — состояние пользователя (agent.js хранит его в deepseek.json): ua — User-Agent (свой, если пришёл из твоего браузера,
+   иначе обычный Chrome под Windows; auto — придуман нами и сам «обновляется», как настоящий Chrome), lang — Accept-Language,
+   did — постоянный id вкладки (x-device-id), dev — отпечаток устройства Shumei для входа, ck — cookies сайта,
+   calm — до какого времени быть бережнее после проверки. x-client-version — версия веб-клиента, по ней сайт включает
+   возможности (PERSONALCOMPUTER_DEEPSEEK_VERSION) */
 const VER = () => process.env.PERSONALCOMPUTER_DEEPSEEK_VERSION || '2.7.0';
-function headers(token, extra = {}) {
-  return { 'Content-Type': 'application/json', Accept: '*/*', ...(token ? { Authorization: 'Bearer ' + token } : {}),
-    'x-client-platform': 'web', 'x-client-version': VER(), 'x-app-version': VER(), 'x-client-locale': 'en_US',
-    'x-client-timezone-offset': String(-new Date().getTimezoneOffset() * 60), Origin: DS_BASE, Referer: DS_BASE + '/', ...extra };
+/* текущий Chrome: выходит раз в 4 недели (142 — 28.10.2025); берём на версию старше — так у большинства людей */
+export const chromeMajor = (now = Date.now()) => Math.max(142, 141 + Math.floor((now - Date.UTC(2025, 9, 28)) / (28 * 864e5)));
+export const defaultUA = (v = chromeMajor()) => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/' + v + '.0.0.0 Safari/537.36';
+/* sec-ch-ua — как его собирает сам Chromium (GREASE по номеру версии: components/embedder_support/user_agent_utils.cc).
+   Только у Chrome и Edge; Firefox и Safari этих заголовков не шлют */
+export function hintsOf(ua) {
+  ua = String(ua || '');
+  const m = /Chrome\/(\d+)/.exec(ua);
+  if (!m || /Firefox|FxiOS|CriOS|EdgiOS|OPR\/|YaBrowser|SamsungBrowser|UCBrowser/.test(ua)) return {};
+  const v = +m[1], edge = /Edg\/(\d+)/.exec(ua);
+  const ch = [' ', '(', ':', '-', '.', '/', ')', ';', '=', '?', '_'], order = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]][v % 6];
+  const list = [];
+  list[order[0]] = ['Not' + ch[v % 11] + 'A' + ch[(v + 1) % 11] + 'Brand', ['8', '99', '24'][v % 3]];
+  list[order[1]] = ['Chromium', String(v)];
+  list[order[2]] = [edge ? 'Microsoft Edge' : 'Google Chrome', edge ? edge[1] : String(v)];
+  const plat = /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /CrOS/.test(ua) ? 'Chrome OS' : /Mac OS X|Macintosh/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : 'Unknown';
+  return { 'sec-ch-ua': list.map(([b, x]) => '"' + b + '";v="' + x + '"').join(', '), 'sec-ch-ua-mobile': /Mobile/.test(ua) ? '?1' : '?0', 'sec-ch-ua-platform': '"' + plat + '"' };
+}
+/* состояние «браузера» пользователя: недостающее дополняем, придуманный нами Chrome «обновляем» */
+export function ident(st) {
+  if (!st || typeof st !== 'object') st = {};
+  if (typeof st.ua !== 'string' || !/^Mozilla\/5\.0 /.test(st.ua) || st.ua.length > 400) { st.ua = defaultUA(); st.auto = 1; }
+  else if (st.auto) { const v = +(/Chrome\/(\d+)/.exec(st.ua)?.[1] || 0); if (v < chromeMajor() - 2) st.ua = defaultUA(); }
+  if (typeof st.lang !== 'string' || !/^[\w,;=.\s*-]{2,200}$/.test(st.lang)) st.lang = 'en-US,en;q=0.9';
+  if (typeof st.did !== 'string' || !/^[0-9a-f-]{36}$/.test(st.did)) st.did = crypto.randomUUID();
+  if (!st.ck || typeof st.ck !== 'object' || Array.isArray(st.ck)) st.ck = {};
+  return st;
+}
+const locOf = lang => { const m = /^([a-z]{2,3})(?:-([A-Za-z]{2}))?/.exec(String(lang || '')); return m ? m[1] + '_' + (m[2] || (m[1] === 'en' ? 'US' : m[1])).toUpperCase() : 'en_US'; };
+
+/* ---------- cookies сайта ----------
+   Как у браузера: всё, что сайт выдал через Set-Cookie (своему домену), уходит обратно; истёкшее выбрасываем.
+   Сессионные (без срока) живут сутки — браузер столько обычно и не закрывают */
+const CK_MAX = 60, CK_SESSION = 864e5;
+const myHost = () => { try { return new URL(api()).hostname; } catch { return 'chat.deepseek.com'; } };
+const ckOk = (dom, host = myHost()) => !dom || host === dom || host.endsWith('.' + dom);
+export function takeCookies(st, lines, host = myHost()) {
+  let n = 0;
+  for (const line of lines || []) {
+    const [nv, ...attrs] = String(line).split(';'), i = nv.indexOf('=');
+    if (i <= 0) continue;
+    const name = nv.slice(0, i).trim(), value = nv.slice(i + 1).trim();
+    if (!/^[!#$%&'*+\-.^\w`|~]{1,128}$/.test(name) || value.length > 4096) continue;
+    let exp = 0, age = null, dom = '', dated = false;
+    for (const a of attrs) {
+      const k = a.indexOf('='), key = (k < 0 ? a : a.slice(0, k)).trim().toLowerCase(), v = k < 0 ? '' : a.slice(k + 1).trim();
+      if (key === 'max-age' && /^-?\d+$/.test(v)) age = +v;
+      else if (key === 'expires') { const t = Date.parse(v); if (Number.isFinite(t)) { exp = t; dated = true; } }
+      else if (key === 'domain') dom = v.replace(/^\./, '').toLowerCase();
+    }
+    if (!ckOk(dom, host)) continue;
+    /* Max-Age главнее Expires; срок в прошлом (или Max-Age=0) — сайт удаляет cookie */
+    if (age !== null) { exp = Date.now() + age * 1000; dated = true; }
+    if (dated && exp <= Date.now()) delete st.ck[name];
+    else st.ck[name] = { v: value, e: exp || 0, t: Date.now(), ...(dom ? { d: dom } : {}) };
+    n++;
+  }
+  const ks = Object.keys(st.ck); if (ks.length > CK_MAX) for (const k of ks.slice(0, ks.length - CK_MAX)) delete st.ck[k];
+  return n;
+}
+const live = c => c && typeof c.v === 'string' && (c.e ? c.e > Date.now() : Date.now() - (c.t || 0) < CK_SESSION);
+export const cookieHeader = st => Object.entries(st?.ck || {}).filter(([, c]) => live(c)).map(([k, c]) => k + '=' + c.v).join('; ');
+/* cookies браузера (CDP Network.getCookies) → сюда и обратно (Network.setCookies) */
+export function absorbCookies(st, list) {
+  ident(st);
+  for (const c of list || []) {
+    if (!c?.name || typeof c.value !== 'string' || !ckOk(String(c.domain || '').replace(/^\./, '').toLowerCase())) continue;
+    const e = c.expires > 0 ? Math.round(c.expires * 1000) : 0;
+    if (e && e <= Date.now()) { delete st.ck[c.name]; continue; }
+    st.ck[c.name] = { v: c.value, e, t: Date.now(), ...(/^\./.test(c.domain || '') ? { d: String(c.domain).slice(1) } : {}) };
+  }
+  return st;
+}
+export const cookieList = st => Object.entries(st?.ck || {}).filter(([, c]) => live(c))
+  .map(([name, c]) => ({ name, value: c.v, ...(c.d ? { domain: '.' + c.d } : { url: DS_BASE }), path: '/', secure: true, ...(c.e ? { expires: c.e / 1000 } : {}) }));
+
+/* ---------- запрос к сайту ----------
+   cl — { token, st, save }. Заголовки — как у fetch со страницы сайта: sec-fetch-* same-origin, Origin только у POST,
+   Referer — страница, с которой «нажали» (чат, вход) */
+export function client(token, st, save) { return { token: token || '', st: ident(st), save: typeof save === 'function' ? save : () => {} }; }
+function headers(cl, method, ref, extra = {}) {
+  const st = cl.st, ck = cookieHeader(st);
+  return {
+    Accept: '*/*', 'Accept-Language': st.lang, ...(method !== 'GET' ? { 'Content-Type': 'application/json', Origin: DS_BASE } : {}),
+    ...(cl.token ? { Authorization: 'Bearer ' + cl.token } : {}),
+    'User-Agent': st.ua, ...hintsOf(st.ua),
+    'sec-fetch-dest': 'empty', 'sec-fetch-mode': 'cors', 'sec-fetch-site': 'same-origin', priority: 'u=1, i',
+    'x-app-version': VER(), 'x-client-locale': locOf(st.lang), 'x-client-platform': 'web', 'x-client-version': VER(),
+    'x-client-timezone-offset': String(-new Date().getTimezoneOffset() * 60), 'x-device-id': st.did,
+    Referer: DS_BASE + (ref || '/'), ...(ck ? { Cookie: ck } : {}), ...extra };
+}
+/* ответ сайта до разбора: cookies — в «браузер», страница защиты — ошибкой (проверка или блокировка) */
+async function send(cl, method, p, { body, signal, ref, extra } = {}) {
+  let r;
+  try { r = await apiFetch(api() + p, { method, headers: headers(cl, method, ref, extra), signal, ...(body !== undefined ? { body } : {}) }); }
+  catch (e) { if (signal?.aborted) throw e; throw netErr(e); }
+  if (takeCookies(cl.st, r.headers.getSetCookie?.() || [])) cl.save();
+  const act = String(r.headers.get('x-amzn-waf-action') || '').toLowerCase();
+  if (act === 'captcha' || act === 'challenge') { await r.body?.cancel().catch(() => {}); throw wafErr(act, cl); }
+  return r;
 }
 /* JSON-запрос к API; ответ — data.biz_data (или data) либо ошибка с человеческим текстом */
-async function call(token, method, p, body, signal, extra) {
-  let r;
-  try {
-    r = await apiFetch(api() + p, { method, headers: headers(token, extra), signal, ...(body ? { body: JSON.stringify(body) } : {}) });
-  } catch (e) { if (signal?.aborted) throw e; throw netErr(e); }
+async function call(cl, method, p, body, signal, o = {}) {
+  const r = await send(cl, method, p, { body: body ? JSON.stringify(body) : undefined, signal, ...o });
   const t = await r.text().catch(() => '');
-  if (isWafBody(t)) throw dErr(WAF, { status: 403, waf: true });
+  const w = wafOf(r.status, t, r.headers);
+  if (w) throw wafErr(w, cl);
   let j = null; try { j = JSON.parse(t); } catch {}
   /* biz_data: null — тоже ответ (так сайт отвечает на недействительный вход): отдаём null, а не обёртку */
   if (r.ok && j && (j.code === 0 || j.code === undefined) && !(+j.data?.biz_code)) return j.data && 'biz_data' in j.data ? j.data.biz_data : j.data ?? j;
@@ -106,15 +247,48 @@ async function call(token, method, p, body, signal, extra) {
 /* ---------- аккаунт ----------
    id аккаунта — к нему привязаны чаты DeepSeek: токен другого аккаунта — новые чаты. Заодно проверка, что токен рабочий */
 const acache = new Map();
-async function accountOf(token, signal) {
-  const c = acache.get(token);
+async function accountOf(cl, signal) {
+  const c = acache.get(cl.token);
   if (c && Date.now() - c.t < 3600e3) return c.me;
-  const d = await call(token, 'GET', '/api/v0/users/current', null, signal || AbortSignal.timeout(20000));
+  const d = await call(cl, 'GET', '/api/v0/users/current', null, signal || AbortSignal.timeout(20000));
   if (!d || typeof d !== 'object') throw dErr(EXPIRED, { status: 401 });
-  const me = { id: String(d.id || d.user_id || '') || crypto.createHash('sha256').update(token).digest('hex').slice(0, 16), login: String(d.email || d.mobile_number || d.id_profile?.name || '') };
-  acache.set(token, { t: Date.now(), me });
+  const me = { id: String(d.id || d.user_id || '') || crypto.createHash('sha256').update(cl.token).digest('hex').slice(0, 16), login: String(d.email || d.mobile_number || d.id_profile?.name || '') };
+  acache.set(cl.token, { t: Date.now(), me });
   if (acache.size > 20) acache.delete(acache.keys().next().value);
   return me;
+}
+export const forget = token => acache.delete(token);
+
+/* ---------- вход по email (или телефону) и паролю ----------
+   Тело — как у сайта: всегда шесть полей, пустые — пустыми строками. Телефон: +код страны и номер (без кода — +86, как у сайта) */
+export function loginBody(login, password, device) {
+  const s = String(login || '').trim();
+  const base = { email: '', mobile: '', password: String(password || ''), area_code: '', device_id: String(device || ''), os: 'web' };
+  if (s.includes('@')) return { ...base, email: s };
+  const m = /^\+(\d{1,4})[\s().-]*([\d\s().-]+)$/.exec(s);
+  return { ...base, mobile: (m ? m[2] : s).replace(/\D/g, ''), area_code: '+' + (m ? m[1] : '86') };
+}
+export const isLogin = s => { s = String(s || '').trim(); return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) || /^\+?[\d\s().-]{6,20}$/.test(s); };
+/* → { token, id, login }. Ошибки помечены: badPass, device (сайт не узнал устройство), banned, captcha, waf */
+export async function signin(st, { login, password, device }, signal, save) {
+  if (!isLogin(login) || !password) throw dErr('Нужны email (или телефон) и пароль от chat.deepseek.com', { status: 400 });
+  const cl = client('', st, save);
+  let d;
+  try { d = await call(cl, 'POST', LOGIN, loginBody(login, password, device || st.dev), signal || AbortSignal.timeout(25000), { ref: '/sign_in' }); }
+  catch (e) {
+    if (e.captcha || e.waf || e.net || e.muted) throw e;
+    if (e.biz === 11 || /RISK_DEVICE|device/i.test(e.bmsg || '')) throw dErr(DEVICE, { status: 403, device: true });
+    if (e.banned) throw e;
+    if (e.biz === 2 || e.status === 401 || /PASSWORD|USER_NAME|credential|incorrect|密码|账号或/i.test(e.bmsg || '')) throw dErr(BADPASS, { status: 401, badPass: true });
+    throw e;
+  }
+  const user = d?.user && typeof d.user === 'object' ? d.user : d || {}, token = parseToken(user.token || d?.token || '');
+  if (!token) throw dErr('chat.deepseek.com не выдал токен при входе', { status: 502, detail: JSON.stringify(d || {}).slice(0, 200) });
+  /* как вкладка сайта после входа: «это устройство» (ответ не важен) */
+  call(client(token, st, save), 'POST', '/api/v0/users/auth_token/check_device', { device_id: st.did, device_model: '' }, AbortSignal.timeout(10000), { ref: '/' }).catch(() => {});
+  const id = String(user.id || ''), me = { id: id || crypto.createHash('sha256').update(token).digest('hex').slice(0, 16), login: String(user.email || user.mobile_number || login).trim() };
+  acache.set(token, { t: Date.now(), me });
+  return { token, ...me };
 }
 
 /* ---------- модели ----------
@@ -263,8 +437,8 @@ export async function solvePow({ challenge, salt, expire_at, difficulty }, signa
   return null;
 }
 /* заголовок x-ds-pow-response для запроса к target (у модели и загрузки файлов — свои задачи) */
-async function pow(token, target, signal) {
-  const d = await call(token, 'POST', '/api/v0/chat/create_pow_challenge', { target_path: target }, signal);
+async function pow(cl, target, signal, ref) {
+  const d = await call(cl, 'POST', '/api/v0/chat/create_pow_challenge', { target_path: target }, signal, { ref });
   const ch = d?.challenge;
   /* сайт отвечает 200 без задачи, когда вход недействителен */
   if (!ch || typeof ch !== 'object') throw dErr(EXPIRED, { status: 401 });
@@ -275,17 +449,24 @@ async function pow(token, target, signal) {
 }
 
 /* ---------- очередь запросов аккаунта ----------
-   Один ответ за раз и пауза между запросами: иначе DeepSeek временно блокирует аккаунт.
-   Пауза — случайная в [gap, 2·gap], отсчёт от конца прошлого запроса (пока работают инструменты, она уже идёт) */
+   Один ответ за раз и пауза между запросами: иначе DeepSeek временно блокирует аккаунт, а защита сайта просит проверку.
+   Пауза — случайная в [gap, 2·gap], отсчёт от конца прошлого запроса (пока работают инструменты, она уже идёт).
+   И не больше RPM ответов в минуту — так часто человек не пишет даже в спешке. После проверки «я не робот» (calm) —
+   пауза втрое длиннее, а в минуту — вдвое меньше: защита сайта ещё присматривается */
 const gates = new Map();
-const GAP = () => { const g = process.env.PERSONALCOMPUTER_DEEPSEEK_GAP_MS; return g !== undefined && Number.isFinite(+g) ? +g : 1500; };
+const num = (k, d) => { const g = process.env[k]; return g !== undefined && g !== '' && Number.isFinite(+g) ? +g : d; };
+const GAP = () => num('PERSONALCOMPUTER_DEEPSEEK_GAP_MS', 1500), RPM = () => num('PERSONALCOMPUTER_DEEPSEEK_RPM', 10);
 const sleep = (ms, signal) => new Promise(ok => { if (ms <= 0) return ok(); const t = setTimeout(ok, ms); signal?.addEventListener('abort', () => { clearTimeout(t); ok(); }, { once: true }); });
-function gated(acct, signal, fn) {
+export const calm = st => !!st && +st.calm > Date.now();
+function gated(acct, signal, fn, st) {
   let g = gates.get(acct);
-  if (!g) { g = { p: Promise.resolve(), last: 0 }; gates.set(acct, g); if (gates.size > 50) gates.delete(gates.keys().next().value); }
+  if (!g) { g = { p: Promise.resolve(), last: 0, hits: [] }; gates.set(acct, g); if (gates.size > 50) gates.delete(gates.keys().next().value); }
   const run = g.p.then(async () => {
-    const gap = GAP(); await sleep(g.last + gap + Math.random() * gap - Date.now(), signal);
+    const c = calm(st), gap = GAP() * (c ? 3 : 1), rpm = RPM() > 0 ? Math.max(1, Math.round(RPM() / (c ? 2 : 1))) : 0;
+    await sleep(g.last + gap + Math.random() * gap - Date.now(), signal);
+    if (rpm) { g.hits = g.hits.filter(t => Date.now() - t < 60e3); if (g.hits.length >= rpm) await sleep(g.hits[0] + 60e3 - Date.now() + Math.random() * gap, signal); }
     if (signal?.aborted) throw signal.reason;
+    g.hits.push(Date.now());
     try { return await fn(); } finally { g.last = Date.now(); }
   });
   g.p = run.catch(() => {});
@@ -293,13 +474,13 @@ function gated(acct, signal, fn) {
 }
 
 /* ---------- чаты ---------- */
-async function newChat(token, signal) {
-  const d = await call(token, 'POST', '/api/v0/chat_session/create', { character_id: null }, signal);
+async function newChat(cl, signal) {
+  const d = await call(cl, 'POST', '/api/v0/chat_session/create', { character_id: null }, signal);
   const id = d?.chat_session?.id || d?.id || d?.chat_session_id;
   if (!id) throw dErr('chat.deepseek.com не создал чат', { status: 502, detail: JSON.stringify(d || {}).slice(0, 300) });
   return String(id);
 }
-const dropChat = (token, id) => call(token, 'POST', '/api/v0/chat_session/delete', { chat_session_id: id }, AbortSignal.timeout(15000)).catch(() => {});
+const dropChat = (cl, id) => call(cl, 'POST', '/api/v0/chat_session/delete', { chat_session_id: id }, AbortSignal.timeout(15000), { ref: '/a/chat/s/' + id }).catch(() => {});
 
 /* ---------- один ответ модели (поток) ----------
    Поток — JSON-патчи к объекту ответа:
@@ -414,17 +595,15 @@ function stitch(prevTail, out) {
     end() { if (open) flush(); },
   };
 }
-async function complete({ token, chatId, parent, prompt, files = [], think, signal, onText, onPoke }) {
-  const ph = await pow(token, COMPLETION, signal);
+async function complete({ cl, chatId, parent, prompt, files = [], think, signal, onText, onPoke }) {
+  const ref = '/a/chat/s/' + chatId, ph = await pow(cl, COMPLETION, signal, ref);
   const body = { chat_session_id: chatId, parent_message_id: parent ?? null, model_type: null, prompt, ref_file_ids: files, thinking_enabled: !!think, search_enabled: false, action: null, preempt: false };
-  let r;
-  try {
-    r = await apiFetch(api() + COMPLETION, { method: 'POST', headers: headers(token, { Accept: 'text/event-stream', 'x-ds-pow-response': ph }), body: JSON.stringify(body), signal });
-  } catch (e) { if (signal?.aborted) throw e; throw netErr(e); }
+  const r = await send(cl, 'POST', COMPLETION, { body: JSON.stringify(body), signal, ref, extra: { Accept: 'text/event-stream', 'x-ds-pow-response': ph } });
   const ct = r.headers.get('content-type') || '';
   if (!r.ok || !/event-stream|text\/plain/.test(ct)) {
     const t = await r.text().catch(() => '');
-    if (isWafBody(t)) throw dErr(WAF, { status: 403, waf: true });
+    const w = wafOf(r.status, t, r.headers);
+    if (w) throw wafErr(w, cl);
     let j = null; try { j = JSON.parse(t); } catch {}
     if (r.ok && !j && /^\s*data:/m.test(t)) return readStream([t], { onText, onPoke });
     throw bizErr(j || { msg: t.slice(0, 200) }, r.ok ? 0 : r.status);
@@ -497,35 +676,33 @@ export function kindOf(name, mime) {
 }
 const READY = /^(SUCCESS|PARSED|DONE|COMPLETED?|FINISHED|READY)$/i, FAILED = /FAIL|ERROR|REJECT|UNSUPPORT|INVALID/i;
 const fcache = new Map();
-export async function upload(token, acct, { name, data, mime }, signal) {
+export async function upload(cl, acct, { name, data, mime }, signal) {
   const ck = acct + ':' + crypto.createHash('sha256').update(data).digest('hex');
   const c = fcache.get(ck);
   if (c && Date.now() - c.t < 40 * 60e3) return c.id;
-  const ph = await gated(acct, signal, () => pow(token, UPLOAD, signal));
-  const bd = '----PersonalComputer' + crypto.randomBytes(12).toString('hex'), fname = String(name).replace(/["\r\n\\]/g, '_');
+  const ph = await gated(acct, signal, () => pow(cl, UPLOAD, signal), cl.st);
+  const bd = '----WebKitFormBoundary' + crypto.randomBytes(12).toString('base64').replace(/[^A-Za-z0-9]/g, 'x').slice(0, 16), fname = String(name).replace(/["\r\n\\]/g, '_');
   const body = Buffer.concat([Buffer.from('--' + bd + '\r\nContent-Disposition: form-data; name="file"; filename="' + fname + '"; filename*=UTF-8\'\'' + encodeURIComponent(name) + '\r\nContent-Type: ' + mime + '\r\n\r\n'), Buffer.from(data), Buffer.from('\r\n--' + bd + '--\r\n')]);
-  let r;
-  try {
-    r = await apiFetch(api() + UPLOAD, { method: 'POST', signal, body: new Uint8Array(body),
-      headers: headers(token, { 'Content-Type': 'multipart/form-data; boundary=' + bd, 'x-ds-pow-response': ph, 'x-file-size': String(data.length) }) });
-  } catch (e) { if (signal?.aborted) throw e; throw netErr(e); }
+  const r = await send(cl, 'POST', UPLOAD, { body: new Uint8Array(body), signal,
+    extra: { 'Content-Type': 'multipart/form-data; boundary=' + bd, 'x-ds-pow-response': ph, 'x-file-size': String(data.length) } });
   const t = await r.text().catch(() => '');
-  if (isWafBody(t)) throw dErr(WAF, { status: 403, waf: true });
+  const w = wafOf(r.status, t, r.headers);
+  if (w) throw wafErr(w, cl);
   let j = null; try { j = JSON.parse(t); } catch {}
   if (!r.ok || !j || (j.code && j.code !== 0) || +j.data?.biz_code) throw bizErr(j || { msg: t.slice(0, 200) }, r.ok ? 0 : r.status);
   const d = j.data?.biz_data || {}, id = d.id || d.file_id || d.file?.id;
   if (!id) throw new Error('chat.deepseek.com не вернул id файла');
-  let st = String(d.status || '');
-  for (let i = 0; !READY.test(st); i++) {
-    if (FAILED.test(st)) throw new Error('DeepSeek не смог разобрать файл' + (d.error_msg ? ': ' + d.error_msg : ''));
+  let stt = String(d.status || '');
+  for (let i = 0; !READY.test(stt); i++) {
+    if (FAILED.test(stt)) throw new Error('DeepSeek не смог разобрать файл' + (d.error_msg ? ': ' + d.error_msg : ''));
     if (i >= 120) throw new Error('DeepSeek слишком долго разбирает файл');
     await sleep(i < 10 ? 500 : 1000, signal);
     if (signal?.aborted) throw signal.reason;
-    const q = await call(token, 'GET', '/api/v0/file/fetch_files?file_ids=' + encodeURIComponent(id), null, signal);
+    const q = await call(cl, 'GET', '/api/v0/file/fetch_files?file_ids=' + encodeURIComponent(id), null, signal);
     const list = Array.isArray(q?.files) ? q.files : Array.isArray(q) ? q : q && q[id] ? [q[id]] : q ? [q] : [];
     const rec = list.find(x => x && (x.id === id || x.file_id === id)) || (list.length === 1 ? list[0] : null);
-    st = String(rec?.status || '');
-    if (FAILED.test(st) && rec?.error_msg) throw new Error('DeepSeek не смог разобрать файл: ' + String(rec.error_msg).slice(0, 200));
+    stt = String(rec?.status || '');
+    if (FAILED.test(stt) && rec?.error_msg) throw new Error('DeepSeek не смог разобрать файл: ' + String(rec.error_msg).slice(0, 200));
   }
   fcache.set(ck, { t: Date.now(), id });
   if (fcache.size > 200) fcache.delete(fcache.keys().next().value);
@@ -546,10 +723,11 @@ const instr = (sys, tools, upd) => wrapInstr(sys, tools, upd, { site: SITE, extr
 
 /* ---------- шаг агента ----------
    hist — история чата (с метками _ds), sys и tools — как для обычной модели. → { text, calls, used, ds } */
-export async function turn({ key, think, sys, tools, hist, signal, onText, getFiles, idleMs = 180000 }) {
+export async function turn({ key, st, save, think, sys, tools, hist, signal, onText, getFiles, idleMs = 180000 }) {
   const token = parseToken(key);
-  if (!token) throw dErr('Вставь токен DeepSeek в настройках → Модель — без него модель не ответит.', { status: 401 });
-  const me = await accountOf(token, signal), acct = me.id;
+  if (!token) throw dErr('Подключи аккаунт DeepSeek в настройках → Модель — без него модель не ответит.', { status: 401 });
+  const cl = client(token, st, save);
+  const me = await accountOf(cl, signal), acct = me.id;
   const h = sysHash(sys, tools, PROTO), nm = names(hist), day = dayOf(sys);
   let fresh = false, shown = false, max = MAX_MSG;
   for (let attempt = 0; ; attempt++) {
@@ -570,7 +748,7 @@ export async function turn({ key, think, sys, tools, hist, signal, onText, getFi
     if (!content.trim()) content = 'Продолжай.';
     /* файлы из того, что уходит сейчас (в новом чате — и из прежней переписки, сколько влезет) */
     const att = await attachFiles(sent, getFiles, { kindOf, limits: { image: 5, doc: 5 }, maxSize: MAX_FILE, signal,
-      upload: (f, sg) => upload(token, acct, f, sg), fatal: e => e.waf || e.muted || e.status === 401 });
+      upload: (f, sg) => upload(cl, acct, f, sg), fatal: e => e.waf || e.captcha || e.muted || e.status === 401 });
     content += att.note;
     /* «тишина» дольше idleMs — модель зависла */
     const idle = new AbortController();
@@ -579,18 +757,18 @@ export async function turn({ key, think, sys, tools, hist, signal, onText, getFi
     const sig = AbortSignal.any([signal, idle.signal]);
     const P = callParser(s => { shown = true; onText?.(s); });
     try {
-      const chatId = an ? an.q.c : await newChat(token, sig);
+      const chatId = an ? an.q.c : await newChat(cl, sig);
       /* all — весь ответ (с продолжениями), каким его получил разборщик вызовов */
       let all = '';
       const push = s => { all += s; P.push(s); };
-      const one = (o, pipe) => gated(acct, sig, () => complete({ token, chatId, signal: sig, onPoke: poke, ...o, onText: pipe }));
+      const one = (o, pipe) => gated(acct, sig, () => complete({ cl, chatId, signal: sig, onPoke: poke, ...o, onText: pipe }), cl.st);
       let r = await one({ parent: an ? an.q.r : null, prompt: content, files: att.files, think }, push);
       let last = r.respId ?? null, used = r.used;
       /* упёрлись в предел длины ответа — просим продолжить в том же чате и приклеиваем продолжение */
       for (let k = 0; k < MAX_CONT && last !== null && cutOff(r, P, all); k++) {
         const S = stitch(all.slice(-400), push), had = all.length;
         try { r = await one({ parent: last, prompt: CONTINUE, think: false }, s => S.push(s)); }
-        catch (e) { if (signal.aborted) throw e; console.warn('deepseek: продолжение ответа не вышло:', e.message); break; }
+        catch (e) { if (signal.aborted || e.captcha) throw e; console.warn('deepseek: продолжение ответа не вышло:', e.message); break; }
         S.end();
         if (r.respId !== null) last = r.respId;
         used = r.used || used;
@@ -603,6 +781,7 @@ export async function turn({ key, think, sys, tools, hist, signal, onText, getFi
     } catch (e) {
       if (signal.aborted) throw e;
       if (e.status === 401) acache.delete(token);
+      /* проверку посреди ответа (после продолжения) показываем так же: агент подождёт её и повторит шаг */
       if (idle.signal.aborted) e = dErr('DeepSeek не отвечает уже ' + Math.round(idleMs / 60000) + ' мин. Нажми «Повторить».', { net: true });
       const final = e.waf || e.muted || e.captcha || e.status === 401 || e.status === 429;
       /* продолжить старый чат не вышло (его удалили на сайте, ветка битая, переполнен) — новый чат со всей перепиской */
@@ -616,18 +795,30 @@ export async function turn({ key, think, sys, tools, hist, signal, onText, getFi
   }
 }
 
-/* короткий ответ без инструментов (название чата): во временном чате, который потом удаляем, — чтобы не засорять аккаунт */
-export async function ask({ key, prompt, signal }) {
-  const token = parseToken(key), { id: acct } = await accountOf(token, signal);
-  const chatId = await newChat(token, signal);
-  try { return (await gated(acct, signal, () => complete({ token, chatId, parent: null, prompt, think: false, signal }))).text; }
-  finally { dropChat(token, chatId); }
+/* короткий ответ без инструментов (название чата): во временном чате, который потом удаляем, — чтобы не засорять аккаунт.
+   Пока после проверки «я не робот» нужно быть бережнее — лишних запросов не делаем: название придумается позже */
+export async function ask({ key, st, save, prompt, signal }) {
+  const cl = client(parseToken(key), st, save);
+  if (calm(cl.st)) return '';
+  const { id: acct } = await accountOf(cl, signal);
+  const chatId = await newChat(cl, signal);
+  try { return (await gated(acct, signal, () => complete({ cl, chatId, parent: null, prompt, think: false, signal }), cl.st)).text; }
+  finally { dropChat(cl, chatId); }
+}
+
+/* окно проверки: пускает ли сайт запросы сервера (с cookies, которые выдал браузер) — тот же запрос, что сайт делает
+   перед каждым сообщением. true — пускает, false — всё ещё просит проверку, null — не понять (нет токена, сеть) */
+export async function probe(key, st, save) {
+  const token = parseToken(key);
+  if (!token) return null;
+  try { await call(client(token, st, save), 'POST', '/api/v0/chat/create_pow_challenge', { target_path: COMPLETION }, AbortSignal.timeout(15000)); return true; }
+  catch (e) { return e.captcha ? false : null; }
 }
 
 /* проверка в настройках: токен рабочий, чей аккаунт, какие модели */
-export async function check(rawKey) {
+export async function check(rawKey, st, save) {
   const token = parseToken(rawKey);
-  if (!token) throw dErr('Вставь токен DeepSeek — после этого проверю связь', { status: 401, needKey: true });
-  const me = await accountOf(token);
+  if (!token) throw dErr('Подключи аккаунт DeepSeek — после этого проверю связь', { status: 401, needKey: true });
+  const me = await accountOf(client(token, st, save));
   return { models: MODELS.map(m => m.id), info: MODELS, login: me.login, exp: 0, needKey: false, free: null };
 }

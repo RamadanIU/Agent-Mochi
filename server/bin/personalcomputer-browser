@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# Браузер на сервере для окна проверки DeepSeek («я не робот», вход по паролю с незнакомого устройства).
+# Personal Computer открывает в нём сайт и показывает его экран в приложении — проверку проходит человек.
+# Запускается только на время проверки. Работает только от root:
+#   personalcomputer-browser install — поставить (уже стоит и запускается — ничего не делает); «sudo personalcomputer browser»
+#   personalcomputer-browser status  — какой браузер найдёт Personal Computer
+#   personalcomputer-browser remove  — убрать свой (из /opt/personalcomputer/browser; системный пакет не трогаем)
+# Откуда: системный Chromium, если он в репозитории дистрибутива настоящий (Debian, Fedora, Alpine, Arch, openSUSE);
+# иначе (Ubuntu: там chromium — обёртка над snap, в службе не запускается) — Chromium headless shell от Playwright
+# вместе с нужными библиотеками (через apt) в /opt/personalcomputer/browser.
+set -uo pipefail
+umask 022
+export LC_ALL=C
+
+PREFIX=${PERSONALCOMPUTER_PREFIX:-/opt/personalcomputer}
+DIR=${PERSONALCOMPUTER_BROWSER_DIR:-$PREFIX/browser}
+PW_VER=1.64.1
+say() { printf '%s\n' "🐾 $*"; }
+ok() { printf '%s\n' "✔ $*"; }
+warn() { printf '%s\n' "! $*" >&2; }
+die() { printf '%s\n' "✘ $*" >&2; exit 1; }
+
+# тот же порядок, что у server/lib/browser.js: свой, потом системный (кроме обёрток snap)
+found() {
+  local f n d
+  f=$(find "$DIR" -maxdepth 4 -type f \( -name chrome -o -name chromium -o -name chrome-headless-shell -o -name headless_shell \) -perm -u+x 2>/dev/null | sort | head -1)
+  if [ -n "$f" ]; then echo "$f"; return 0; fi
+  for n in chromium chromium-browser google-chrome-stable google-chrome chrome microsoft-edge-stable; do
+    for d in /usr/bin /usr/local/bin /usr/lib/chromium /opt/google/chrome; do
+      f="$d/$n"
+      [ -x "$f" ] || continue
+      if [ "$(stat -c %s "$f" 2>/dev/null || echo 0)" -lt 8192 ] && grep -q snap "$f" 2>/dev/null; then continue; fi
+      echo "$f"; return 0
+    done
+  done
+  return 1
+}
+# браузер правда запускается без окна (библиотеки на месте): ждём, пока он откроет DevTools, и гасим
+works() {
+  local d log pid i
+  d=$(mktemp -d); log="$d/log"
+  "$1" --headless=new --no-sandbox --disable-gpu --no-first-run --disable-background-networking --user-data-dir="$d/p" --remote-debugging-port=0 about:blank >"$log" 2>&1 &
+  pid=$!
+  for i in $(seq 1 60); do
+    if grep -q 'DevTools listening on' "$log" 2>/dev/null; then kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; rm -rf "$d" 2>/dev/null; return 0; fi
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.5
+  done
+  kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+  [ -z "${i:-}" ] || tail -n 3 "$log" >&2
+  rm -rf "$d" 2>/dev/null; return 1
+}
+pm() { local p; for p in apt-get dnf yum apk pacman zypper; do command -v "$p" >/dev/null 2>&1 && { echo "$p"; return 0; }; done; return 1; }
+
+from_repo() {
+  case "$(pm)" in
+    apt-get)
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get -o DPkg::Lock::Timeout=600 update -qq || true
+      # настоящий пакет — только если это не переходник на snap (так у Ubuntu)
+      if apt-cache show chromium 2>/dev/null | grep -q '^Version:' && ! apt-cache show chromium 2>/dev/null | grep -qi 'snap'; then
+        apt-get -o DPkg::Lock::Timeout=600 install -y -qq --no-install-recommends chromium fonts-liberation fonts-noto-cjk >/dev/null && return 0
+      fi
+      return 1 ;;
+    dnf) dnf install -y -q chromium >/dev/null ;;
+    yum) yum install -y -q chromium >/dev/null ;;
+    apk) apk add --no-cache -q chromium nss freetype harfbuzz ttf-freefont font-noto font-noto-cjk >/dev/null ;;
+    pacman) pacman -Sy --noconfirm --needed chromium >/dev/null ;;
+    zypper) zypper -n -q install --no-recommends chromium >/dev/null ;;
+    *) return 1 ;;
+  esac
+}
+from_playwright() {
+  local node="$PREFIX/node/bin"
+  [ -x "$node/npx" ] || node=$(dirname "$(command -v npx 2>/dev/null || echo /nonexistent/npx)")
+  [ -x "$node/npx" ] || { warn "Нет npx (Node.js) — не из чего поставить браузер"; return 1; }
+  mkdir -p "$DIR"
+  local deps=()
+  [ "$(pm)" = apt-get ] && deps=(--with-deps)
+  PATH="$node:$PATH" PLAYWRIGHT_BROWSERS_PATH="$DIR" HOME=/root npm_config_update_notifier=false \
+    "$node/npx" -y "playwright@$PW_VER" install "${deps[@]}" --only-shell chromium || return 1
+  chmod -R a+rX "$DIR"
+}
+
+case "${1:-install}" in
+  install)
+    [ "$(id -u)" -eq 0 ] || die "Нужно через sudo: sudo personalcomputer browser"
+    if f=$(found) && works "$f"; then ok "Браузер уже есть: $f"; exit 0; fi
+    say "Ставлю браузер для окна проверки DeepSeek (около 300 МБ, пара минут)…"
+    if from_repo && f=$(found) && works "$f"; then ok "Готово: $f (пакет дистрибутива)"; exit 0; fi
+    say "В репозитории системы подходящего Chromium нет — беру сборку Playwright…"
+    if from_playwright && f=$(found) && works "$f"; then ok "Готово: $f"; exit 0; fi
+    die "Браузер не поставился (причина — строки выше). Можно поставить любой Chromium или Chrome вручную и указать путь в /etc/personalcomputer/personalcomputer.env: PERSONALCOMPUTER_CHROME=/путь/к/chrome — затем sudo personalcomputer restart" ;;
+  status)
+    if f=$(found); then
+      if works "$f"; then ok "Браузер: $f ($("$f" --version 2>/dev/null | head -1))"; else warn "Браузер найден, но не запускается: $f — sudo personalcomputer browser поставит недостающее"; exit 1; fi
+    else warn "Браузера нет — поставить: sudo personalcomputer browser"; exit 1; fi ;;
+  remove)
+    [ "$(id -u)" -eq 0 ] || die "Нужно через sudo: sudo personalcomputer browser remove"
+    rm -rf "$DIR" && ok "Свой браузер убран ($DIR). Системный пакет, если есть, остался" ;;
+  *) echo "personalcomputer browser [install|status|remove]"; exit 2 ;;
+esac
