@@ -7,7 +7,12 @@
    cookies (отметку о пройденной проверке), а при входе — токен и отпечаток устройства.
    За человека здесь ничего не решается: окно показывает страницу и передаёт твои нажатия.
 
-   Сеанс — один на пользователя: prov — сайт, why — 'check' (проверка) или 'login' (вход на сайте, только DeepSeek),
+   Вход в окне (why 'login') — для входа по email, телефону или GitHub: токен сайта забирается из вкладки сам.
+   Вход через Google здесь не работает и обходить это мы не будем: Google нарочно не пускает в аккаунт браузер,
+   которым управляет программа (страница «This browser or app may not be secure»). Для Google-аккаунтов —
+   «Войти через Google» в настройках: вход идёт в твоём собственном браузере.
+
+   Сеанс — один на пользователя: prov — сайт, why — 'check' (проверка) или 'login' (вход на сайте),
    url — страница проверки, если сайт её назвал (слайдер Qwen). Сам закрывается, когда дело сделано, через 15 минут
    или когда окно закрыли; браузер гаснет сам через 5 минут без вкладок (browser.js). */
 import path from 'node:path';
@@ -28,7 +33,7 @@ const PROV = {
     name: 'DeepSeek', base: DS.DS_BASE, site: () => env('PERSONALCOMPUTER_DEEPSEEK_SITE', 'PERSONALCOMPUTER_DEEPSEEK_URL') || DS.DS_BASE,
     doc: /(^|\.)(deepseek\.com|awswaf\.com)$/i,
     sub: /(^|\.)(deepseek\.com|awswaf\.com|fengkongcloud\.(com|cn)|ishumei\.com|cloudfront\.net|gstatic\.com|googleapis\.com)$/i,
-    state: c => c.ds, token: c => DS.parseToken(c.dsToken()),
+    state: c => c.ds, token: c => DS.parseToken(c.dsToken()), login: '/sign_in',
     put: t => 'localStorage.setItem("userToken",' + JSON.stringify(JSON.stringify({ value: t, __version: '0' })) + ');', drop: 'localStorage.removeItem("userToken");',
     read: 'const v=localStorage.getItem("userToken");t=v?(JSON.parse(v).value||v):""',
     probe: DS.probe, absorb: DS.absorbCookies, list: DS.cookieList,
@@ -37,7 +42,7 @@ const PROV = {
     name: 'Qwen', base: QW.QWEN_BASE, site: () => env('PERSONALCOMPUTER_QWEN_SITE', 'PERSONALCOMPUTER_QWEN_URL') || QW.QWEN_BASE,
     doc: /(^|\.)(qwen\.ai|aliyun\.com|alibaba\.com|alibabacloud\.com)$/i,
     sub: /(^|\.)(qwen\.ai|aliyun\.com|alibaba\.com|alibabacloud\.com|alicdn\.com|aliyuncs\.com|mmstat\.com|alibabausercontent\.com|gstatic\.com|googleapis\.com)$/i,
-    state: c => c.qw, token: c => QW.parseToken(c.qwenToken()),
+    state: c => c.qw, token: c => QW.parseToken(c.qwenToken()), login: '/auth?action=signin',
     put: t => 'localStorage.setItem("token",' + JSON.stringify(t) + ');', drop: 'localStorage.removeItem("token");',
     read: 't=localStorage.getItem("token")||""',
     probe: QW.probe, absorb: QW.absorbCookies, list: QW.cookieList,
@@ -91,7 +96,11 @@ class Sess extends EventEmitter {
     this.page = await br.page({ allow: allowFor(P), width: clamp(w, 320, 1400), height: clamp(h, 400, 1400) });
     this.page.on('frame', f => { this.frame = f; this.emit('frame', f); });
     this.page.on('close', () => { if (this.state !== 'done') this.end('closed'); });
-    this.page.on('blocked', u => { if (/accounts\.google|apple\.com|github\.com|weixin|qq\.com/i.test(u)) this.set(this.state, 'Вход через Google, Apple или WeChat в этом окне не работает — войди по email (или телефону) и паролю.'); });
+    this.page.on('popup', () => this.set(this.state, 'Сайт открыл отдельное окно — в окне приложения такие не открываются (так обычно устроен вход через Google, а Google не пускает браузер на сервере). Войди по email или телефону, а для Google-аккаунта закрой окно и нажми в настройках «Войти через Google».'));
+    this.page.on('blocked', u => {
+      if (/accounts\.google|google\.com\/(o\/oauth|signin)/i.test(u)) this.set(this.state, 'Google не пускает вход в браузере на сервере — так он защищает аккаунты от программ. Закрой окно и нажми в настройках «Войти через Google»: вход пройдёт в твоём браузере.');
+      else if (/apple\.com|weixin|qq\.com|github\.com/i.test(u)) this.set(this.state, 'Этот способ входа в окне не работает — войди по email (или телефону) и паролю, а для Google-аккаунта — «Войти через Google» в настройках.');
+    });
     /* cookies нашего «браузера» → в настоящий: проверка, пройденная раньше, засчитана и ему */
     await this.page.setCookies(P.list(st).map(c => c.url ? { ...c, url: site } : c)).catch(() => {});
     /* аккаунт: для проверки — тот, что подключён; для входа — чистая страница входа. Один раз за вкладку (sessionStorage),
@@ -99,7 +108,7 @@ class Sess extends EventEmitter {
     await this.page.onNew('try{if(!sessionStorage.getItem("__pc")){sessionStorage.setItem("__pc","1");' + (this.why === 'login' || !token ? P.drop : P.put(token)) + '}}catch(e){}');
     await this.page.screencast(true);
     /* слайдер, который назвал сайт, — сразу его; иначе — сам сайт (проверку он покажет сам) */
-    await this.page.go(this.why === 'login' ? site + '/sign_in' : pageUrl(P, url) || site + '/');
+    await this.page.go(this.why === 'login' ? site + P.login : pageUrl(P, url) || site + '/');
     this.set('live', this.why === 'login' ? 'Войди в свой аккаунт ' + P.name + ' — как на сайте.' : 'Открываю сайт…');
     this.poll = setInterval(() => this.tick().catch(() => {}), 1500);
     this.life = setTimeout(() => this.end('timeout'), LIFE);
@@ -114,7 +123,7 @@ class Sess extends EventEmitter {
       if (!s) return;
       if (s.w) { this.sawWaf = true; this.good = 0; if (!/проверк|слайдер/i.test(this.msg)) this.set('live', 'Пройди проверку на странице — дальше всё сделаю сам.'); return; }
       if (this.why === 'login') {
-        if (s.t && s.t !== this.o.had && !/sign_in|login/.test(s.path)) return this.finishLogin(s.t);
+        if (s.t && s.t !== this.o.had && !/sign_in|login|auth/.test(s.path)) return this.finishLogin(s.t);
         return;
       }
       /* страница защиты ушла (проверку прошли) или сайт открылся и держится. Защита сайта (её скрипт на странице) выдаёт
@@ -147,8 +156,17 @@ class Sess extends EventEmitter {
     this.emit('done', { why: 'check', prov: this.prov });
     setTimeout(() => this.end('done'), 1800).unref?.();
   }
-  /* вход в окне (DeepSeek): токен из вкладки, отпечаток устройства — из SDK сайта */
+  /* вход в окне: токен из вкладки (у DeepSeek — ещё и отпечаток устройства из SDK сайта), cookies — в «браузер» сервера */
   async finishLogin(raw) {
+    if (this.prov === 'qwen') {
+      const token = QW.parseToken(raw);
+      if (!/^eyJ[\w-]+\.[\w-]+\.[\w-]*$/.test(token)) return;
+      await this.takeCookies();
+      this.set('done', 'Вход выполнен.');
+      this.emit('done', { why: 'login', prov: 'qwen', token });
+      setTimeout(() => this.end('done'), 1800).unref?.();
+      return;
+    }
     const token = DS.parseToken(raw);
     const dev = await this.page.eval('(async()=>{try{const s=window.SMSdk;if(!s||!s.getDeviceId)return "";return String(await s.getDeviceId()||"")}catch(e){return ""}})()', { timeout: 6000 }).catch(() => '');
     await this.takeCookies();
@@ -180,7 +198,6 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, Math.round(+v || a)));
 /* открыть окно. Уже открыто то же самое — оно же (вторая вкладка приложения видит тот же экран) */
 export async function open(chat, prov, why, o = {}) {
   prov = provOf(prov);
-  if (prov !== 'deepseek') why = 'check';
   let s = sessions.get(chat.u.id);
   if (s && !s.ended && s.why === why && s.prov === prov) return s;
   s?.end('closed');

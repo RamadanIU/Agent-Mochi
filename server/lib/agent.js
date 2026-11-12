@@ -15,6 +15,7 @@ import { isQwen, turn as qwenTurn, ask as qwenAsk, renew as qwenRenew, tokenLeft
 import { isDeepSeek, turn as dsTurn, ask as dsAsk, parseToken as dsParse, signin as dsSignin, forget as dsForget, DS_BASE, CHECK as DS_CHECK } from './deepseek.js';
 import { unseal } from './store.js';
 import * as CO from './coarena.js';
+import * as KR from './kiro.js';
 import { deviceId as dsDeviceId } from './webcheck.js';
 /* веб-чаты по токену аккаунта (Qwen, DeepSeek): свой протокол, история живёт на сайте, файлы уходят туда целиком */
 const isWeb = base => isQwen(base) || isDeepSeek(base);
@@ -369,6 +370,12 @@ export class Chat extends EventEmitter {
       if (!log.length) return;
       const text = log.map(e => (e.kind === 'user' ? 'Пользователь: ' : 'Ассистент: ') + oneLine(e.text, 600)).join('\n');
       /* Qwen и DeepSeek: короткий вопрос во временном чате (он сразу удаляется), а не в чате разговора */
+      /* Kiro: короткий вопрос самой «дешёвой» моделью каталога — кредиты на название почти не тратятся */
+      if (KR.isKiro(S.base)) {
+        const t = cleanTitle(await KR.ask({ token: await this.krKey(), auth: this.settings().krAuth, model: S.model, prompt: TITLE_SYS + '\n\n' + text, signal: AbortSignal.timeout(90000) }));
+        if (t && !m.named && !m.del) { Object.assign(m, { title: t, named: 1 }); this.metaChanged(); }
+        return;
+      }
       if (isWeb(S.base)) {
         const q = { model: S.model, prompt: TITLE_SYS + '\n\n' + text, signal: AbortSignal.timeout(90000) };
         const t = cleanTitle(isQwen(S.base) ? await qwenAsk({ key: await this.qwenKey(), ...this.qwState(), ...q }) : await dsAsk({ key: this.dsToken(), ...this.dsState(), ...q }));
@@ -743,6 +750,7 @@ export class Chat extends EventEmitter {
     }
     if (FILE_TOOLS.has(nm)) return await this.fileTool(nm, a, sig);
     if (nm === 'view_image') {
+      if (KR.isKiro(this.settings().base) && KR.modelInfo(this.settings().model)?.img === false) return 'Ошибка: эта модель Kiro не видит картинки — смотреть нечем. Опиши файл по метаданным (run_command: file, identify) или скажи пользователю, что для картинок нужна модель Claude.';
       if (!isWeb(this.settings().base) && (this.settings().vis === false || this.noVis >= 2)) return 'Ошибка: эта модель не видит картинки (или зрение выключено в настройках) — смотреть нечем. Опиши файл по метаданным (run_command: file, identify) или скажи пользователю, что нужна модель со зрением.';
       if (!String(a.path || '').trim()) return 'Ошибка: нет параметра path';
       if (imgs.length >= 5) return 'Ошибка: за один шаг — не больше 5 картинок; остальные открой следующим шагом';
@@ -878,6 +886,22 @@ export class Chat extends EventEmitter {
         }
       }
     }
+    /* Kiro (kiro.dev): свой API (как у Kiro IDE) с родными инструментами; доступ живёт час — обновляем заранее,
+       а если Kiro всё-таки сказал «доступ истёк» — обновляем и повторяем, пока пользователь ничего не увидел */
+    if (KR.isKiro(S.base)) {
+      for (let again = false; ; again = true) {
+        const key = await this.krKey(again);
+        if (!key) throw Object.assign(new Error('нет входа в Kiro'), { human: 'Сначала войди в Kiro: настройки → Модель → «Kiro (kiro.dev)» → «Войти через Google» (или GitHub, или AWS Builder ID).', detail: '' });
+        this.partial = '';
+        try {
+          return await KR.turn({ token: key, auth: this.settings().krAuth, model: S.model, sys, tools, msgs: this.wire(), think: !!S.think, effort: S.effort,
+            conv: this.u.id + ':' + this.cid, signal: sig, onText: d => { this.partial += d; this.emit('delta', d, this.cid); } });
+        } catch (e) {
+          if (!e.auth || sig.aborted || this.partial) throw e;
+          if (again || !this.settings().krAuth?.rt) throw Object.assign(e, { human: (e.status === 403 && !/истёк/.test(e.human || '') ? e.human : 'Доступ к Kiro истёк, а обновить его не вышло.') + ' Войди снова: настройки → Модель → Kiro.' });
+        }
+      }
+    }
     /* Coarena: каталог моделей нужен до запроса — уровни размышления и потолок ответа у каждой модели свои */
     const co = CO.isCoarena(S.base);
     if (co) await CO.catalog().catch(e => console.warn('coarena:', e.message));
@@ -962,6 +986,32 @@ export class Chat extends EventEmitter {
     const s = this.set.v, P = s.provs ||= {};
     if (isQwen(s.base)) s.key = t;
     P[QWEN_BASE] = { ...(P[QWEN_BASE] || {}), key: t, model: P[QWEN_BASE]?.model || (isQwen(s.base) ? s.model : '') || '' };
+    this.set.save();
+  }
+
+  /* ---------- доступ к Kiro: живёт час, обновляем по refresh-токену (kiro.js → refresh) ----------
+     Осталось меньше 5 минут — обновляем перед запросом; force — Kiro сказал «доступ истёк». Сеть подвела, а старый
+     доступ ещё жив — отдаём его */
+  krToken() { const S = this.settings(); return KR.isKiro(S.base) ? S.key : (S.provs || {})[KR.KR_BASE]?.key || ''; }
+  async krKey(force) {
+    const a = this.settings().krAuth, key = this.krToken();
+    if (!a?.rt) return key;
+    if (!force && key && KR.tokenLeft(a) > 300e3) return key;
+    if (!this.krRenew) this.krRenew = (async () => {
+      try { const r = await KR.refresh(a); this.setKrAuth(r.auth, r.token); return r.token; }
+      finally { this.krRenew = null; }
+    })();
+    try { return await this.krRenew; }
+    catch (e) { if (!force && !e.relogin && key && KR.tokenLeft(a) > 0) return key; throw e; }
+  }
+  /* вход в Kiro: auth — что нужно для обновления (krAuth), token — сам доступ (ключ провайдера) */
+  setKrAuth(auth, token) {
+    const s = this.set.v, P = s.provs ||= {};
+    if (auth) s.krAuth = auth;
+    if (token !== undefined) {
+      if (KR.isKiro(s.base)) s.key = token;
+      P[KR.KR_BASE] = { ...(P[KR.KR_BASE] || {}), key: token, model: P[KR.KR_BASE]?.model || (KR.isKiro(s.base) ? s.model : '') || '' };
+    }
     this.set.save();
   }
 
