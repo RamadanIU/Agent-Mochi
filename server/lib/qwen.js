@@ -456,7 +456,21 @@ export async function ask({ key, st, save, model, prompt, signal }) {
 }
 
 /* окно проверки: у Qwen нет безобидного запроса, по которому видно, пускает ли сайт к модели, — решает страница */
-export const probe = async () => null;
+/* пускает ли сайт запросы сервера (окно проверки, webcheck.js). Слайдер Alibaba стоит перед ответом модели —
+   спрашиваем его же адрес, но для несуществующего чата: защита пустила — сайт ответит «чата нет» (или «не вошёл»),
+   не пустила — слайдером. Модель не запускается, чат не создаётся. Итог — как у DeepSeek: ok, captcha, auth, err */
+export async function probe(key, st, save) {
+  const cl = client(key, st, save), id = crypto.randomUUID();
+  let r;
+  try { r = await send(cl, 'POST', '/api/v2/chat/completions?chat_id=' + id, { body: JSON.stringify({ stream: true, chat_id: id, chatId: id, messages: [] }), signal: AbortSignal.timeout(15000), chatId: id, accept: 'text/event-stream' }); }
+  catch (e) { return { s: 'err', msg: e.human || e.message }; }
+  const t = await r.text().catch(() => '');
+  let j = null; try { j = JSON.parse(t); } catch {}
+  if (isWafBody(t) || isWafJson(j) || /_____tmd_____/.test(t)) return { s: 'captcha' };
+  if (r.status === 401 || r.status === 403 || /unauthori[sz]ed|not ?login|login required|jwt/i.test(String(j?.data?.code || j?.code || '') + ' ' + String(j?.data?.details || j?.message || ''))) return { s: cl.token ? 'auth' : 'ok' };
+  if (r.status >= 500) return { s: 'err', msg: 'chat.qwen.ai ответил HTTP ' + r.status };
+  return { s: 'ok' };
+}
 /* cookies браузера на сервере ↔ «браузер» запросов (webcheck.js) */
 export const absorbCookies = (st, list) => W.absorbCookies(st, list, myHost());
 export const cookieList = st => W.cookieList(st, QWEN_BASE);

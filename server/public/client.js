@@ -152,7 +152,10 @@ dialog.dsw{width:min(1000px,calc(100% - 24px));max-width:none;height:min(900px,c
 #dsw-re{color:var(--mut)}@media(hover:hover){#dsw-re:hover{color:var(--acc)}}
 /* браузера нет — окно по содержимому, без пустого экрана */
 dialog.dsw.nob{width:min(640px,calc(100% - 24px));height:fit-content}.dsw.nob .dsw-st{display:none}.dsw.nob .dsw-no{flex:none}
-@media(max-width:559px){dialog.dsw{width:100%;height:100dvh;margin:0;border-width:0}.dsw-b{padding:10px 10px 12px}}
+/* телефон: окно с экраном сайта — во весь экран; окно-подсказка (нет браузера) — карточкой по центру, длинное прокручивается */
+@media(max-width:559px){dialog.dsw:not(.nob){width:100%;height:100dvh;margin:0;border-width:0}.dsw-b{padding:10px 10px 12px}
+  dialog.dsw.nob{width:calc(100% - 20px);max-height:calc(100dvh - 20px);margin:auto}.dsw.nob .dsw-b{min-height:0}.dsw.nob .dsw-no{flex:0 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
+  .dsw-no .hcmd{flex-wrap:wrap}.dsw-no .hcmd code{min-width:0;overflow-wrap:anywhere}}
 /* действие в карточке аккаунта и под входом: «Пройти проверку», «Войти в окне DeepSeek» */
 .wa-do{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 0}.wa-do[hidden]{display:none}
 .wa-do .pbtn{width:auto;margin:2px}.wa-do .pbtn .pi{--ico:var(--j-shield)}
@@ -862,7 +865,7 @@ loadModels = async function () {
 const kst = (t, s) => { const h = $('#c-kst'); h.textContent = t || ''; if (s) h.dataset.s = s; else delete h.dataset.s; };
 let krT = 0, krGen = 0;
 window.krReset = () => { clearTimeout(krT); krGen++; $('#wa-kw').hidden = true; kst(''); document.querySelectorAll('[data-kr]').forEach(b => { b.disabled = false; }); };
-const KR_WAYS = { google: 'Google', github: 'GitHub', builder: 'AWS Builder ID' };
+const KR_WAYS = { google: 'Google', github: 'GitHub', email: 'email', builder: 'AWS Builder ID' };
 async function krStart(how) {
   krReset();
   const g = krGen, btns = document.querySelectorAll('[data-kr]');
@@ -871,7 +874,7 @@ async function krStart(how) {
      opener обнуляем: странице входа незачем доступ к приложению */
   let win = null;
   try { win = window.open('', 'kiro-login', 'popup,width=540,height=780'); if (win) { win.opener = null; try { win.document.title = 'Вход в Kiro…'; win.document.body.style.cssText = 'font:16px system-ui;padding:24px;color:#555'; win.document.body.textContent = 'Открываю вход в Kiro…'; } catch (e) {} } } catch (e) { win = null; }
-  kst('Открываю вход через ' + KR_WAYS[how] + '…', 'wait');
+  kst(how === 'email' ? 'Открываю вход в Kiro по email…' : 'Открываю вход через ' + KR_WAYS[how] + '…', 'wait');
   let r;
   try { r = await post('api/kiro/login', { how }); }
   catch (e) { try { win && win.close(); } catch (x) {} if (g === krGen) { btns.forEach(b => { b.disabled = false; }); kst(e.message, 'err'); } return; }
@@ -883,7 +886,7 @@ async function krStart(how) {
 }
 function krShow(r, opened) {
   $('#wa-kw').hidden = false; kst('');
-  $('#wa-kt').textContent = (opened ? 'В окне ' : 'Открой окно входа и ') + (r.how === 'builder' ? 'войди в AWS Builder ID (или зарегистрируйся) и разреши доступ' : 'войди через ' + (KR_WAYS[r.how] || r.way) + ' и подтверди вход в Kiro') + ' — дальше я всё сделаю сам.';
+  $('#wa-kt').textContent = (opened ? 'В окне ' : 'Открой окно входа и ') + (r.how === 'email' ? 'войди в Kiro по email (или зарегистрируйся) и подтверди вход' : r.how === 'builder' ? 'войди в AWS Builder ID и разреши доступ' : 'войди через ' + (KR_WAYS[r.how] || r.way) + ' и подтверди вход в Kiro') + ' — дальше я всё сделаю сам.';
   $('#wa-kc').textContent = r.code || '—';
   const a = $('#wa-kopen'); a.href = r.url; a.lastChild.textContent = opened ? 'Открыть окно снова' : 'Открыть окно входа';
 }

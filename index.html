@@ -883,7 +883,7 @@ dialog .note{box-shadow:var(--sh2),var(--sunk)}
 /* Kiro: вход окошком Kiro в своём браузере (Google, GitHub, AWS Builder ID), код для сверки и кредиты месяца */
 .wa-kb{display:flex;gap:12px;margin-top:12px}.wa-kb .gbtn{flex:1;width:auto;min-width:0}
 .ghi,.awi{flex:none;width:20px;height:20px;background:var(--fg);-webkit-mask:var(--ghpix) center/contain no-repeat;mask:var(--ghpix) center/contain no-repeat}
-.awi{background:#ff9900;-webkit-mask-image:var(--j-user);mask-image:var(--j-user)}
+.awi{background:var(--acc);-webkit-mask-image:var(--j-user);mask-image:var(--j-user)}
 :root{--ghpix:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' shape-rendering='crispEdges'%3E%3Cpath fill='%23000' d='M1 0h1v1H1zM8 0h1v1H8zM1 1h2v1H1zM7 1h2v1H7zM1 2h8v1H1zM0 3h10v1H0zM0 4h2v1H0zM4 4h2v1H4zM8 4h2v1H8zM0 5h10v1H0zM1 6h8v1H1zM2 7h6v1H2zM2 8h1v1H2zM4 8h2v1H4zM7 8h1v1H7zM1 9h1v1H1zM4 9h2v1H4zM8 9h1v1H8z'/%3E%3C/svg%3E")}
 .wa-kw{margin:14px 0 0;padding:12px;background:var(--card);box-shadow:var(--sh2);animation:inP .3s var(--ez)}.wa-kw[hidden]{display:none}
 .wa-kt{margin:0;font:7px/1.8 var(--pf);color:var(--fg)}
@@ -1799,7 +1799,7 @@ const tick=setInterval(paint,100);paint();
         <!-- Kiro: вход окошком Kiro в своём браузере; сервер сам забирает доступ -->
         <div class="wa-kr" id="wa-kr" hidden>
           <div class="wa-g"><button class="pbtn gbtn" data-kr="google" type="button"><i class="gi" aria-hidden="true"></i><span>Войти через Google</span></button><button class="qm" type="button" data-help="krin" aria-label="Как это работает">?</button></div>
-          <div class="wa-kb"><button class="pbtn gbtn" data-kr="github" type="button"><i class="ghi" aria-hidden="true"></i><span>GitHub</span></button><button class="pbtn gbtn" data-kr="builder" type="button"><i class="awi" aria-hidden="true"></i><span>AWS Builder ID</span></button></div>
+          <div class="wa-kb"><button class="pbtn gbtn" data-kr="github" type="button"><i class="ghi" aria-hidden="true"></i><span>GitHub</span></button><button class="pbtn gbtn" data-kr="email" type="button"><i class="awi" aria-hidden="true"></i><span>По email</span></button></div>
           <div class="wa-kw" id="wa-kw" role="status" hidden>
             <p class="wa-kt" id="wa-kt"></p>
             <div class="wa-kc"><span>Код на странице</span><b id="wa-kc"></b></div>
@@ -4523,11 +4523,11 @@ function krHelp(k){
     +'<p>Kiro — среда разработки от Amazon (AWS). У аккаунта каждый месяц есть бесплатные кредиты (новичкам — ещё и бонус на первые недели), а модели — Claude и другие, список зависит от плана.</p>'
     +'<p>Personal Computer говорит с Kiro от имени твоего аккаунта тем же API, что и сама Kiro IDE, — прямо со своего сервера, без сторонних шлюзов. Инструменты (команды, файлы, MCP) модель вызывает по-настоящему, а не текстом.</p>'
     +'<p>Сколько кредитов осталось и когда они обновятся — в карточке. У каждой модели свой расход: «×1,3» — в 1,3 раза больше обычного, «бесплатно» — не тратит кредиты.</p>'};
-  if(k==='krin')return{t:'Вход в Kiro',h:'<ol><li>Нажми «Войти через Google» (или GitHub, или AWS Builder ID) — откроется окошко Kiro в твоём браузере.</li><li>Войди там как обычно и подтверди вход. Код на странице должен совпасть с кодом здесь.</li><li>Всё — Personal Computer сам получит доступ и выберет модель. Окошко можно закрыть.</li></ol>'
+  if(k==='krin')return{t:'Вход в Kiro',h:'<ol><li>Нажми «Войти через Google» (или GitHub, или «По email») — откроется окошко Kiro в твоём браузере.</li><li>Войди там как обычно и подтверди вход. Код на странице должен совпасть с кодом здесь.</li><li>Всё — Personal Computer сам получит доступ и выберет модель. Окошко можно закрыть.</li></ol>'
     +'<p>Пароль от Google или GitHub вводится только на их страницах — Personal Computer его не видит. Сервер получает лишь доступ к Kiro: он живёт час и обновляется сам, а ключ обновления хранится на твоём сервере зашифрованным.</p>'
-    +'<p>Нет Google и GitHub? «AWS Builder ID» — вход по email на сайте AWS, там же и регистрация.</p>'
+    +'<p>Нет Google и GitHub? «По email» — аккаунт Kiro по почте: на странице Kiro можно и зарегистрироваться.</p>'
     +'<p class="hnote">Работает и с телефона: окошко откроется новой вкладкой — войди там и вернись сюда.</p>'};
-  if(k==='tok')return{t:'Токен вручную',h:'<p>Если на компьютере стоит Kiro IDE и ты в ней вошёл: открой файл <code>~/.aws/sso/cache/kiro-auth-token.json</code> и вставь его содержимое целиком (или только значение refreshToken — оно начинается с <code>aor</code>).</p><p>Вход через AWS Builder ID в Kiro IDE хранит ещё и файл клиента рядом (с clientId и clientSecret) — вставь оба файла подряд. Проще — нажать «AWS Builder ID».</p>'};
+  if(k==='tok')return{t:'Токен вручную',h:'<p>Если на компьютере стоит Kiro IDE и ты в ней вошёл: открой файл <code>~/.aws/sso/cache/kiro-auth-token.json</code> и вставь его содержимое целиком (или только значение refreshToken — оно начинается с <code>aor</code>).</p><p>Вход через AWS Builder ID в Kiro IDE хранит ещё и файл клиента рядом (с clientId и clientSecret) — вставь оба файла подряд. Но новые версии Kiro без профиля Kiro такой вход не принимают — надёжнее нажать «Войти через Google», «GitHub» или «По email».</p>'};
   if(k==='think'){const m=window.qwInfoOf?qwInfoOf():null;
     return{t:'Размышление',h:(m&&m.must?'<p>Эта модель всегда сначала думает — выключить нельзя.</p>':m&&!m.think?'<p>Эта модель не умеет размышлять — отвечает сразу.</p>':'')
       +'<p>Модель сначала думает, потом отвечает: умнее, но медленнее и тратит больше кредитов. Глубину выбирают ниже.</p><p>В чате размышлений не видно — зажми компьютер, и откроется окно с размышлениями по шагам.</p>'}}

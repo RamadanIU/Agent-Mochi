@@ -6,7 +6,10 @@
    открывает эту страницу окошком в ТВОЁМ браузере (там ты уже вошёл в Google или GitHub — ничего вводить не надо),
    ты подтверждаешь вход, а сервер, опрашивая Kiro, сам забирает токены. Ни паролей, ни консоли, ни копирования токенов.
      google, github — вход в Kiro через Google или GitHub (prod.us-east-1.auth.desktop.kiro.dev, /oauth/device/*);
-     builder        — AWS Builder ID (по email, регистрация там же): AWS SSO OIDC, device_authorization;
+     email          — аккаунт Kiro по почте (там же регистрация): тот же вход, провайдер Cognito;
+     builder        — AWS Builder ID: AWS SSO OIDC, device_authorization. Профиля Kiro (profileArn) такой вход не
+                      даёт, а новые версии Kiro без него запросы не принимают, — в приложении кнопки нет, остался
+                      для «Токена вручную» из Kiro IDE;
      token          — вручную: refresh-токен или файл kiro-auth-token.json из Kiro IDE.
    Доступ живёт час и обновляется сам по refresh-токену (тот лежит на сервере зашифрованным, store.seal).
 
@@ -40,9 +43,34 @@ const SOCIAL_CLIENT = 'kiro-cli';
 const SCOPES = ['codewhisperer:completions', 'codewhisperer:analysis', 'codewhisperer:conversations'];
 const START_URL = 'https://view.awsapps.com/start';
 
+/* ---------- версия Kiro IDE ----------
+   Kiro не отвечает «старым» версиям IDE («This version of Kiro is no longer supported»), а IDE обновляется часто.
+   Поэтому версию берём там же, где её узнаёт сама Kiro IDE, — в файле обновлений (раз в 12 часов), а если Kiro
+   всё-таки сказал «устарела» — перепроверяем сразу. Своя версия — PERSONALCOMPUTER_KIRO_IDE_VERSION */
+const IDE_KNOWN = '1.4.154', SDK = '1.0.27';
+const VER_URL = () => envUrl('PERSONALCOMPUTER_KIRO_VERSION_URL') || 'https://prod.download.desktop.kiro.dev/stable/metadata-linux-x64-stable.json';
+const semver = v => /^\d{1,4}\.\d{1,4}\.\d{1,6}$/.test(String(v || '')) ? String(v) : '';
+const newer = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]; return false; };
+let IDE = IDE_KNOWN, ideAt = 0, idePend = null;
+export const ide = () => semver(process.env.PERSONALCOMPUTER_KIRO_IDE_VERSION) || IDE;
+export function ideVersion(force) {
+  if (semver(process.env.PERSONALCOMPUTER_KIRO_IDE_VERSION)) return Promise.resolve(ide());
+  if (!force && Date.now() - ideAt < 12 * 3600e3) return Promise.resolve(IDE);
+  return idePend ||= (async () => {
+    try {
+      const r = await apiFetch(VER_URL(), { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
+      const j = r.ok ? jparse(await r.text()) : null, v = semver(j?.currentRelease || j?.releases?.[0]?.version);
+      if (v && newer(v, IDE)) IDE = v;
+      ideAt = Date.now();
+    } catch { ideAt = Date.now() - 11 * 3600e3; /* сеть подвела — спросим снова через час */ }
+    finally { idePend = null; }
+    return IDE;
+  })();
+}
+
 /* ---------- заголовки — как у Kiro IDE (AWS SDK) ---------- */
-const IDE = process.env.PERSONALCOMPUTER_KIRO_IDE_VERSION || '0.10.32', SDK = '1.0.27';
 function hdrs(token, a, extra = {}) {
+  const IDE = ide();
   const mid = /^[0-9a-f]{64}$/.test(a?.mid || '') ? a.mid : crypto.createHash('sha256').update('personalcomputer-kiro').digest('hex');
   return {
     Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', Accept: 'application/json',
@@ -66,7 +94,8 @@ const AGAIN = 'Войди снова: настройки → Модель → Ki
 /* ====================================================================================================
    Вход по коду устройства
    ==================================================================================================== */
-const WAYS = { google: 'Google', github: 'GitHub', builder: 'AWS Builder ID' };
+const WAYS = { google: 'Google', github: 'GitHub', email: 'email', builder: 'AWS Builder ID' };
+const PROVIDER = { google: 'Google', github: 'Github', email: 'Cognito' };
 export const wayName = h => WAYS[h] || 'токен';
 
 /* начать вход: код, страница входа и как часто спрашивать */
@@ -74,7 +103,7 @@ export async function deviceStart(how) {
   if (!WAYS[how]) throw E('Неизвестный способ входа', { status: 400 });
   try {
     if (how !== 'builder') {
-      const r = await post(AUTH() + '/oauth/device/authorization', { clientId: SOCIAL_CLIENT, loginProvider: how === 'google' ? 'Google' : 'Github' });
+      const r = await post(AUTH() + '/oauth/device/authorization', { clientId: SOCIAL_CLIENT, loginProvider: PROVIDER[how] });
       const j = r.j || {};
       if (!r.ok || !j.deviceCode) throw E('Kiro не начал вход' + (j.message ? ': ' + j.message : ' (HTTP ' + r.status + ')') + '. Попробуй ещё раз через минуту.', { status: 502 });
       return { how, dc: j.deviceCode, code: j.userCode || '', url: j.verificationUriComplete || j.verificationUri || '', exp: Date.now() + (+j.expiresInMilliseconds || 300e3), every: Math.max(1000, +j.intervalInMilliseconds || 5000) };
@@ -227,6 +256,7 @@ const cats = new Map();
 let lastCat = null;
 export const modelInfo = id => (lastCat?.list || []).find(m => m.id === id) || (id ? toInfo({ modelId: id }) : null);
 export async function models(token, a, { force } = {}) {
+  await ideVersion();
   const key = (a?.mid || '') + ':' + regionOf(a), c = cats.get(key);
   if (c && !force && Date.now() - c.at < 600e3) return c;
   const get = async q => {
@@ -236,8 +266,8 @@ export async function models(token, a, { force } = {}) {
   };
   let r = null, list = null;
   try {
-    r = await get({ origin: 'AI_EDITOR' });
-    if (!(r.status === 200 && Array.isArray(r.j?.models) && r.j.models.length) && a?.arn) r = await get({ origin: 'AI_EDITOR', profileArn: a.arn });
+    r = await get({ origin: 'AI_EDITOR', ...(a?.arn ? { profileArn: a.arn } : {}) });
+    if (!(r.status === 200 && Array.isArray(r.j?.models) && r.j.models.length) && a?.arn) r = await get({ origin: 'AI_EDITOR' });
   } catch (e) { r = { status: 0, err: e }; }
   if (r.status === 401 || isTokenErr(r.status, r.j, r.t)) throw E('Доступ Kiro не подошёл', { status: 401, auth: true });
   if (r.status === 200 && Array.isArray(r.j?.models) && r.j.models.length) list = r.j.models;
@@ -252,6 +282,7 @@ export const pickModel = c => (c.def && c.list.find(m => m.id === c.def) ? c.def
 /* кредиты: сколько потрачено из месячных, пробный бонус, когда обнулится, чей аккаунт */
 const when = x => { const n = num(x); if (n) return n < 1e12 ? n * 1000 : n; const t = Date.parse(String(x || '')); return Number.isFinite(t) ? t : 0; };
 export async function usage(token, a) {
+  await ideVersion();
   const q = new URLSearchParams({ isEmailRequired: 'true', origin: 'AI_EDITOR', resourceType: 'AGENTIC_REQUEST', ...(a?.arn ? { profileArn: a.arn } : {}) });
   const r = await apiFetch(API(regionOf(a)) + '/getUsageLimits?' + q, { headers: hdrs(token, a), signal: AbortSignal.timeout(20000) });
   const t = await r.text().catch(() => ''), j = jparse(t);
@@ -399,6 +430,10 @@ export function fail(status, j, t, model) {
   const msg = String(j?.message || j?.Message || j?.error_description || '').slice(0, 400), reason = String(j?.reason || j?.__type || j?.code || ''), all = msg + ' ' + reason + ' ' + String(t || '').slice(0, 400);
   const o = { status, detail: ('HTTP ' + status + ' ' + (reason ? reason + ': ' : '') + msg).trim().slice(0, 300) };
   if (isTokenErr(status, j, t)) return E('Доступ Kiro истёк.', { ...o, auth: true });
+  if (/profileArn is required/i.test(all))
+    return E('Kiro не принимает этот вход без профиля Kiro (так бывает со входом через AWS Builder ID). Войди заново: настройки → Модель → Kiro → «Войти через Google», «GitHub» или «По email».', o);
+  if (/version of Kiro is no longer supported|update to the latest version/i.test(all))
+    return E('Kiro не принимает запросы от версии Kiro IDE ' + ide() + ' — требует новее. Обнови Personal Computer (настройки → Сервер → «Обновления»). Если обновления ещё нет — впиши свежую версию с kiro.dev/downloads в /etc/personalcomputer/personalcomputer.env: PERSONALCOMPUTER_KIRO_IDE_VERSION=…', { ...o, outdated: true });
   if (/CONTENT_LENGTH_EXCEEDS|too long|exceeds the maximum|input is too large|context.{0,20}(length|window)|prompt is too long/i.test(all)) return E('Разговор не помещается в модель Kiro — начни новый чат.', { ...o, long: true });
   if (/additionalModelRequestFields|output_config|reasoning.{0,20}not supported/i.test(all) && status === 400) return E('Модель Kiro не приняла настройку размышления.', { ...o, extra: true });
   if (/MONTHLY_REQUEST_COUNT|OVERAGE|insufficient.{0,10}credit|credit.{0,30}(limit|exhaust|exceed)|usage limit|limit (has been )?reached|ServiceQuotaExceeded/i.test(all))
@@ -534,7 +569,8 @@ async function readStream(r, { model, onText, poke }) {
    Ужимает переписку, если не влезла; временные сбои повторяет сам (пока пользователь ничего не увидел).
    Доступ истёк — ошибка с auth: агент обновляет его и зовёт снова */
 export async function turn({ token, auth, model, sys, tools = [], msgs = [], think, effort, conv, signal, onText }) {
-  let shrink = 0, extra = true, wasted = 0, tries = 0;
+  let shrink = 0, extra = true, wasted = 0, tries = 0, rever = false;
+  await ideVersion();
   for (;;) {
     const body = build({ sys, msgs, tools, model, think, effort, conv, auth, shrink, extra });
     /* тишина дольше 3 минут — Kiro завис */
@@ -557,6 +593,8 @@ export async function turn({ token, auth, model, sys, tools = [], msgs = [], thi
       if (!streamed) {
         if (e.long && shrink < 3) { shrink++; continue; }
         if (e.extra && extra) { extra = false; NOEXTRA.add(model); continue; }
+        /* Kiro сказал «версия устарела» — узнаём свежую и повторяем (один раз) */
+        if (e.outdated && !rever) { rever = true; const was = ide(); if (await ideVersion(true) !== was) continue; }
       }
       const net = !e.human && (e instanceof TypeError || idle.signal.aborted || e.name === 'AbortError');
       if ((net || e.retry) && !streamed && tries < 3) {

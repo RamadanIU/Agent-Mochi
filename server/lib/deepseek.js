@@ -722,11 +722,17 @@ export async function ask({ key, st, save, prompt, signal }) {
 
 /* окно проверки: пускает ли сайт запросы сервера (с cookies, которые выдал браузер) — тот же запрос, что сайт делает
    перед каждым сообщением. true — пускает, false — всё ещё просит проверку, null — не понять (нет токена, сеть) */
+/* пускает ли сайт запросы сервера (окно проверки, webcheck.js): тот же запрос, что сайт делает перед сообщением.
+   { s: 'ok' } — пускает; 'captcha' — всё ещё просит проверку; 'auth' — токен не подошёл; 'err' — спросить не вышло.
+   Без токена (проверка при входе по паролю) защита стоит раньше входа: «не вошёл» (401) — значит, защита пустила */
 export async function probe(key, st, save) {
   const token = parseToken(key);
-  if (!token) return null;
-  try { await call(client(token, st, save), 'POST', '/api/v0/chat/create_pow_challenge', { target_path: COMPLETION }, AbortSignal.timeout(15000)); return true; }
-  catch (e) { return e.captcha ? false : null; }
+  try { await call(client(token, st, save), 'POST', '/api/v0/chat/create_pow_challenge', { target_path: COMPLETION }, AbortSignal.timeout(15000)); return { s: 'ok' }; }
+  catch (e) {
+    if (e.captcha) return { s: 'captcha' };
+    if (e.status === 401) return { s: token ? 'auth' : 'ok' };
+    return { s: 'err', msg: e.human || e.message };
+  }
 }
 
 /* проверка в настройках: токен рабочий, чей аккаунт, какие модели */
