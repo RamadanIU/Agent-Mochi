@@ -566,6 +566,12 @@
 :root[data-theme=modern] .wa-bar{height:6px;margin-top:8px;border-radius:3px;background:var(--field);box-shadow:inset 0 0 0 1px var(--bd);overflow:hidden}
 :root[data-theme=modern] .wa-bar i{border-radius:3px}
 :root[data-theme=modern] .wa-cr small{margin-top:7px;font:400 12px/1.45 var(--sans)}
+:root[data-theme=modern] .wa-qr{margin-top:10px}
+:root[data-theme=modern] .wa-gs{font:400 13px/1.45 var(--sans)}
+:root[data-theme=modern] .wa-gs li+li{margin-top:4px}
+:root[data-theme=modern] .ag-paste{margin-top:10px}
+:root[data-theme=modern] .ag-paste .pbtn{margin:0;background:var(--acc);color:var(--onacc);box-shadow:none}
+:root[data-theme=modern] .ag-paste .pbtn .pi{--ico:var(--m-link)}
 /* ---------- DeepSeek: проверка «я не робот» — карточка в чате и окно с экраном сайта ---------- */
 :root[data-theme=modern] .m.e.ck{background:color-mix(in srgb,var(--hi) 5%,var(--card));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--hi) 26%,transparent)}
 :root[data-theme=modern] .m.e.ck .et{background:none;color:var(--hi)}

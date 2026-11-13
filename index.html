@@ -892,6 +892,11 @@ dialog .note{box-shadow:var(--sh2),var(--sunk)}
 .wa-ka{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;margin-top:12px}.wa-ka .pbtn{margin:2px}.wa-ka .pbtn .pi{--ico:var(--j-link)}
 .kr-imp textarea{width:100%;min-height:76px;resize:vertical;font:7px/1.6 var(--pf)}
 #f-key.kr-off{display:none}
+.ag-paste{margin-top:12px}
+.ag-paste .pbtn{flex:none;width:auto;margin:0 2px 2px}
+.ag-paste .pbtn .pi{--ico:var(--j-link)}
+.wa-qr{margin-top:11px}
+.wa-qr[data-low] .wa-bar i{background:color-mix(in srgb,var(--err) 80%,var(--acc))}
 #c-kimp .pi{--ico:var(--j-enter)}
 .wa-gs{margin:0;padding:0 0 0 18px;font:7px/1.9 var(--pf);color:var(--fg)}.wa-gs li+li{margin-top:6px}
 .wa-gw .wa-kt{margin-top:10px;color:var(--mut)}.wa-gb{margin:10px 0 0}
@@ -4385,7 +4390,7 @@ $('#ask-ok').onclick=()=>$('#ask').close('ok');$('#ask-no').onclick=()=>$('#ask'
 $('#ask-i').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#ask').close('ok')}};
 $('#ask').addEventListener('click',e=>{if(e.target===$('#ask'))$('#ask').close('')});
 /* свой Ollama и другие OpenAI-совместимые серверы — через «Другой» */
-const PRESETS={OpenAI:'https://api.openai.com/v1',Coarena:'https://coarena.ai/api/v1','Qwen (chat.qwen.ai)':'https://chat.qwen.ai','DeepSeek (chat.deepseek.com)':'https://chat.deepseek.com','Kiro (kiro.dev)':'https://kiro.dev',OpenRouter:'https://openrouter.ai/api/v1','Ollama Cloud':'https://ollama.com/v1',JustWoker:'https://api.justwoker.icu/v1','LM Studio':'http://localhost:1234/v1'};
+const PRESETS={OpenAI:'https://api.openai.com/v1',Coarena:'https://coarena.ai/api/v1','Qwen (chat.qwen.ai)':'https://chat.qwen.ai','DeepSeek (chat.deepseek.com)':'https://chat.deepseek.com','Kiro (kiro.dev)':'https://kiro.dev','Antigravity (Google)':'https://antigravity.google',OpenRouter:'https://openrouter.ai/api/v1','Ollama Cloud':'https://ollama.com/v1',JustWoker:'https://api.justwoker.icu/v1','LM Studio':'http://localhost:1234/v1'};
 const LOCAL=['LM Studio'],CUSTOM='Другой';
 const prov=$('#c-prov');
 /* сохранённые на сервере провайдеры: адрес API → {model, hasKey} (заполняет client.js; сами ключи в браузер не приходят).
@@ -4409,6 +4414,8 @@ const isDs=b=>{try{return new URL(nb(b)).hostname==='chat.deepseek.com'}catch(e)
 const isCo=b=>{try{return /(^|\.)coarena\.ai$/i.test(new URL(nb(b)).hostname)}catch(e){return false}};
 /* Kiro (kiro.dev, Amazon): аккаунт Kiro (вход окошком Kiro в своём браузере), модели и кредиты — с сервера */
 const isKr=b=>{try{return /^(app\.)?kiro\.dev$/i.test(new URL(nb(b)).hostname)}catch(e){return false}};
+/* Antigravity (Google): аккаунт Google, модели и лимиты — с сервера (client.js) */
+const isAg=b=>{try{return /(^|\.)antigravity\.google$/i.test(new URL(nb(b)).hostname)}catch(e){return false}};
 /* что экран знает о веб-чате: имя, сайт, где на сайте лежит токен, ручная команда, есть ли вход по паролю */
 const WEB={qw:{k:'qw',name:'Qwen',site:'chat.qwen.ai',url:'https://chat.qwen.ai',login:'https://chat.qwen.ai/auth?action=signin',hash:'qwen-token',take:'localStorage.token',manual:'copy(localStorage.token)',pw:true},
   ds:{k:'ds',name:'DeepSeek',site:'chat.deepseek.com',url:'https://chat.deepseek.com',login:'https://chat.deepseek.com/sign_in',hash:'deepseek-token',take:'(()=>{try{return JSON.parse(localStorage.userToken).value}catch(e){return localStorage.userToken}})()',manual:'copy(JSON.parse(localStorage.userToken).value)',pw:true,
@@ -4416,7 +4423,8 @@ const WEB={qw:{k:'qw',name:'Qwen',site:'chat.qwen.ai',url:'https://chat.qwen.ai'
     more:"+'&deepseek-device='+encodeURIComponent((()=>{try{const d=window.SMSdk&&SMSdk.getDeviceId&&SMSdk.getDeviceId();return typeof d==='string'?d:''}catch(e){return ''}})())+'&deepseek-ua='+encodeURIComponent(navigator.userAgent)",
     msg:",dev:(()=>{try{const d=window.SMSdk&&SMSdk.getDeviceId&&SMSdk.getDeviceId();return typeof d==='string'?d:''}catch(e){return ''}})(),ua:navigator.userAgent"}};
 WEB.kr={k:'kr',name:'Kiro',site:'kiro.dev',url:'https://app.kiro.dev',pw:false,kiro:true};
-const webOf=b=>isQw(b)?WEB.qw:isDs(b)?WEB.ds:isKr(b)?WEB.kr:null;
+WEB.ag={k:'ag',name:'Antigravity',site:'antigravity.google',url:'https://antigravity.google',pw:false,ag:true};
+const webOf=b=>isQw(b)?WEB.qw:isDs(b)?WEB.ds:isKr(b)?WEB.kr:isAg(b)?WEB.ag:null;
 /* «Войти через Google»: команда в консоли сайта открывает это приложение с токеном после # (на сервер не уходит),
    client.js его подхватывает и сохраняет с подтверждением. Закладка — тот же код как javascript:-ссылка */
 /* Окно сайта открыло само приложение — токен уходит ему напрямую (postMessage только на адрес приложения), а оно
@@ -4433,16 +4441,17 @@ function keyHint(){const b=nb($('#c-base').value),sv=provSaved[b],w=webOf(b),wa=
   $('#f-key').firstChild.nodeValue=w?'Токен '+w.name:'API ключ';$('#c-forget').hidden=!sv||!!w;
   /* у веб-чата поле токена живёт в папке «Токен вручную», у остальных провайдеров — на своём месте */
   const fk=$('#f-key');if(w){if(fk.parentNode!==$('#wa-tokb'))$('#wa-tokb').append(fk)}else if(fk.previousElementSibling!==$('#f-key-home'))$('#f-key-home').after(fk);
-  /* Kiro: вместо поля токена — вход окошком Kiro и «Токен вручную» (refreshToken или файл из Kiro IDE) */
-  const kr=!!w&&!!w.kiro;fk.classList.toggle('kr-off',kr);$('#wa-kr').hidden=!kr;$('#kr-imp').hidden=!kr;$('#c-gin').parentNode.hidden=kr;$('#c-gst').hidden=kr;$('#c-win').hidden=kr;if(kr)$('#wa-gw').hidden=true;if(!kr)$('#wa-cr').hidden=true;
-  if(wa.dataset.p!==(w?w.k:'')){wa.dataset.p=w?w.k:'';wa.classList.remove('swap');$('#wa-swap').setAttribute('aria-expanded','false');$('#c-gst').textContent='';$('#c-qst').textContent='';$('#c-qdo').hidden=true;$('#wa-gw').hidden=true;window.krReset&&krReset()}
-  wa.hidden=!w;$('#mh').hidden=!!w&&!kr;$('#f-model').hidden=isDs(b);
+  /* Kiro и Antigravity: вместо поля токена — свой вход и «Токен вручную» (refresh-токен или файл входа) */
+  const kr=!!w&&!!w.kiro,ag=!!w&&!!w.ag,acc=kr||ag;fk.classList.toggle('kr-off',acc);$('#wa-kr').hidden=!kr;$('#kr-imp').hidden=!kr;$('#c-gin').parentNode.hidden=acc;$('#c-gst').hidden=acc;$('#c-win').hidden=acc;if(acc)$('#wa-gw').hidden=true;if(!kr)$('#wa-cr').hidden=true;
+  if(wa.dataset.p!==(w?w.k:'')){wa.dataset.p=w?w.k:'';wa.classList.remove('swap');$('#wa-swap').setAttribute('aria-expanded','false');$('#c-gst').textContent='';$('#c-qst').textContent='';$('#c-qdo').hidden=true;$('#wa-gw').hidden=true;window.krReset&&krReset();window.agReset&&agReset()}
+  wa.hidden=!w;$('#mh').hidden=!!w&&!acc;$('#f-model').hidden=isDs(b);
   if(w){$('#wa-n').textContent='Аккаунт '+w.name;$('#wa-pw').hidden=!w.pw;
     /* DeepSeek пускает и по телефону */
     const ds=w===WEB.ds,q=$('#c-qmail');$('#f-qmail').firstChild.nodeValue=ds?'Email или телефон':'Email';q.type=ds?'text':'email';q.inputMode=ds?'email':'';q.placeholder=ds?'you@mail.com или +7 900 000-00-00':'you@mail.com'}
-  $('#f-think').hidden=!w;$('#f-vis').hidden=!!w&&!kr;$('#f-effort').hidden=!isCo(b);
+  /* Antigravity: думают почти все модели — вместо переключателя только глубина */
+  $('#f-think').hidden=!w||ag;$('#f-vis').hidden=!!w&&!acc;$('#f-effort').hidden=!isCo(b);
   $('#f-think').querySelector('span').firstChild.nodeValue=isDs(b)?'DeepThink':'Размышление';
-  $('#f-effort').querySelector('.fl').firstChild.nodeValue=kr?'Глубина размышления':'Уровень размышления';if(kr&&window.coEffort)coEffort()}
+  $('#f-effort').querySelector('.fl').firstChild.nodeValue=acc?'Глубина размышления':'Уровень размышления';if(acc&&window.coEffort)coEffort()}
 function syncSet(){const p=prov.value;$('#f-steps').hidden=!$('#c-lim').checked;$('#sh').hidden=true;$('#f-base').hidden=!!PRESETS[p];$('#f-key').hidden=LOCAL.includes(p);keyHint()}
 function fill(s){
   for(const k in F)$(F[k]).value=s[k]||'';
@@ -4470,17 +4479,17 @@ function gwShow(w){const p=$('#wa-gw');p.hidden=false;$('#c-gst').textContent=''
   $('#wa-g3').textContent='Закладки ещё нет? Один раз перетащи эту кнопку на панель закладок (Ctrl+Shift+B). Или без закладки: «Скопировать команду», затем в окне сайта F12, вкладка Console, вставить и Enter.';
   const a=$('#wa-gbm');a.href=bmHref(w);a.textContent='Токен '+w.name}
 const gwOpen=w=>{try{window.webWin=window.open(w.login||w.url,'pc-web-login','popup,width=560,height=820')}catch(e){window.webWin=null}return window.webWin};
-$('#c-gin').onclick=()=>{const w=webOf($('#c-base').value);if(!w||w.kiro)return;
+$('#c-gin').onclick=()=>{const w=webOf($('#c-base').value);if(!w||w.kiro||w.ag)return;
   if(touchUI()){openHelp('google',$('#c-gin'));return}
   gwShow(w);if(!gwOpen(w)){const st=$('#c-gst');st.textContent='Браузер не дал открыть окно — нажми «Открыть сайт снова»';st.dataset.s='err'}};
-$('#wa-gre').onclick=()=>{const w=webOf($('#c-base').value);if(w&&!w.kiro)gwOpen(w)};
+$('#wa-gre').onclick=()=>{const w=webOf($('#c-base').value);if(w&&!w.kiro&&!w.ag)gwOpen(w)};
 $('#wa-gx').onclick=()=>{$('#wa-gw').hidden=true};
 $('#wa-gcp').onclick=async()=>{const w=webOf($('#c-base').value),b=$('#wa-gcp');if(!w)return;const c=webCmd(w);
   try{await navigator.clipboard.writeText(c);b.lastChild.textContent='Скопировано'}catch(e){await ask('Команда для консоли','Вставь её в консоль на '+w.site+' (F12, вкладка Console):',c,'Готово')}
   setTimeout(()=>{b.lastChild.textContent='Скопировать команду'},2000)};
 $('#wa-gbm').onclick=e=>{e.preventDefault();const a=e.currentTarget;a.classList.add('nope');a.dataset.t='Не нажимай здесь — перетащи на панель закладок (Ctrl+Shift+B)';setTimeout(()=>a.classList.remove('nope'),2600)};
 /* вход в окне приложения: настоящая страница сайта в браузере на сервере (email, телефон, GitHub) — токен заберётся сам */
-$('#c-win').onclick=()=>{const w=webOf($('#c-base').value);if(!w||w.kiro||!window.openCheck)return;openCheck('login',()=>window.webLogged&&webLogged(),w===WEB.qw?'qwen':'deepseek')};
+$('#c-win').onclick=()=>{const w=webOf($('#c-base').value);if(!w||w.kiro||w.ag||!window.openCheck)return;openCheck('login',()=>window.webLogged&&webLogged(),w===WEB.qw?'qwen':'deepseek')};
 
 /* ---------- справка под «?» ----------
    Объяснения не лежат полотном в настройках: на ПК — облачко у знака вопроса, на телефоне — шторка снизу,
@@ -4491,6 +4500,7 @@ let waNote='';
 const cmdBox=c=>'<div class="hcmd"><code>'+esc(c)+'</code><button type="button" class="hcp" data-copy="'+esc(c).replace(/"/g,'&quot;')+'">Копировать</button></div>';
 function helpOf(k){const w=webOf($('#c-base').value)||WEB.qw,n=w.name,s=w.site,ds=w===WEB.ds;
   if(w.kiro){const K=krHelp(k);if(K)return K}
+  if(w.ag&&window.agHelp){const K=agHelp(k);if(K)return K}
   const steps='<ol><li>Один раз перетащи на панель закладок кнопку «Токен '+n+'» (она ниже и в окошке после нажатия).</li><li>Нажми «Войти через Google» — приложение откроет окно '+s+'. Войди там через Google.</li><li>Нажми закладку в этом окне — токен сам вернётся сюда и сохранится, окно закроется.</li></ol><p>Без закладки: «Скопировать команду», затем в окне сайта F12, вкладка «Console», вставить и Enter (Chrome при первой вставке попросит набрать <code>allow pasting</code>).</p>';
   if(k==='wa')return{t:'Аккаунт '+n,h:(waNote?'<p class="hbad">'+esc(waNote)+'</p>':'')
     +'<p>Personal Computer говорит с '+s+' от имени твоего аккаунта: модели бесплатно, запросы идут с твоего сервера прямо на сайт — без сторонних прокси.</p>'

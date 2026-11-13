@@ -18,6 +18,7 @@ import * as QW from './qwen.js';
 import * as DS from './deepseek.js';
 import * as CO from './coarena.js';
 import * as KR from './kiro.js';
+import * as AG from './antigravity.js';
 import * as DC from './webcheck.js';
 import * as X from './ext.js';
 import { putInbox, storeCopy, getFile, userDir, safeName } from './files.js';
@@ -180,10 +181,11 @@ function provsOf(S) {
 }
 const pubSettings = c => {
   /* qwAuth — вход в Qwen (email и хеш пароля), dsAuth — вход в DeepSeek (логин и зашифрованный пароль),
-     krAuth — вход в Kiro (refresh-токен зашифрованным): наружу только кто и как вошёл */
-  const S = c.settings(), { key, provs, qwAuth, dsAuth, krAuth, ...s } = S;
+     krAuth — вход в Kiro, agAuth — вход в Antigravity (refresh-токен зашифрованным): наружу только кто и как вошёл */
+  const S = c.settings(), { key, provs, qwAuth, dsAuth, krAuth, agAuth, ...s } = S;
   return { ...s, hasKey: !!key, maxStepsDef: DEF_SETTINGS.maxSteps, qwEmail: qwAuth?.email || '', dsLogin: dsAuth?.login || '',
     krLogin: krAuth ? { how: krAuth.how || '', email: krAuth.email || '' } : null,
+    agLogin: agAuth ? { how: agAuth.how || '', email: agAuth.email || '' } : null,
     provs: Object.entries(provsOf(S)).map(([base, p]) => ({ base, model: p.model || '', hasKey: !!p.key })) };
 };
 function putSettings(c, b) {
@@ -198,6 +200,7 @@ function putSettings(c, b) {
     /* DeepSeek: и пароль, и cookies сайта, и профиль браузера на сервере (там тоже вход в аккаунт) */
     if (DS.isDeepSeek(f)) { delete s.dsAuth; c.ds.v.ck = {}; delete c.ds.v.calm; c.ds.save(); DC.forgetProfile(c.u); }
     if (KR.isKiro(f)) { delete s.krAuth; KR.loginStop(c.u.id); }
+    if (AG.isAntigravity(f)) { delete s.agAuth; AG.loginStop(c.u.id); }
     return c.set.save();
   }
   if (steps !== undefined && !(steps >= 1 && steps <= MAX_STEPS)) throw new HttpErr(400, 'Лимит шагов — от 1 до ' + MAX_STEPS);
@@ -208,9 +211,9 @@ function putSettings(c, b) {
   }
   const cur = s.base || DEF_SETTINGS.base, moved = cur !== prev;
   /* «Сбросить всё» стирает ключи всех провайдеров */
-  if (b.clearKey) { s.key = ''; for (const k in P) delete P[k]; delete s.qwAuth; delete s.dsAuth; delete s.krAuth; }
-  /* Kiro: доступ приходит только входом (kiroLogin / kiroImport) — вписанное в поле ключа не берём */
-  else if (KR.isKiro(cur)) { if (moved) s.key = P[cur]?.key || ''; }
+  if (b.clearKey) { s.key = ''; for (const k in P) delete P[k]; delete s.qwAuth; delete s.dsAuth; delete s.krAuth; delete s.agAuth; }
+  /* Kiro и Antigravity: доступ приходит только входом (kiroLogin / agLogin, «Токен вручную») — вписанное в поле ключа не берём */
+  else if (KR.isKiro(cur) || AG.isAntigravity(cur)) { if (moved) s.key = P[cur]?.key || ''; }
   /* токен Qwen и DeepSeek вставляют как попало (Bearer, cookie, JSON из localStorage) — храним только сам токен; JWT бывает длинным */
   else if (typeof b.key === 'string' && b.key.trim()) s.key = QW.isQwen(cur) ? QW.parseToken(b.key).slice(0, 8000) : DS.isDeepSeek(cur) ? DS.parseToken(b.key).slice(0, 8000) : CO.isCoarena(cur) ? CO.parseKey(b.key) : b.key.trim().slice(0, 500);
   else if (moved) s.key = P[cur]?.key || '';
@@ -221,7 +224,7 @@ function putSettings(c, b) {
   if (b.stepLimit !== undefined) s.stepLimit = !!b.stepLimit;
   if (b.think !== undefined) s.think = !!b.think;
   /* уровень размышления (Coarena): '' — как решит модель */
-  if (b.effort !== undefined) { const e = String(b.effort || ''); if (e && !CO.EFFORTS.includes(e) && !KR.EFFORTS.includes(e)) throw new HttpErr(400, 'Неизвестный уровень размышления'); s.effort = e; }
+  if (b.effort !== undefined) { const e = String(b.effort || ''); if (e && !CO.EFFORTS.includes(e) && !KR.EFFORTS.includes(e) && !AG.EFFORTS.includes(e)) throw new HttpErr(400, 'Неизвестный уровень размышления'); s.effort = e; }
   if (steps !== undefined) s.maxSteps = steps;
   if (!b.clearKey) {
     P[cur] = { key: s.key || '', model: s.model || DEF_SETTINGS.model };
@@ -266,6 +269,19 @@ async function models(c, b) {
       if (a && r.login && a.email !== r.login) { a.email = r.login; c.set.save(); }
       return r;
     } catch (e) { throw new HttpErr(e.status === 401 || e.auth || e.relogin ? 401 : 502, e.human || e.message, { human: true, ...(e.needKey ? { needKey: true } : {}), ...(e.relogin || e.auth ? { relogin: true } : {}) }); }
+  }
+  /* Antigravity: модели аккаунта (что умеют, сколько лимита осталось у каждой), чей аккаунт и план.
+     Доступ подходит к концу — сначала обновляем; Google сказал «истёк» — обновляем и спрашиваем ещё раз */
+  if (AG.isAntigravity(base)) {
+    try {
+      let key = await c.agKey(), r;
+      try { r = await AG.check(key, c.settings().agAuth); }
+      catch (e) { if (!e.auth || !c.settings().agAuth?.rt) throw e; key = await c.agKey(true); r = await AG.check(key, c.settings().agAuth); }
+      return r;
+    } catch (e) {
+      throw new HttpErr(e.status === 401 || e.auth || e.relogin ? 401 : e.verify || e.banned ? 403 : 502, e.human || e.message,
+        { human: true, ...(e.needKey ? { needKey: true } : {}), ...(e.relogin || e.auth ? { relogin: true } : {}), ...(typeof e.verify === 'string' ? { verify: e.verify } : {}) });
+    }
   }
   /* Coarena: модели с уровнями размышления — из открытого каталога, ключ и остаток дневного лимита — по /limits */
   if (CO.isCoarena(base)) {
@@ -372,6 +388,36 @@ async function kiroImport(c, b) {
   catch (e) { throw new HttpErr(e.status === 400 ? 400 : e.relogin ? 401 : 502, e.human || e.message, { human: true }); }
   const login = await kiroSave(c, r.token, r.auth);
   return { ok: true, login };
+}
+
+/* ---------- Antigravity: вход через Google ----------
+   Приложение открывает страницу Google окошком в браузере пользователя; код со страницы localhost:51121 сервер ловит
+   сам (если Personal Computer открыт на этом же компьютере) или получает вставленным адресом (agCode). Дальше —
+   доступ, чей аккаунт, проект Cloud Code (antigravity.js → loginStart, account) */
+async function agSave(c, t, how = 'google') {
+  const info = await AG.account(t.access, {});
+  c.setAgAuth(AG.authFrom(t, { ...info, how }), t.access);
+  return info.email;
+}
+function agLogin(c) {
+  try { return AG.loginStart(c.u.id, t => agSave(c, t)); }
+  catch (e) { throw new HttpErr(502, e.human || e.message, { human: true }); }
+}
+function agCode(c, b) {
+  try { return AG.loginCode(c.u.id, String(b.text || '').slice(0, 8000)); }
+  catch (e) { throw new HttpErr(e.status === 409 ? 409 : 400, e.human || e.message, { human: true }); }
+}
+/* «Токен вручную»: refresh_token или файл входа — проверяем сразу, обновив доступ; проект берём из файла или у Google */
+async function agImport(c, b) {
+  let r, info;
+  try {
+    r = await AG.importAuth(String(b.text || '').slice(0, 50000));
+    const [pj, ui] = await Promise.all([r.auth.project ? { project: r.auth.project } : AG.project(r.token), r.auth.email ? {} : AG.userinfo(r.token).catch(() => ({}))]);
+    info = { ...pj, email: String(ui.email || '').slice(0, 200), name: String(ui.name || '').slice(0, 100) };
+  } catch (e) { throw new HttpErr(e.status === 400 ? 400 : e.relogin ? 401 : e.verify ? 403 : 502, e.human || e.message, { human: true }); }
+  const auth = { ...r.auth, ...Object.fromEntries(Object.entries(info).filter(([, v]) => v)) };
+  c.setAgAuth(auth, r.token);
+  return { ok: true, login: auth.email || '' };
 }
 
 /* вход, который ждёт окна входа (сайт не узнал устройство): 15 минут */
@@ -652,6 +698,14 @@ async function api(req, res, url) {
       if (M === 'DELETE') { KR.loginStop(u.id); return json(res, 200, { ok: true }); }
       break;
     case '/api/kiro/import': if (M === 'POST') return json(res, 200, await kiroImport(chat, await jbody(req))); break;
+    /* Antigravity: вход через Google (начать, как идёт, вставить адрес со страницы localhost, отменить) и токен вручную */
+    case '/api/antigravity/login':
+      if (M === 'POST') return json(res, 200, agLogin(chat));
+      if (M === 'GET') return json(res, 200, AG.loginOf(u.id));
+      if (M === 'PUT') return json(res, 200, agCode(chat, await jbody(req)));
+      if (M === 'DELETE') { AG.loginStop(u.id); return json(res, 200, { ok: true }); }
+      break;
+    case '/api/antigravity/import': if (M === 'POST') return json(res, 200, await agImport(chat, await jbody(req))); break;
     case '/api/qwen/login':
       if (M === 'POST') return json(res, 200, await qwenLogin(chat, await jbody(req)));
       if (M === 'DELETE') { delete chat.set.v.qwAuth; chat.set.save(); return json(res, 200, pubSettings(chat)); }
