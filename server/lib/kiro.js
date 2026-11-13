@@ -311,23 +311,92 @@ export async function check(token, a) {
 /* ====================================================================================================
    Запрос к модели
    ==================================================================================================== */
-/* JSON Schema инструмента: Kiro не принимает additionalProperties, пустой required и служебные $-поля */
+/* JSON Schema инструмента → то, что примет Kiro, а за ним Bedrock (строгая проверка по JSON Schema draft 2020-12).
+   Kiro не принимает additionalProperties, пустой required и служебные $-поля. Ссылки $ref на $defs/definitions
+   подставляем на место (схема становится самодостаточной, сами $defs не нужны: раньше в них по ошибке попадал
+   type: 'object', и Bedrock отвергал всю схему — так было с send_feedback у поиска Parallel). Схемы — только значения
+   ключей-схем (properties, items, anyOf…); default, enum, const, examples — данные, их не трогаем. Ключи старых
+   черновиков переводим (exclusiveMinimum: true, items-массив, required: true у свойства, nullable), а неизвестные и
+   испорченные (не того типа) — отбрасываем */
+const SUB_ONE = new Set(['contains', 'not', 'if', 'then', 'else', 'propertyNames', 'unevaluatedItems']);
+const SUB_LIST = new Set(['anyOf', 'oneOf', 'allOf']);
+const SUB_MAP = new Set(['properties', 'patternProperties', 'dependentSchemas']);
+const KW_NUM = new Set(['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf']);
+const KW_INT = new Set(['minLength', 'maxLength', 'minItems', 'maxItems', 'minProperties', 'maxProperties', 'minContains', 'maxContains']);
+const KW_STR = new Set(['title', 'description', 'pattern', 'format', 'contentMediaType', 'contentEncoding']);
+const KW_BOOL = new Set(['uniqueItems', 'deprecated', 'readOnly', 'writeOnly']);
+const TYPES = new Set(['string', 'number', 'integer', 'boolean', 'object', 'array', 'null']);
+const isObj = x => !!x && typeof x === 'object' && !Array.isArray(x);
 export function cleanSchema(s) {
-  if (!s || typeof s !== 'object' || Array.isArray(s)) return { type: 'object', properties: {} };
-  const out = {};
-  for (const [k, v] of Object.entries(s)) {
-    if (k === 'additionalProperties' || k === '$schema' || k === '$id' || (k === 'required' && Array.isArray(v) && !v.length)) continue;
-    if (k === 'properties' && v && typeof v === 'object' && !Array.isArray(v)) out[k] = Object.fromEntries(Object.entries(v).map(([n, p]) => [n, cleanSchema(p)]));
-    else if (Array.isArray(v)) out[k] = v.map(x => x && typeof x === 'object' && !Array.isArray(x) ? cleanSchema(x) : x);
-    else if (v && typeof v === 'object') out[k] = cleanSchema(v);
-    else out[k] = v;
-  }
-  if (!out.type && !out.anyOf && !out.oneOf && !out.$ref) out.type = 'object';
+  const root = isObj(s) ? s : {};
+  let budget = 5000; /* сколько узлов можно развернуть: ссылки друг на друга не раздуют схему без меры */
+  /* #/$defs/Имя, #/definitions/Имя и любой путь внутри схемы (JSON Pointer) */
+  const at = ref => {
+    if (typeof ref !== 'string' || !ref.startsWith('#')) return undefined;
+    let o = root;
+    for (const p of ref.slice(1).split('/').slice(1)) {
+      let k; try { k = decodeURIComponent(p).replace(/~1/g, '/').replace(/~0/g, '~'); } catch { return undefined; }
+      if (!o || typeof o !== 'object' || !Object.hasOwn(o, k)) return undefined;
+      o = o[k];
+    }
+    return o;
+  };
+  const walk = (n, refs) => {
+    budget--;
+    if (n === false) return { not: {} };
+    if (!isObj(n)) return {}; /* true, пусто, мусор — «что угодно» */
+    if (typeof n.$ref === 'string') {
+      const { $ref, ...own } = n, t = budget > 0 && !refs.includes($ref) ? at($ref) : undefined;
+      /* ссылка на себя (дерево) или неизвестная — «что угодно»; соседние ключи важнее подставленных */
+      return { ...(t === undefined ? {} : walk(t, [...refs, $ref])), ...walk(own, refs) };
+    }
+    const out = {}, req = [];
+    for (const [k, v] of Object.entries(n)) {
+      if (SUB_MAP.has(k)) {
+        if (!isObj(v)) continue;
+        out[k] = Object.fromEntries(Object.entries(v).map(([p, x]) => { if (k === 'properties' && x?.required === true) req.push(p); return [p, walk(x, refs)]; }));
+      } else if (SUB_LIST.has(k)) { if (Array.isArray(v) && v.length) out[k] = v.map(x => walk(x, refs)); }
+      else if (SUB_ONE.has(k)) out[k] = walk(v, refs);
+      else if (k === 'items') {
+        if (!Array.isArray(v)) out.items = walk(v, refs);
+        else if (v.length) { out.prefixItems = v.map(x => walk(x, refs)); if (isObj(n.additionalItems) || n.additionalItems === false) out.items = walk(n.additionalItems, refs); }
+      } else if (k === 'prefixItems') { if (Array.isArray(v) && v.length) out.prefixItems = v.map(x => walk(x, refs)); }
+      else if (k === 'type') { const t = [...new Set((Array.isArray(v) ? v : [v]).filter(x => TYPES.has(x)))]; if (t.length) out.type = t.length === 1 ? t[0] : t; }
+      else if (k === 'required') { if (Array.isArray(v)) req.push(...v.filter(x => typeof x === 'string')); }
+      else if (k === 'enum') { if (Array.isArray(v) && v.length) out.enum = v; }
+      else if (k === 'examples') { if (Array.isArray(v)) out.examples = v; }
+      else if (k === 'default' || k === 'const') out[k] = v;
+      else if (k === 'dependentRequired') { if (isObj(v)) out[k] = Object.fromEntries(Object.entries(v).filter(([, x]) => Array.isArray(x)).map(([p, x]) => [p, [...new Set(x.filter(y => typeof y === 'string'))]])); }
+      else if (KW_NUM.has(k)) { if (typeof v === 'number' && Number.isFinite(v)) out[k] = v; }
+      else if (KW_INT.has(k)) { if (Number.isInteger(v) && v >= 0) out[k] = v; }
+      else if (KW_STR.has(k)) { if (typeof v === 'string') out[k] = v; }
+      else if (KW_BOOL.has(k)) { if (typeof v === 'boolean') out[k] = v; }
+      /* остальное — additionalProperties (Kiro не принимает), $defs (подставлены), $schema, $id и чужие ключи — не передаём */
+    }
+    if (req.length) out.required = [...new Set(req)];
+    /* draft-04: exclusiveMinimum: true рядом с minimum */
+    for (const [ex, lim] of [['exclusiveMinimum', 'minimum'], ['exclusiveMaximum', 'maximum']]) if (n[ex] === true && typeof out[lim] === 'number') { out[ex] = out[lim]; delete out[lim]; }
+    /* OpenAPI: nullable: true */
+    if (n.nullable === true && out.type && ![].concat(out.type).includes('null')) out.type = [...[].concat(out.type), 'null'];
+    return out;
+  };
+  const out = walk(root, []);
+  /* верх — всегда объект со свойствами (так требует API) */
+  out.type = 'object';
+  if (!isObj(out.properties)) out.properties = {};
   return out;
 }
-const spec = t => {
-  const f = t.function || t, d = String(f.description || '').trim() || 'Инструмент ' + f.name;
-  return { toolSpecification: { name: f.name, description: d.length > 9500 ? d.slice(0, 9500) + '…' : d, inputSchema: { json: cleanSchema(f.parameters) } } };
+/* запасная схема, если Kiro не принял настоящую: level 1 — только имена и описания параметров, 2 — без параметров */
+export function plainSchema(s, level = 1) {
+  const pr = level < 2 && isObj(s?.properties) ? Object.entries(s.properties).filter(([n]) => /^[\w.-]{1,64}$/.test(n)) : [];
+  const simple = t => typeof t === 'string' && TYPES.has(t) && t !== 'null' ? { type: t } : {};
+  const props = Object.fromEntries(pr.map(([n, p]) => [n, { ...simple(p?.type), ...(typeof p?.description === 'string' ? { description: p.description.slice(0, 2000) } : {}) }]));
+  const req = Array.isArray(s?.required) ? s.required.filter(n => Object.hasOwn(props, n)) : [];
+  return { type: 'object', properties: props, ...(req.length ? { required: req } : {}) };
+}
+const spec = (t, plain = 0) => {
+  const f = t.function || t, d = String(f.description || '').trim() || 'Инструмент ' + f.name, json = cleanSchema(f.parameters);
+  return { toolSpecification: { name: f.name, description: d.length > 9500 ? d.slice(0, 9500) + '…' : d, inputSchema: { json: plain ? plainSchema(json, plain) : json } } };
 };
 const argsObj = s => { if (s && typeof s === 'object' && !Array.isArray(s)) return s; const j = jparse(String(s || '').trim() || '{}'); return j && typeof j === 'object' && !Array.isArray(j) ? j : {}; };
 const textOf = c => typeof c === 'string' ? c : Array.isArray(c) ? c.filter(p => p && (p.type === 'text' || typeof p.text === 'string')).map(p => p.text || '').join('\n') : c == null ? '' : String(c);
@@ -408,7 +477,7 @@ export function build({ sys = '', msgs = [], tools = [], model, think = false, e
   const cm = um(curU, directive);
   const ctx = cm.userInputMessage.userInputMessageContext ||= {};
   /* инструменты — у текущего хода; выключили все, а в истории вызовы остались — Kiro всё равно нужна их схема */
-  let specs = (tools || []).filter(t => (t.function || t)?.name).map(spec);
+  let specs = (tools || []).filter(t => (t.function || t)?.name).map(t => spec(t, PLAIN.get(plainKey(t)) || 0));
   if (!specs.length) {
     const names = [...new Set(history.flatMap(h => (h.assistantResponseMessage?.toolUses || []).map(x => x.name)))];
     specs = names.map(n => ({ toolSpecification: { name: n, description: 'Инструмент ' + n + ' (сейчас выключен)', inputSchema: { json: { type: 'object', properties: {} } } } }));
@@ -421,6 +490,9 @@ export function build({ sys = '', msgs = [], tools = [], model, think = false, e
 }
 /* модели, которые не приняли additionalModelRequestFields — дальше без него (размышление остаётся через <thinking_mode>) */
 const NOEXTRA = new Set();
+/* инструменты, чью схему Kiro не принял: насколько её упростить (plainSchema) — по имени и самой схеме */
+const PLAIN = new Map();
+const plainKey = t => { const f = t.function || t; return f.name + ':' + crypto.createHash('sha1').update(JSON.stringify(f.parameters ?? null)).digest('hex').slice(0, 16); };
 
 /* ---------- ошибки Kiro → человеческий текст ----------
    status, j — ответ API; флаги: auth — обновить доступ и повторить, long — переписка не влезла (ужать и повторить),
@@ -430,6 +502,10 @@ export function fail(status, j, t, model) {
   const msg = String(j?.message || j?.Message || j?.error_description || '').slice(0, 400), reason = String(j?.reason || j?.__type || j?.code || ''), all = msg + ' ' + reason + ' ' + String(t || '').slice(0, 400);
   const o = { status, detail: ('HTTP ' + status + ' ' + (reason ? reason + ': ' : '') + msg).trim().slice(0, 300) };
   if (isTokenErr(status, j, t)) return E('Доступ Kiro истёк.', { ...o, auth: true });
+  /* Bedrock не принял схему инструмента: «tools.13.custom.input_schema: JSON schema is invalid» — turn упростит её и повторит */
+  const bad = /tools\.(\d+)\.(?:custom\.)?input_schema/i.exec(all);
+  if (bad || /TOOL_SCHEMA_INVALID/i.test(all))
+    return E('Kiro не принял описание одного из инструментов. Выключи лишние инструменты MCP в настройках → Инструменты или начни новый чат.', { ...o, badTool: bad ? +bad[1] : -1 });
   if (/profileArn is required/i.test(all))
     return E('Kiro не принимает этот вход без профиля Kiro (так бывает со входом через AWS Builder ID). Войди заново: настройки → Модель → Kiro → «Войти через Google», «GitHub» или «По email».', o);
   if (/version of Kiro is no longer supported|update to the latest version/i.test(all))
@@ -569,7 +645,7 @@ async function readStream(r, { model, onText, poke }) {
    Ужимает переписку, если не влезла; временные сбои повторяет сам (пока пользователь ничего не увидел).
    Доступ истёк — ошибка с auth: агент обновляет его и зовёт снова */
 export async function turn({ token, auth, model, sys, tools = [], msgs = [], think, effort, conv, signal, onText }) {
-  let shrink = 0, extra = true, wasted = 0, tries = 0, rever = false;
+  let shrink = 0, extra = true, wasted = 0, tries = 0, rever = false, fixes = 0;
   await ideVersion();
   for (;;) {
     const body = build({ sys, msgs, tools, model, think, effort, conv, auth, shrink, extra });
@@ -595,6 +671,18 @@ export async function turn({ token, auth, model, sys, tools = [], msgs = [], thi
         if (e.extra && extra) { extra = false; NOEXTRA.add(model); continue; }
         /* Kiro сказал «версия устарела» — узнаём свежую и повторяем (один раз) */
         if (e.outdated && !rever) { rever = true; const was = ide(); if (await ideVersion(true) !== was) continue; }
+        /* Kiro не принял схему инструмента: упрощаем её (сначала — только имена и описания параметров, потом — без
+           параметров) и повторяем; номер не назван — упрощаем все. Запоминаем, чтобы следующие шаги не спотыкались */
+        if (e.badTool !== undefined && fixes < 8) {
+          const sent = (tools || []).filter(t => (t.function || t)?.name), bad = e.badTool >= 0 ? [sent[e.badTool]].filter(Boolean) : fixes ? [] : sent;
+          const up = bad.filter(t => (PLAIN.get(plainKey(t)) || 0) < 2);
+          if (up.length) {
+            if (PLAIN.size > 500) PLAIN.clear();
+            for (const t of up) { PLAIN.set(plainKey(t), (PLAIN.get(plainKey(t)) || 0) + 1); console.warn('kiro: схема инструмента ' + (t.function || t).name + ' не принята — упрощаю: ' + e.detail); }
+            fixes++; continue;
+          }
+          if (bad.length === 1) e.human = e.message = 'Kiro не принял описание инструмента «' + (bad[0].function || bad[0]).name + '». Выключи его: настройки → Инструменты.';
+        }
       }
       const net = !e.human && (e instanceof TypeError || idle.signal.aborted || e.name === 'AbortError');
       if ((net || e.retry) && !streamed && tries < 3) {
