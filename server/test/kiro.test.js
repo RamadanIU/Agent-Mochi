@@ -13,7 +13,22 @@ const MODELS = [
   { modelId: 'glm-5', modelName: 'GLM-5', rateMultiplier: 0, supportedInputTypes: ['TEXT'] },
 ];
 let m, srv, url;
-const S = { gen: [], refresh: 0, polls: 0, oidcPolls: 0, script: [], access: 'aoaACCESS1', gone: false, ver: '2.0.0', need: '', providers: [] };
+const S = { gen: [], refresh: 0, polls: 0, oidcPolls: 0, script: [], access: 'aoaACCESS1', gone: false, ver: '2.0.0', need: '', providers: [], strict: null };
+/* схема не по draft 2020-12 (то, на чём спотыкается Bedrock): там, где ждут схему, — не объект и не true/false */
+const isSchema = x => typeof x === 'boolean' || (!!x && typeof x === 'object' && !Array.isArray(x));
+function schemaBad(s) {
+  if (typeof s === 'boolean') return false;
+  if (!isSchema(s)) return true;
+  for (const [k, v] of Object.entries(s)) {
+    if (['properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas'].includes(k) && (!isSchema(v) || Object.values(v).some(schemaBad))) return true;
+    if (['items', 'additionalProperties', 'not', 'if', 'then', 'else', 'contains', 'propertyNames'].includes(k) && schemaBad(v)) return true;
+    if (['anyOf', 'oneOf', 'allOf', 'prefixItems'].includes(k) && (!Array.isArray(v) || !v.length || v.some(schemaBad))) return true;
+    if (k === 'type' && ![].concat(v).every(t => ['string', 'number', 'integer', 'boolean', 'object', 'array', 'null'].includes(t))) return true;
+    if (['exclusiveMinimum', 'exclusiveMaximum', 'minimum', 'maximum'].includes(k) && typeof v !== 'number') return true;
+    if (k === 'required' && !(Array.isArray(v) && v.every(x => typeof x === 'string'))) return true;
+  }
+  return false;
+}
 
 before(async () => {
   srv = http.createServer(async (q, s) => {
@@ -59,6 +74,12 @@ before(async () => {
       if (!authed()) return json(403, { message: 'The bearer token included in the request is invalid.', reason: null });
       /* как у настоящего Kiro: старой версии IDE — отказ */
       if (S.need && !String(q.headers['user-agent']).includes('KiroIDE-' + S.need + '-')) { S.script.unshift(step); return json(400, { message: 'This version of Kiro is no longer supported. Please update to the latest version of Kiro to continue.', reason: null }); }
+      /* как Bedrock: схемы инструментов проверяются строго (draft 2020-12) — в $defs, properties и т. п. только схемы;
+         S.strict — инструмент, у которого «не принимается» всё, кроме type и description параметров (always — вообще всё) */
+      const ts = j.conversationState?.currentMessage?.userInputMessage?.userInputMessageContext?.tools || [];
+      const bi = ts.findIndex(t => schemaBad(t.toolSpecification.inputSchema.json) || (S.strict && t.toolSpecification.name === S.strict.name
+        && (S.strict.always || Object.values(t.toolSpecification.inputSchema.json.properties || {}).some(p => Object.keys(p).some(k => k !== 'type' && k !== 'description')))));
+      if (bi >= 0) { S.script.unshift(step); return json(400, { message: 'Bedrock error message: The model returned the following errors: tools.' + bi + '.custom.input_schema: JSON schema is invalid. It must match JSON Schema draft 2020-12 (https://json-schema.org/draft/2020-12).', reason: 'TOOL_SCHEMA_INVALID' }); }
       if (step.err) return json(step.err, { message: step.msg || 'x', reason: step.reason || null });
       s.writeHead(200, { 'content-type': 'application/vnd.amazon.eventstream' });
       const fr = [];
@@ -172,6 +193,48 @@ test('чат: родные инструменты, размышление с у�
   assert.ok(!JSON.stringify(log).includes('Посмотрю сервер'));
   const th = (await c.json('/api/chat/thoughts', undefined, 'GET')).j.list;
   assert.equal(th[0].text, 'Посмотрю сервер.'); assert.deepEqual(th[0].tools, ['Смотрю']);
+});
+
+test('схемы инструментов: $defs подставляются (send_feedback у поиска), старые черновики переводятся; не принятую — упрощаем и повторяем', async () => {
+  /* как send_feedback у Parallel Search: раньше в $defs попадал type: 'object' — Bedrock отвергал всю схему (tools.13) */
+  const fb = { type: 'object', title: 'send_feedback_toolArguments', additionalProperties: false, required: ['message'],
+    properties: { message: { type: 'string', minLength: 20 }, examples: { anyOf: [{ type: 'array', items: { $ref: '#/$defs/Ex' }, maxItems: 50 }, { type: 'null' }], default: null } },
+    $defs: { Ex: { type: 'object', properties: { id: { type: 'string', pattern: '^[A-Za-z0-9_-]+$' } }, required: ['id'], additionalProperties: false } } };
+  const c = K.cleanSchema(fb);
+  assert.ok(!schemaBad(c));
+  assert.equal(c.$defs, undefined);
+  assert.deepEqual(c.properties.examples, { anyOf: [{ type: 'array', items: { type: 'object', properties: { id: { type: 'string', pattern: '^[A-Za-z0-9_-]+$' } }, required: ['id'] }, maxItems: 50 }, { type: 'null' }], default: null });
+  /* draft-04 и draft-07: exclusiveMinimum: true, items-массив, required: true у свойства; enum без type не становится объектом */
+  assert.deepEqual(K.cleanSchema({ properties: { n: { type: 'number', minimum: 0, exclusiveMinimum: true }, p: { type: 'array', items: [{ type: 'number' }] }, e: { enum: ['a', 'b'] }, r: { type: 'string', required: true }, d: { type: 'any', default: { x: 1 } } } }),
+    { type: 'object', properties: { n: { type: 'number', exclusiveMinimum: 0 }, p: { type: 'array', prefixItems: [{ type: 'number' }] }, e: { enum: ['a', 'b'] }, r: { type: 'string' }, d: { default: { x: 1 } } }, required: ['r'] });
+  /* ссылка сама на себя (дерево) — дальше «что угодно», без бесконечности */
+  const tree = K.cleanSchema({ type: 'object', properties: { t: { $ref: '#/definitions/N' } }, definitions: { N: { type: 'object', properties: { kids: { type: 'array', items: { $ref: '#/definitions/N' } } } } } });
+  assert.deepEqual(tree.properties.t, { type: 'object', properties: { kids: { type: 'array', items: {} } } });
+
+  /* Kiro (Bedrock) всё-таки не принял схему — сначала только имена и описания параметров, и это запоминается */
+  const env = { PERSONALCOMPUTER_KIRO_API_URL: url, PERSONALCOMPUTER_KIRO_IDE_VERSION: S.ver }, was = {};
+  for (const k in env) { was[k] = process.env[k]; process.env[k] = env[k]; }
+  try {
+    const tools = [
+      { type: 'function', function: { name: 'run_command', description: 'команда', parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } } },
+      { type: 'function', function: { name: 'picky', description: 'капризный', parameters: { type: 'object', properties: { mode: { type: 'string', enum: ['a', 'b'], description: 'режим' } }, required: ['mode'] } } },
+    ];
+    const go = () => K.turn({ token: S.access, auth: { arn: ARN }, model: 'claude-sonnet-4.5', tools, msgs: [{ role: 'user', content: 'привет' }], conv: 'schema-test' });
+    S.strict = { name: 'picky' }; S.gen.length = 0; S.script = [{ text: 'Готово' }];
+    assert.equal((await go()).text, 'Готово');
+    assert.equal(S.gen.length, 2);
+    const sch = n => S.gen.at(-1).body.conversationState.currentMessage.userInputMessage.userInputMessageContext.tools.find(t => t.toolSpecification.name === n).toolSpecification.inputSchema.json;
+    assert.deepEqual(sch('picky'), { type: 'object', properties: { mode: { type: 'string', description: 'режим' } }, required: ['mode'] });
+    assert.deepEqual(sch('run_command'), { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] }, 'остальные инструменты не трогаем');
+    S.gen.length = 0; S.script = [{ text: 'Снова' }];
+    assert.equal((await go()).text, 'Снова');
+    assert.equal(S.gen.length, 1, 'упрощённая схема запомнилась — лишнего запроса нет');
+    /* не принял и совсем простую — понятная ошибка с именем инструмента */
+    S.strict = { name: 'picky', always: true }; S.gen.length = 0; S.script = [{ text: 'никогда' }];
+    await assert.rejects(go(), e => /«picky».*настройки → Инструменты/.test(e.human));
+    assert.equal(S.gen.length, 2);
+    assert.match(K.fail(400, { message: 'Bedrock error message: tools.3.custom.input_schema: JSON schema is invalid.', reason: 'TOOL_SCHEMA_INVALID' }, '', 'm').badTool + '', /^3$/);
+  } finally { for (const k in env) { if (was[k] === undefined) delete process.env[k]; else process.env[k] = was[k]; } S.strict = null; S.script = []; }
 });
 
 test('доступ истёк посреди работы — обновляется сам и запрос повторяется; переписка не влезла — ужимается', async () => {
