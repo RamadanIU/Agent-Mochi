@@ -16,6 +16,7 @@ import { isDeepSeek, turn as dsTurn, ask as dsAsk, parseToken as dsParse, signin
 import { unseal } from './store.js';
 import * as CO from './coarena.js';
 import * as KR from './kiro.js';
+import * as AG from './antigravity.js';
 import { deviceId as dsDeviceId } from './webcheck.js';
 /* веб-чаты по токену аккаунта (Qwen, DeepSeek): свой протокол, история живёт на сайте, файлы уходят туда целиком */
 const isWeb = base => isQwen(base) || isDeepSeek(base);
@@ -376,6 +377,12 @@ export class Chat extends EventEmitter {
         if (t && !m.named && !m.del) { Object.assign(m, { title: t, named: 1 }); this.metaChanged(); }
         return;
       }
+      /* Antigravity: короткий вопрос быстрой моделью Gemini Flash, у которой ещё есть лимит */
+      if (AG.isAntigravity(S.base)) {
+        const t = cleanTitle(await AG.ask({ token: await this.agKey(), auth: this.settings().agAuth, model: S.model, prompt: TITLE_SYS + '\n\n' + text, signal: AbortSignal.timeout(90000) }));
+        if (t && !m.named && !m.del) { Object.assign(m, { title: t, named: 1 }); this.metaChanged(); }
+        return;
+      }
       if (isWeb(S.base)) {
         const q = { model: S.model, prompt: TITLE_SYS + '\n\n' + text, signal: AbortSignal.timeout(90000) };
         const t = cleanTitle(isQwen(S.base) ? await qwenAsk({ key: await this.qwenKey(), ...this.qwState(), ...q }) : await dsAsk({ key: this.dsToken(), ...this.dsState(), ...q }));
@@ -458,15 +465,15 @@ export class Chat extends EventEmitter {
 
   /* в запрос уходят вложения трёх последних сообщений с файлами; уровень отката: 1 — без PDF, 2 — без всего */
   wire() {
-    const S = this.settings(), H = this.doc.v.hist, lvl = S.vis === false ? 2 : this.noVis, co = CO.isCoarena(S.base), key = rsKey(S);
+    const S = this.settings(), H = this.doc.v.hist, lvl = S.vis === false ? 2 : this.noVis, co = CO.isCoarena(S.base), ag = AG.isAntigravity(S.base), key = rsKey(S);
     const rec = new Set(H.map((m, i) => m._pf ? i : -1).filter(i => i >= 0).slice(-3));
     const us = H.map((m, i) => m.role === 'user' ? i : -1).filter(i => i >= 0), from = us.length > 40 ? us[us.length - 40] : 0;
     const out = [];
     for (let i = from; i < H.length; i++) {
       const { _pf, _vi, _mid, _qw, _ds, _fl, _rs, ...m } = H[i];
-      /* размышления модели (Coarena): возвращаем их той же модели того же провайдера — без них
+      /* размышления модели (Coarena, Antigravity): возвращаем их той же модели того же провайдера — без них
          думающая модель теряет нить между вызовами инструментов, а чужой модели они ни к чему */
-      if (_rs && co && _rs.b === key) Object.assign(m, _rs.f);
+      if (_rs && (co || ag) && _rs.b === key) Object.assign(m, _rs.f);
       /* Ollama не принимает историю, где аргументы вызова — не JSON-объект (обрезаны или пустые): шлём {} — модель и так получила ошибку */
       if (m.tool_calls) m.tool_calls = m.tool_calls.map(c => argsOk(c.function.arguments) ? c : { ...c, function: { ...c.function, arguments: '{}' } });
       if (_pf && lvl < 2 && rec.has(i)) {
@@ -751,6 +758,7 @@ export class Chat extends EventEmitter {
     if (FILE_TOOLS.has(nm)) return await this.fileTool(nm, a, sig);
     if (nm === 'view_image') {
       if (KR.isKiro(this.settings().base) && KR.modelInfo(this.settings().model)?.img === false) return 'Ошибка: эта модель Kiro не видит картинки — смотреть нечем. Опиши файл по метаданным (run_command: file, identify) или скажи пользователю, что для картинок нужна модель Claude.';
+      if (AG.isAntigravity(this.settings().base) && AG.modelInfo(this.settings().model)?.img === false) return 'Ошибка: эта модель Antigravity не видит картинки — смотреть нечем. Опиши файл по метаданным (run_command: file, identify) или скажи пользователю, что для картинок нужна модель Gemini или Claude.';
       if (!isWeb(this.settings().base) && (this.settings().vis === false || this.noVis >= 2)) return 'Ошибка: эта модель не видит картинки (или зрение выключено в настройках) — смотреть нечем. Опиши файл по метаданным (run_command: file, identify) или скажи пользователю, что нужна модель со зрением.';
       if (!String(a.path || '').trim()) return 'Ошибка: нет параметра path';
       if (imgs.length >= 5) return 'Ошибка: за один шаг — не больше 5 картинок; остальные открой следующим шагом';
@@ -902,6 +910,32 @@ export class Chat extends EventEmitter {
         }
       }
     }
+    /* Antigravity (Google): свой API (как у самого Antigravity) с родными инструментами; доступ живёт час — обновляем
+       заранее, а если Google сказал «доступ истёк» — обновляем и повторяем; проект не пустил — узнаём проект заново.
+       Всё это — пока пользователь ничего не увидел */
+    if (AG.isAntigravity(S.base)) {
+      let again = false, proj = false;
+      for (;;) {
+        const key = await this.agKey(again);
+        if (!key) throw Object.assign(new Error('нет входа в Antigravity'), { human: 'Сначала войди в Antigravity: настройки → Модель → «Antigravity (Google)» → «Войти через Google».', detail: '' });
+        this.partial = '';
+        try {
+          return await AG.turn({ token: key, auth: this.settings().agAuth, model: S.model, sys, tools, msgs: this.wire(), effort: S.effort,
+            conv: this.u.id + ':' + this.cid, signal: sig, onText: d => { this.partial += d; this.emit('delta', d, this.cid); } });
+        } catch (e) {
+          if (sig.aborted || this.partial) throw e;
+          if (e.project && !proj) {
+            proj = true;
+            const a = this.settings().agAuth, p = await AG.project(key).catch(() => null);
+            if (p && a && p.project !== a.project) { this.setAgAuth({ ...a, project: p.project, tier: p.tier || a.tier }); continue; }
+            throw e;
+          }
+          if (!e.auth) throw e;
+          if (again || !this.settings().agAuth?.rt) throw Object.assign(e, { human: (e.status === 403 && !/истёк/.test(e.human || '') ? e.human : 'Доступ к Antigravity истёк, а обновить его не вышло.') + ' Войди снова: настройки → Модель → Antigravity.' });
+          again = true;
+        }
+      }
+    }
     /* Coarena: каталог моделей нужен до запроса — уровни размышления и потолок ответа у каждой модели свои */
     const co = CO.isCoarena(S.base);
     if (co) await CO.catalog().catch(e => console.warn('coarena:', e.message));
@@ -1011,6 +1045,31 @@ export class Chat extends EventEmitter {
     if (token !== undefined) {
       if (KR.isKiro(s.base)) s.key = token;
       P[KR.KR_BASE] = { ...(P[KR.KR_BASE] || {}), key: token, model: P[KR.KR_BASE]?.model || (KR.isKiro(s.base) ? s.model : '') || '' };
+    }
+    this.set.save();
+  }
+
+  /* ---------- доступ к Antigravity: живёт час, обновляем по refresh-токену (antigravity.js → refresh) ----------
+     Как у Kiro: меньше 5 минут — обновляем перед запросом; force — Google сказал «доступ истёк» */
+  agToken() { const S = this.settings(); return AG.isAntigravity(S.base) ? S.key : (S.provs || {})[AG.AG_BASE]?.key || ''; }
+  async agKey(force) {
+    const a = this.settings().agAuth, key = this.agToken();
+    if (!a?.rt) return key;
+    if (!force && key && AG.tokenLeft(a) > 300e3) return key;
+    if (!this.agRenew) this.agRenew = (async () => {
+      try { const r = await AG.refresh(a); this.setAgAuth(r.auth, r.token); return r.token; }
+      finally { this.agRenew = null; }
+    })();
+    try { return await this.agRenew; }
+    catch (e) { if (!force && !e.relogin && key && AG.tokenLeft(a) > 0) return key; throw e; }
+  }
+  /* вход в Antigravity: auth — что нужно для обновления (agAuth), token — сам доступ (ключ провайдера) */
+  setAgAuth(auth, token) {
+    const s = this.set.v, P = s.provs ||= {};
+    if (auth) s.agAuth = auth;
+    if (token !== undefined) {
+      if (AG.isAntigravity(s.base)) s.key = token;
+      P[AG.AG_BASE] = { ...(P[AG.AG_BASE] || {}), key: token, model: P[AG.AG_BASE]?.model || (AG.isAntigravity(s.base) ? s.model : '') || '' };
     }
     this.set.save();
   }

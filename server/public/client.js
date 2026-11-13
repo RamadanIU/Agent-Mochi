@@ -673,7 +673,7 @@ $('#c-save').onclick = async () => {
   try { window.personalComputerRoom && personalComputerRoom.sndUI(); } catch (x) {}
   if (!cfg.tts && window.personalComputerStop) personalComputerStop();
   const body = { base: $('#c-base').value.trim(), model: $('#c-model').value.trim(), sys: $('#c-sys').value.trim(), vis: $('#c-vis').checked, think: $('#c-think').checked, ...st };
-  if (isCo(body.base) || (isKr(body.base) && !$('#f-effort').hidden)) body.effort = $('#c-effort').value;
+  if (isCo(body.base) || ((isKr(body.base) || isAg(body.base)) && !$('#f-effort').hidden)) body.effort = $('#c-effort').value;
   const k = $('#c-key').value.trim();
   if (k) body.key = k; else if (clearKey) body.clearKey = true;
   try {
@@ -691,6 +691,7 @@ function qwThink() {
   if (m && m.must) c.checked = true; else if (m && !m.think) c.checked = false;
   s.textContent = m && m.must ? 'Эта модель всегда сначала думает' : m && !m.think ? 'Эта модель отвечает сразу, без размышлений' : THINK_SUB;
   if (isKr($('#c-base').value)) { coEffort(); krHint(); }
+  if (isAg($('#c-base').value)) { coEffort(); agHint(); }
 }
 mi().addEventListener('input', qwThink); mi().addEventListener('change', qwThink);
 $('#ml').addEventListener('click', () => setTimeout(qwThink));
@@ -699,8 +700,17 @@ let coInfo = {};
 window.coNames = { none: 'Без размышлений', minimal: 'Минимальный', low: 'Низкий', medium: 'Средний', high: 'Высокий', xhigh: 'Очень высокий', max: 'Максимальный' };
 window.coInfoOf = () => coInfo[mi().value.trim()] || null;
 /* Kiro: глубина — из умений выбранной модели, и только когда размышление включено */
-const krNames = { low: 'Низкая', medium: 'Средняя', high: 'Высокая', xhigh: 'Очень высокая', max: 'Максимальная' };
+const krNames = { minimal: 'Минимальная', low: 'Низкая', medium: 'Средняя', high: 'Высокая', xhigh: 'Очень высокая', max: 'Максимальная' };
 window.coEffort = () => {
+  /* Antigravity: глубина — из умений выбранной модели; переключателя нет — думают почти все модели, а у тех, где уровень
+     записан в названии («High», «Low»), его выбирает сам Google */
+  if (isAg($('#c-base').value)) {
+    const sel = $('#c-effort'), m = qwInfoOf(), list = m && m.efforts ? m.efforts : [];
+    sel.textContent = ''; for (const e of list) sel.add(new Option(krNames[e] || e, e));
+    sel.value = list.includes(effortVal) ? effortVal : list.includes('medium') ? 'medium' : list.includes('high') ? 'high' : list[0] || '';
+    $('#f-effort').hidden = !list.length;
+    return;
+  }
   if (isKr($('#c-base').value)) {
     const sel = $('#c-effort'), m = qwInfoOf(), list = m && m.efforts ? m.efforts : [], c = $('#c-think');
     sel.textContent = ''; for (const e of list) sel.add(new Option(krNames[e] || e, e));
@@ -774,7 +784,7 @@ $('#c-qmail').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $(
 $('#wa-out').onclick = async () => {
   const base = $('#c-base').value.trim().replace(/\/+$/, ''), w = webOf(base); if (!w) return;
   const act = base === String(srvSet?.base || '').replace(/\/+$/, '');
-  if (!await ask(w.name, 'Отключить аккаунт ' + w.name + '? ' + (w.kiro ? 'Доступ и ключ его обновления' : 'Токен' + (w === WEB.ds ? ', логин, пароль и cookies сайта' : w.pw ? ', email и хеш пароля' : '')) + ' сотрутся с сервера.' + (act ? ' Сейчас Personal Computer работает через него — без аккаунта модель отвечать не будет.' : ''), null, 'Отключить')) return;
+  if (!await ask(w.name, 'Отключить аккаунт ' + w.name + '? ' + (w.kiro || w.ag ? 'Доступ и ключ его обновления' : 'Токен' + (w === WEB.ds ? ', логин, пароль и cookies сайта' : w.pw ? ', email и хеш пароля' : '')) + ' сотрутся с сервера.' + (act ? ' Сейчас Personal Computer работает через него — без аккаунта модель отвечать не будет.' : ''), null, 'Отключить')) return;
   try {
     srvSet = await api('api/settings', { method: 'PUT', json: { forget: base } });
     provSaved = Object.fromEntries((srvSet.provs || []).map(p => [p.base, p])); provOpts();
@@ -804,6 +814,28 @@ loadModels = async function () {
       if (e.j && e.j.needKey) { waState('none'); krResume(false); return; }
       waState('bad', { msg: e.message });
       krResume(false);
+    }
+    return;
+  }
+  /* Antigravity: аккаунт, план и лимиты — в карточке, модели — с умениями и остатком лимита у каждой */
+  if (isAg(base)) {
+    qwInfo = {}; waState('wait'); h.textContent = ''; delete h.dataset.s;
+    try {
+      const r = await post('api/models', { base }); if (t !== mt) return;
+      mdl = r.models.slice(); qwInfo = Object.fromEntries((r.info || []).map(m => [m.id, m]));
+      const act = isAg(srvSet && srvSet.base);
+      waState('ok', { who: r.login || 'Аккаунт Google', sub: [r.plan ? 'план ' + r.plan : '', r.how === 'token' ? 'вход по токену' : 'вход через Google', act ? 'доступ обновляется сам' : 'нажми «Сохранить», чтобы работать через Antigravity', r.live ? '' : 'список моделей — основной (Google свой не прислал)'].filter(Boolean).join(' · ') });
+      agQuota(r.quota);
+      const cur = mi().value.trim(); if (mdl.length && (!cur || !mdl.includes(cur))) mi().value = r.def || mdl[0];
+      provNew = false; qwThink();
+      agResume(true);
+    } catch (e) {
+      if (t !== mt) return; mdl = []; agQuota(null);
+      if (e.j && e.j.needKey) { waState('none'); agResume(false); return; }
+      /* Google просит подтвердить аккаунт — ссылка на проверку прямо из карточки */
+      const v = e.j && e.j.verify;
+      waState('bad', { msg: e.message, act: v ? { label: 'Подтвердить аккаунт', fn: () => window.open(v, '_blank', 'noopener') } : null });
+      agResume(false);
     }
     return;
   }
@@ -940,7 +972,11 @@ function krCredits(c) {
 }
 /* модели Kiro: в списке — имя и расход кредитов, под полем — что выбрано */
 const krRate = m => m.rate == null ? '' : m.rate === 0 ? 'бесплатно' : '×' + krNum(m.rate);
-window.mdlLabel = x => { if (!isKr($('#c-base').value)) return ''; const m = qwInfo[x]; return m ? m.name + (krRate(m) ? ' · ' + krRate(m) : '') : ''; };
+window.mdlLabel = x => {
+  const b = $('#c-base').value, m = qwInfo[x];
+  if (isAg(b)) return m ? m.name + (m.q == null ? '' : m.q <= 0 ? ' · лимит исчерпан' : ' · ' + Math.round(m.q * 100) + '%') : '';
+  if (!isKr(b)) return ''; return m ? m.name + (krRate(m) ? ' · ' + krRate(m) : '') : '';
+};
 function krHint() {
   const m = qwInfoOf(), h = $('#mh');
   if (!isKr($('#c-base').value) || h.dataset.s === 'err') return;
@@ -949,6 +985,177 @@ function krHint() {
   h.dataset.s = 'ok';
 }
 mi().addEventListener('input', () => { if (isKr($('#c-base').value)) { delete $('#mh').dataset.s; krHint(); } });
+
+/* ---------- Antigravity: вход через Google в своём браузере ----------
+   Сервер выдаёт адрес страницы Google (OAuth самого Antigravity), здесь она открывается окошком в ТВОЁМ браузере: там ты
+   уже вошёл в Google — выбрать аккаунт и «Разрешить». Google отправляет окно на http://localhost:51121/oauth-callback?code=…
+   (так зарегистрирован Antigravity): если Personal Computer открыт на этом же компьютере, сервер ловит адрес сам, иначе
+   адрес вставляют сюда — кнопкой «Вставить» (читает буфер обмена), в поле или сам подхватится при возвращении во вкладку,
+   если браузер уже разрешил читать буфер. Сервер меняет код на доступ, находит проект и показывает аккаунт */
+/* разметка Antigravity — здесь, а не в index.html (страница и так большая): вход, «Токен вручную», лимиты в карточке */
+$('#wa-kr').insertAdjacentHTML('afterend', `<div class="wa-kr" id="wa-ag" hidden>
+  <div class="wa-g"><button class="pbtn gbtn" id="c-agin" type="button"><i class="gi" aria-hidden="true"></i><span>Войти через Google</span></button><button class="qm" type="button" data-help="agin" aria-label="Как это работает">?</button></div>
+  <div class="wa-kw" id="wa-aw" role="status" hidden>
+    <ol class="wa-gs"><li id="wa-a1"></li><li id="wa-a2"></li><li id="wa-a3"></li></ol>
+    <label class="f ag-paste">Адрес страницы localhost<span class="fx"><input id="c-agurl" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="http://localhost:51121/oauth-callback?…"><button class="pbtn sm" id="c-agpaste" type="button"><i class="pi"></i><span>Вставить</span></button></span></label>
+    <div class="wa-ka"><a class="pbtn sm" id="wa-aopen" href="#" target="_blank" rel="noopener noreferrer"><i class="pi"></i><span>Открыть окно Google</span></a><button class="wl" id="wa-ax" type="button">Отмена</button></div>
+  </div>
+  <small class="wst" id="c-ast"></small>
+</div>`);
+$('#kr-imp').insertAdjacentHTML('afterend', `<div class="kr-imp" id="ag-imp" hidden><label class="f">refresh_token или файл входа<textarea id="c-aimpt" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder='1//0g… или {"refresh_token": "1//0g…", …}'></textarea></label><button class="pbtn" id="c-aimp" type="button"><i class="pi"></i><span>Подключить</span></button><small class="wst" id="c-aist"></small></div>`);
+$('#wa-cr').insertAdjacentHTML('beforebegin', '<div class="wa-cr wa-q" id="wa-q" hidden><div class="wa-crt"><span id="wa-ql">Лимиты моделей</span><b id="wa-qn"></b></div><div id="wa-qs"></div></div>');
+/* показать вход Antigravity, когда выбран он (остальную карточку настраивает keyHint в index.html) */
+const keyHint0 = keyHint;
+keyHint = function () { keyHint0(); const ag = isAg($('#c-base').value); $('#wa-ag').hidden = !ag; $('#ag-imp').hidden = !ag; if (!ag) $('#wa-q').hidden = true; };
+const ast = (t, s) => { const h = $('#c-ast'); h.textContent = t || ''; if (s) h.dataset.s = s; else delete h.dataset.s; };
+let agT = 0, agGen = 0, agWin = null, agSent = '';
+const isLoop = () => /^(localhost|127(\.\d{1,3}){3}|\[::1\])$/.test(location.hostname);
+/* похоже на адрес со страницы localhost (или на сам код 4/0A…) */
+const agLike = t => { t = String(t || '').trim(); return (/localhost|127\.0\.0\.1|oauth-callback/i.test(t) && /[?&#]code=/.test(t)) || /^4\/[\w.~-]{10,}$/.test(t); };
+window.agReset = () => { clearTimeout(agT); agGen++; agSent = ''; $('#wa-aw').hidden = true; ast(''); $('#c-agin').disabled = false; $('#c-agurl').value = ''; };
+async function agStart() {
+  agReset();
+  const g = agGen, b = $('#c-agin');
+  b.disabled = true;
+  /* окно — сразу, в обработчике нажатия (иначе браузер заблокирует его как всплывающее), адрес — когда сервер его выдаст */
+  let win = null;
+  try { win = window.open('', 'ag-login', 'popup,width=520,height=720'); if (win) { win.opener = null; try { win.document.title = 'Вход в Google…'; win.document.body.style.cssText = 'font:16px system-ui;padding:24px;color:#555'; win.document.body.textContent = 'Открываю вход Google…'; } catch (e) {} } } catch (e) { win = null; }
+  ast('Открываю вход Google…', 'wait');
+  let r;
+  try { r = await post('api/antigravity/login', {}); }
+  catch (e) { try { win && win.close(); } catch (x) {} if (g === agGen) { b.disabled = false; ast(e.message, 'err'); } return; }
+  if (g !== agGen) { try { win && win.close(); } catch (x) {} return; }
+  let opened = false;
+  try { if (win && !win.closed) { win.location.replace(r.url); opened = true; } } catch (e) {}
+  agWin = opened ? win : null;
+  agShow(r, opened);
+  agT = setTimeout(() => agPoll(g), 1500);
+}
+function agShow(r, opened) {
+  $('#wa-aw').hidden = false; ast('');
+  $('#wa-a1').textContent = (opened ? 'В открывшемся окне' : 'Открой окно Google и в нём') + ' выбери аккаунт и нажми «Разрешить».';
+  $('#wa-a2').textContent = 'Окно откроет страницу localhost — она не загрузится, так и должно быть. Скопируй её адрес из адресной строки.';
+  $('#wa-a3').textContent = isLoop() ? 'Personal Computer открыт на этом компьютере — вход, скорее всего, завершится сам. Если нет — вставь адрес ниже.' : 'Нажми «Вставить» — дальше я всё сделаю сам.';
+  const a = $('#wa-aopen'); a.href = r.url; a.lastChild.textContent = opened ? 'Открыть окно Google снова' : 'Открыть окно Google';
+}
+async function agPoll(g) {
+  if (g !== agGen) return;
+  let r;
+  try { r = await api('api/antigravity/login'); } catch (e) { agT = setTimeout(() => agPoll(g), 3000); return; }
+  if (g === agGen) agState(r, g);
+}
+function agState(r, g) {
+  clearTimeout(agT);
+  if (r.state === 'wait' || r.state === 'save') {
+    /* код не подошёл (скопировали не целиком) — вход продолжается: можно вставить адрес ещё раз */
+    if (r.state === 'save') ast('Подключаю аккаунт: доступ, проект и модели…', 'wait'); else if (r.msg) ast(r.msg, 'err');
+    agT = setTimeout(() => agPoll(g), r.state === 'save' ? 700 : 1500);
+    return;
+  }
+  agReset();
+  if (r.state === 'ok') {
+    try { if (agWin && !agWin.closed) agWin.close(); } catch (e) {}
+    const msg = r.msg || 'Antigravity подключён.';
+    ast(msg, 'ok'); window.sfx && sfx('recv');
+    loggedIn().then(() => ast(msg, 'ok'));
+  } else ast(r.msg || 'Вход не состоялся — нажми «Войти через Google» ещё раз.', 'err');
+}
+async function agSend(t) {
+  t = String(t || '').trim();
+  if (!t || t === agSent || $('#wa-aw').hidden) return;
+  agSent = t;
+  const g = agGen;
+  ast('Проверяю вход…', 'wait');
+  try { const r = await api('api/antigravity/login', { method: 'PUT', json: { text: t } }); if (g === agGen) agState(r, g); }
+  catch (e) { if (g === agGen) { agSent = ''; ast(e.message, 'err'); } }
+}
+/* буфер обмена: по кнопке — всегда (браузер может спросить разрешение), при возвращении во вкладку — только если уже разрешено */
+async function agClip(auto) {
+  if ($('#wa-aw').hidden) return;
+  const cb = navigator.clipboard;
+  if (!cb || !cb.readText) { if (!auto) { $('#c-agurl').focus(); ast('Вставь адрес в поле: долгое нажатие → «Вставить» (или Ctrl+V).'); } return; }
+  if (auto) { try { if ((await navigator.permissions.query({ name: 'clipboard-read' })).state !== 'granted') return; } catch (e) { return; } }
+  let t = '';
+  try { t = await cb.readText(); } catch (e) { if (!auto) { $('#c-agurl').focus(); ast('Браузер не дал прочитать буфер обмена — вставь адрес в поле сам.'); } return; }
+  if (agLike(t)) { $('#c-agurl').value = t.trim(); agSend(t); }
+  else if (!auto) { $('#c-agurl').focus(); ast('В буфере обмена нет адреса со страницы localhost — скопируй его в окне Google и нажми «Вставить» ещё раз.', 'err'); }
+}
+$('#c-agin').onclick = () => agStart();
+$('#c-agpaste').onclick = e => { e.preventDefault(); agClip(false); };
+$('#c-agurl').addEventListener('input', () => { const t = $('#c-agurl').value; if (agLike(t)) agSend(t); });
+$('#c-agurl').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); agSend($('#c-agurl').value); } };
+window.addEventListener('focus', () => setTimeout(() => agClip(true), 200));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(() => agClip(true), 200); });
+$('#wa-ax').onclick = () => { agReset(); api('api/antigravity/login', { method: 'DELETE' }).catch(() => {}); };
+/* закрыли настройки — следить перестаём; сервер доведёт вход сам (если поймает адрес), а при следующем открытии вход продолжится */
+$('#dlg').addEventListener('close', () => agReset());
+/* открыли настройки, а вход ещё идёт — снова показываем шаги и следим */
+async function agResume(on) {
+  const g = agGen;
+  let r; try { r = await api('api/antigravity/login'); } catch (e) { return; }
+  if (g !== agGen || !(r.state === 'wait' || r.state === 'save') || !isAg($('#c-base').value)) return;
+  if (on) { $('#wa').classList.add('swap'); $('#wa-swap').setAttribute('aria-expanded', 'true'); }
+  $('#c-agin').disabled = true;
+  agShow(r, true); agState(r, agGen);
+}
+/* «Токен вручную»: refresh_token или файл входа из другой программы (Antigravity CLI, opencode, CLIProxyAPI) */
+$('#c-aimp').onclick = async () => {
+  const t = $('#c-aimpt').value.trim(), st = $('#c-aist'), b = $('#c-aimp');
+  const say = (x, s) => { st.textContent = x; if (s) st.dataset.s = s; else delete st.dataset.s; };
+  if (!t) { say('Вставь refresh_token или содержимое файла входа', 'err'); return; }
+  b.disabled = true; say('Проверяю ключ в Google…', 'wait');
+  try { const r = await post('api/antigravity/import', { text: t }); $('#c-aimpt').value = ''; $('#wa-tok').open = false; say(''); await loggedIn(); ast('Antigravity подключён' + (r.login ? ': ' + r.login : '') + '.', 'ok'); }
+  catch (e) { say(e.message, 'err'); }
+  finally { b.disabled = false; }
+};
+/* лимиты: по группам моделей (Claude, Gemini Pro, Gemini Flash…) — сколько осталось и когда обновятся */
+const agWhen = ms => { const d = ms - Date.now(); if (d <= 60e3) return 'вот-вот'; if (d < 3600e3) return 'через ' + Math.round(d / 60000) + ' мин'; if (d < 864e5) return 'в ' + new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); return krDay(ms); };
+function agQuota(list) {
+  const box = $('#wa-q'), rows = $('#wa-qs');
+  if (!list || !list.length) { box.hidden = true; return; }
+  box.hidden = false; rows.textContent = '';
+  $('#wa-ql').textContent = 'Лимиты моделей';
+  $('#wa-qn').textContent = list.every(g => g.left >= 1) ? 'всё доступно' : '';
+  for (const g of list) {
+    const r = document.createElement('div'), pct = Math.round(g.left * 100);
+    r.className = 'wa-qr'; if (g.left < 0.1) r.dataset.low = '1';
+    r.innerHTML = '<div class="wa-crt"><span></span><b></b></div><i class="wa-bar" aria-hidden="true"><i></i></i><small></small>';
+    r.querySelector('span').textContent = g.name;
+    r.querySelector('b').textContent = g.left <= 0 ? 'исчерпан' : g.left >= 1 ? 'полный' : 'осталось ' + pct + '%';
+    r.querySelector('.wa-bar i').style.width = pct + '%';
+    r.querySelector('small').textContent = g.left < 1 && g.reset ? 'обновится ' + agWhen(g.reset) : '';
+    rows.append(r);
+  }
+}
+/* под полем модели: имя, остаток лимита, видит ли картинки, как думает, контекст */
+function agHint() {
+  const m = qwInfoOf(), h = $('#mh');
+  if (!isAg($('#c-base').value) || h.dataset.s === 'err') return;
+  if (!m) { if (mdl.length) { h.textContent = 'Такой модели нет у твоего аккаунта Antigravity — выбери из списка'; h.dataset.s = 'err'; } return; }
+  const lim = m.q == null ? '' : m.q <= 0 ? 'лимит исчерпан' + (m.reset ? ', обновится ' + agWhen(m.reset) : '') : m.q >= 1 ? 'лимит полный' : 'осталось ' + Math.round(m.q * 100) + '% лимита' + (m.q < 1 && m.reset ? ', полный — ' + agWhen(m.reset) : '');
+  const ctx = m.ctx ? 'контекст ' + (m.ctx >= 1e6 ? (Math.round(m.ctx / 1e5) / 10).toLocaleString('ru-RU') + ' млн' : Math.round(m.ctx / 1000) + ' тыс.') + ' токенов' : '';
+  h.textContent = [m.name, lim, m.img ? 'видит картинки' : 'без картинок', m.efforts && m.efforts.length ? '' : m.think ? 'думает сама' : '', ctx].filter(Boolean).join(' · ');
+  h.dataset.s = m.q === 0 ? 'err' : 'ok';
+}
+mi().addEventListener('input', () => { if (isAg($('#c-base').value)) { delete $('#mh').dataset.s; agHint(); } });
+/* справка Antigravity под «?» (helpOf в index.html спрашивает её здесь — страница и так большая):
+   вход через Google, адрес со страницы localhost, лимиты, токен вручную, глубина */
+window.agHelp = function (k) {
+  if(k==='wa')return{t:'Аккаунт Antigravity',h:(waNote?'<p class="hbad">'+esc(waNote)+'</p>':'')
+    +'<p>Antigravity — среда разработки от Google со своим агентом. Каждому Google-аккаунту она даёт бесплатные лимиты на модели — Gemini, Claude и другие. У каждой модели свой лимит; израсходованный обновляется сам через несколько часов, а на планах Google AI Pro и Ultra лимиты больше.</p>'
+    +'<p>Personal Computer говорит с Antigravity от имени твоего аккаунта тем же API, что и сам Antigravity, — прямо со своего сервера, без сторонних шлюзов. Инструменты (команды, файлы, MCP) модель вызывает по-настоящему, а не текстом.</p>'
+    +'<p>Сколько лимита осталось — в карточке (по группам моделей) и в списке моделей: «80%» — осталось 80% лимита этой модели.</p>'
+    +'<p class="hnote">Это неофициальный способ пользоваться Antigravity: Google вправе ограничить аккаунт, который работает не из самого Antigravity. Для важного аккаунта взвесь это заранее.</p>'};
+  if(k==='agin')return{t:'Вход через Google',h:'<ol><li>Нажми «Войти через Google» — откроется окно Google в твоём браузере. Выбери аккаунт и нажми «Разрешить».</li><li>Google отправит окно на адрес <code>http://localhost:51121/…</code> — так устроен вход самого Antigravity. Страница не загрузится, так и должно быть: всё нужное уже в её адресе.</li><li>Скопируй этот адрес и нажми «Вставить» (или вставь его в поле). Дальше Personal Computer сам получит доступ, найдёт проект аккаунта и выберет модель.</li></ol>'
+    +'<p>Пароль от Google вводится только на странице Google — Personal Computer его не видит. Сервер получает лишь доступ к Antigravity: он живёт час и обновляется сам, а ключ обновления хранится на твоём сервере зашифрованным.</p>'
+    +'<p>Если Personal Computer открыт на этом же компьютере (или через SSH-туннель с <code>-L 51121:127.0.0.1:51121</code>), вставлять ничего не нужно: сервер сам поймает адрес, и вход завершится сам.</p>'
+    +'<p class="hnote">С телефона окно откроется новой вкладкой: нажми «Разрешить», затем нажми на адресную строку, скопируй адрес, вернись сюда и нажми «Вставить».</p>'};
+  if(k==='tok')return{t:'Токен вручную',h:'<p>Если Antigravity уже подключён в другой программе, можно перенести вход сюда: вставь refresh_token (начинается с <code>1//</code>) или файл входа целиком — Antigravity CLI, opencode (<code>~/.config/opencode/antigravity-accounts.json</code>), CLIProxyAPI (<code>antigravity-*.json</code>). Проект аккаунта Personal Computer возьмёт из файла или узнает у Google сам.</p><p>Подойдёт только ключ, выданный для Antigravity: ключи Gemini CLI и других приложений Google сюда не подходят.</p>'};
+  if(k==='effort'){const m=window.qwInfoOf?qwInfoOf():null;
+    return{t:'Глубина размышления',h:'<p>Модели Antigravity сначала думают, потом отвечают. Чем глубже, тем лучше решают сложное — и тем дольше отвечают и быстрее тратят лимит.</p>'
+      +(m&&m.efforts&&m.efforts.length?'<p>У '+esc(m.name||m.id)+' глубина: '+m.efforts.map(e=>esc(({minimal:'минимальная',low:'низкая',medium:'средняя',high:'высокая',xhigh:'очень высокая',max:'максимальная'})[e]||e)).join(', ')+'.</p>':'')
+      +'<p>У моделей, где уровень записан в названии (например, «High» или «Low»), глубину выбирает сам Google — выбери другую модель из списка.</p><p>В чате размышлений не видно — зажми компьютер, и откроется окно с размышлениями по шагам.</p>'}}
+  return null};
 
 /* ---------- окно проверки DeepSeek ----------
    Сайт попросил подтвердить, что ты не робот, или не узнал устройство при входе по паролю. Сервер открывает
