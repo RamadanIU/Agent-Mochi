@@ -21,6 +21,7 @@ import { deviceId as dsDeviceId } from './webcheck.js';
 /* веб-чаты по токену аккаунта (Qwen, DeepSeek): свой протокол, история живёт на сайте, файлы уходят туда целиком */
 const isWeb = base => isQwen(base) || isDeepSeek(base);
 import { agentExt, extTool, mcpCall, MANAGE_TOOLS, EXT_TOOLS, BUILTIN, mcpPublic, skillList, tokens, setPresetSeed, presetsOff } from './ext.js';
+import * as SA from './subagent.js';
 
 export const DEF_SYS = 'Тебя зовут Personal Computer — ты ламповый пиксельный компьютер-помощник. Общайся тепло, по-доброму и чуть игриво (максимум один короткий смайл вроде ^_^ или «~» на ответ), но без лишней болтовни. Отвечай максимально коротко: одно-два предложения, а если хватает слова или числа — только им. Без вступлений, пересказа вопроса, пояснений и предложений помощи в конце. Делай строго то, что попросили, и ничего сверх этого: не добавляй советов и «бонусов», не выполняй лишних действий, не улучшай и не исправляй то, о чём не просили, не задавай уточняющих вопросов без крайней необходимости. У тебя есть доступ к настоящему Linux-серверу через инструмент run_command. Используй его, только когда нужно проверить факт или выполнить просьбу, а не угадывать. Не показывай команды и сырой вывод, если пользователь сам не просил, — только итог простыми словами. Отвечай на языке пользователя.';
 /* прежние подсказки по умолчанию: кто их не менял (сохранил как было), получает новую */
@@ -28,12 +29,14 @@ export const OLD_SYS = new Set(['Тебя зовут Мочи — ты милы�
 /* что умеет показывать веб-чат — модель должна знать, чтобы рисовать таблицы и схемы, а не ASCII-картинки */
 const FMT = 'Оформление: чат показывает Markdown — заголовки, списки, таблицы, цитаты и врезки (> [!NOTE], > [!TIP], > [!WARNING]), `код` и блоки кода с языком, формулы LaTeX ($…$, $$…$$), схемы и графики в блоке ```mermaid (flowchart, sequenceDiagram, classDiagram, stateDiagram, erDiagram, gantt, pie, xychart-beta, quadrantChart, radar-beta, sankey-beta, treemap-beta, timeline, mindmap, journey, gitGraph, kanban, block-beta, packet-beta, architecture-beta, requirementDiagram, C4Context). Пользуйся этим, только когда правда помогает: сравнение — таблицей, процесс или связи — схемой, числа и динамика — графиком (xychart-beta, pie), сроки — gantt, вычисления — формулой. Короткий ответ оставляй простым текстом.';
 /* think — размышление у Qwen и DeepThink у DeepSeek; effort — уровень размышления у Coarena ('' — как решит модель; см. coarena.js) */
-export const DEF_SETTINGS = { base: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', sys: DEF_SYS, vis: true, stepLimit: true, maxSteps: CFG.maxSteps, think: false, effort: '' };
+/* subProvider / subModel — субагент по умолчанию ('' — как у главного агента), subMaxSteps — его лимит шагов (см. subagent.js) */
+export const DEF_SETTINGS = { base: 'https://api.openai.com/v1', key: '', model: 'gpt-4o-mini', sys: DEF_SYS, vis: true, stepLimit: true, maxSteps: CFG.maxSteps, think: false, effort: '',
+  subProvider: '', subModel: '', subMaxSteps: SA.DEF_SUB_STEPS };
 /* лимит шагов подряд (настройки → Модель): число от 1 до MAX_STEPS */
 export const MAX_STEPS = 10000;
 
-/* к модулю Telegram (он подключается сам, чтобы не было кольцевых импортов) */
-export const hooks = { tg: null };
+/* к модулю Telegram (он подключается сам, чтобы не было кольцевых импортов); models — списки моделей провайдеров (server.js) */
+export const hooks = { tg: null, models: null };
 
 const RUN_TOOL = { type: 'function', function: { name: 'run_command', description: 'Выполнить shell-команду (bash) на Linux-сервере и получить вывод и код выхода. Каждый вызов — новая оболочка: текущая папка сохраняется, переменные окружения — нет.',
   parameters: { type: 'object', properties: {
@@ -79,9 +82,10 @@ export const TG_TOOLS = [
 ];
 
 /* встроенные инструменты, которые пользователь может выключить (Настройки → Инструменты) */
-const GROUPS = { run_command: 'Сервер', send_file: 'Сервер', read_file: 'Файлы', view_image: 'Файлы', edit_file: 'Файлы', write_file: 'Файлы', mcp_manage: 'Расширения', skills_manage: 'Расширения' };
+const GROUPS = { run_command: 'Сервер', send_file: 'Сервер', read_file: 'Файлы', view_image: 'Файлы', edit_file: 'Файлы', write_file: 'Файлы', mcp_manage: 'Расширения', skills_manage: 'Расширения',
+  spawn_subagent: 'Субагенты', list_subagent_models: 'Субагенты' };
 const groupOf = n => GROUPS[n] || (n.startsWith('telegram_') ? 'Telegram' : 'Другое');
-const builtins = () => [RUN_TOOL, READ_TOOL, VIEW_TOOL, EDIT_TOOL, WRITE_TOOL, SEND_TOOL, ...TG_TOOLS];
+const builtins = () => [RUN_TOOL, READ_TOOL, VIEW_TOOL, EDIT_TOOL, WRITE_TOOL, SEND_TOOL, ...TG_TOOLS, ...SA.SUB_TOOLS];
 /* встроенные включает и выключает только пользователь: агенту об этом нужно знать, чтобы не пытаться обойти */
 for (const t of [...builtins(), ...MANAGE_TOOLS]) BUILTIN.add(t.function.name);
 const isOn = (S, n) => (S.tools || {})[n] !== false;
@@ -153,6 +157,8 @@ function labelFor(n, a) {
   else if (n === 'telegram_send') s = 'Пишу в Telegram';
   else if (n.startsWith('telegram_')) s = 'Настраиваю Telegram';
   else if (n === 'skill') s = 'Читаю навык: ' + (a.name || '');
+  else if (n === 'spawn_subagent') s = 'Зову субагента' + (a.model ? ': ' + a.model : '');
+  else if (n === 'list_subagent_models') s = 'Смотрю модели для субагента';
   else if (n === 'mcp_connect') s = 'Подключаю инструменты: ' + (a.server || '');
   else if (n === 'mcp_manage') s = a.action === 'list' ? 'Смотрю MCP-серверы' : 'Настраиваю MCP' + (a.name ? ': ' + a.name : '');
   else if (n === 'skills_manage') s = a.action === 'install' ? 'Устанавливаю навык' : a.action === 'list' ? 'Смотрю навыки' : 'Настраиваю навыки' + (a.name ? ': ' + a.name : '');
@@ -232,6 +238,8 @@ export class Chat extends EventEmitter {
     /* что агент уже видел из файлов (только в памяти): настоящий путь → {sig: версия, rng: [[с, по, ход]]};
        нужно, чтобы не перезаписать непрочитанный файл и не выводить заново то, что уже есть в разговоре */
     this.seen = new Map(); this.turn = 0; this.phKey = null;
+    /* субагент, который работает прямо сейчас (для питомца и индикатора): провайдер, модель, шаг */
+    this.subNow = null;
   }
   get running() { return !!this.ctl; }
 
@@ -409,7 +417,7 @@ export class Chat extends EventEmitter {
   /* rc — в каком чате работает агент (rt — его название), ctx — сколько токенов занимает его разговор (цвет экрана компьютера) */
   runState() {
     const r = this.doc.v.run;
-    return { running: this.running, rc: this.cid, rt: this.meta()?.title || '', ctx: this.ctxSize(), ...(r ? { origin: r.origin, t: r.t, steps: r.steps } : {}), ...(this.chk ? { wait: 'check', at: this.chk.at } : {}) };
+    return { running: this.running, rc: this.cid, rt: this.meta()?.title || '', ctx: this.ctxSize(), ...(r ? { origin: r.origin, t: r.t, steps: r.steps } : {}), ...(this.chk ? { wait: 'check', at: this.chk.at } : {}), ...(this.subNow && this.running ? { sub: this.subNow } : {}) };
   }
   /* заполненность контекста: что модель видела в последнем запросе (по её usage или по оценке), а у чата без запросов — оценка истории */
   ctxSize() {
@@ -657,6 +665,7 @@ export class Chat extends EventEmitter {
       + extra
       + ((isWeb(S.base) ? this.doc.v.hist.some(m => m._fl) : this.wire().some(m => Array.isArray(m.content))) ? '\nКартинки и PDF из сообщений пользователя ты видишь напрямую; те же файлы лежат в inbox/, если их нужно обработать.' : '')
       + (has('view_image') ? '\nЧтобы увидеть картинку с сервера (фото, скриншот, график), вызови view_image — не гадай по имени файла и не читай её через read_file.' : '')
+      + SA.orchestratorPrompt(has)
       + (this.doc.v.hist.some(m => m._mid) ? MID_SYS : '');
   }
 
@@ -688,16 +697,19 @@ export class Chat extends EventEmitter {
   /* один шаг → текст ответа (модель закончила) или null (были инструменты — нужен следующий шаг) */
   async step(sig, g, H, run, ask) {
     const chk = () => { if (sig.aborted || g !== this.gen) throw abortErr(); };
-    const S = this.settings(), on = t => isOn(S, t.function.name);
+    /* субагенту (depth ≥ MAX_DEPTH) инструменты субагентов не показываем: рекурсии не будет */
+    const S = this.settings(), deep = (this.depth || 0) >= SA.MAX_DEPTH, on = t => isOn(S, t.function.name) && !(deep && SA.SUB_TOOL_NAMES.has(t.function.name));
     /* лимит — шагов подряд без сообщений пользователя */
     if (S.stepLimit !== false && run.steps - (run.base || 0) >= S.maxSteps) throw new Error('Personal Computer сделал ' + S.maxSteps + ' шагов подряд и остановился, чтобы не зациклиться. Нажми «Повторить», чтобы продолжить. Лимит шагов меняется в настройках → Модель.');
     run.steps++;
-    const offB = [...builtins(), ...MANAGE_TOOLS].filter(t => !isOn(S, t.function.name)).map(t => t.function.name);
+    const offB = [...builtins(), ...MANAGE_TOOLS].filter(t => !isOn(S, t.function.name) && !(deep && SA.SUB_TOOL_NAMES.has(t.function.name))).map(t => t.function.name);
     const X = await until(agentExt(this, S.tools), sig); chk();
     const { tools, said } = withAction([...builtins().filter(on), ...X.defs]), names = new Set(tools.map(t => t.function.name));
     const ctx = { X, names };
     const sys = await until(this.system(names, X.prompt, offB), sig); chk();
     const { text, calls, used, qw, ds, rs, think } = await until(this.callModel(sys, tools, sig), sig); chk();
+    /* субагент после лимита шагов: только отчёт — вызовы инструментов не выполняем */
+    if (this.noTools) calls.splice(0);
     /* _qw / _ds — скрытая метка чата Qwen / DeepSeek под ответом: следующий шаг продолжит тот же чат (см. webchat.js);
        _rs — размышления модели в том виде, в каком их вернул API (уйдут ей обратно в следующем запросе, см. wire) */
     H.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}), ...(qw ? { _qw: qw } : {}), ...(ds ? { _ds: ds } : {}), ...(rs ? { _rs: { b: rsKey(S), f: rs } } : {}) });
@@ -723,6 +735,7 @@ export class Chat extends EventEmitter {
       if (said.has(nm)) delete a.action;
       const e = this.push({ kind: 'tool', name: nm, label: act || labelFor(nm, a), hint: nm === 'run_command' ? String(a.command || '').slice(0, 2000) : FILE_TOOLS.has(nm) || nm === 'view_image' ? String(a.path || '').slice(0, 500) : '', state: 'run' });
       this.emit('tool', e);
+      ctx.entry = e;
       let out;
       try {
         out = bad ? 'Ошибка: аргументы вызова — невалидный JSON (возможно, обрезаны). Повтори вызов с корректным JSON, длинное содержимое раздели на части.'
@@ -735,6 +748,8 @@ export class Chat extends EventEmitter {
       /* для журнала на экране: код выхода команды и последняя строка вывода, если что-то не так («E: Could not get lock …») */
       if (nm === 'run_command') { const m = out.match(/\[код выхода: (-?\d+)\]/); if (m) e.code = +m[1]; }
       if (e.state === 'bad' || e.code) e.tail = tailLine(out);
+      /* субагент вернул ошибку (JSON с status ≠ completed) — в журнале это сбой с причиной */
+      if (e.sub && e.sub.status !== 'completed') { e.state = 'bad'; e.tail = e.sub.error || e.sub.status; }
       this.update(e);
       H.push({ role: 'tool', tool_call_id: tc.id, content: out });
       this.doc.save();
@@ -747,7 +762,7 @@ export class Chat extends EventEmitter {
     return null;
   }
 
-  async tool(nm, a, sig, { X, imgs }) {
+  async tool(nm, a, sig, { X, imgs, entry }) {
     if (nm === 'run_command') {
       if (!a.command) return 'Ошибка: нет параметра command';
       const r = await runCmd({ cmd: String(a.command), cwd: this.doc.v.cwd || userDir(this.u), timeout: a.timeout }, sig);
@@ -780,9 +795,35 @@ export class Chat extends EventEmitter {
       if (!hooks.tg) return 'Ошибка: Telegram недоступен на этом сервере';
       return await hooks.tg.tool(this, nm, a);
     }
+    if (nm === 'list_subagent_models') {
+      if ((this.depth || 0) >= SA.MAX_DEPTH) return 'Ошибка: субагенту инструменты субагентов недоступны';
+      return JSON.stringify(await SA.listModels(this, a, hooks.models));
+    }
+    if (nm === 'spawn_subagent') return JSON.stringify(await this.spawnSub(a, sig, entry));
     if (X.route.has(nm)) return await mcpCall(this.u, X.route.get(nm), a, sig, { session: this.doc.v.sess, model: this.settings().model });
     if (EXT_TOOLS.has(nm)) return await extTool(this, nm, a);
     return 'Ошибка: неизвестный инструмент ' + nm;
+  }
+
+  /* ---------- субагенты (subagent.js) ----------
+     Субагент работает внутри шага главного агента: «Стоп» и «Прочитать сейчас» останавливают и его.
+     Наружу — события subagent (start → step… → end | error) для питомца и индикатора; запись шага в журнале
+     получает провайдера и модель, а при сбое — причину */
+  async spawnSub(a, sig, entry) {
+    const progress = ev => {
+      if (ev.phase === 'start' || ev.phase === 'step') this.subNow = { provider: ev.provider, name: ev.providerName, model: ev.model, step: ev.step, max: ev.max, t: this.subNow?.t || Date.now() };
+      else this.subNow = null;
+      /* в журнале — кто работает (провайдер · модель), но не поручение: промты и шаги субагента пользователю не показываем */
+      if (entry && ev.phase === 'start') { entry.sub = { provider: ev.provider, model: ev.model }; entry.hint = ev.providerName + ' · ' + ev.model; this.update(entry); }
+      this.emit('subagent', { ...ev, ...(entry ? { seq: entry.seq } : {}) });
+    };
+    let r;
+    try { r = await SA.runSubagent(this, a, sig, { friendly, progress }); }
+    finally {
+      if (this.subNow) { this.subNow = null; this.emit('subagent', { phase: 'end', status: 'cancelled', ...(entry ? { seq: entry.seq } : {}) }); }
+    }
+    if (entry) entry.sub = { ...(entry.sub || {}), provider: r.provider_used, model: r.model_used, status: r.status, steps: r.steps_taken, ...(r.error ? { error: oneLine(r.error.message, 200) } : {}) };
+    return r;
   }
 
   /* ---------- файлы ---------- */

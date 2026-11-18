@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url';
 import { CFG } from './config.js';
 import { ensureDir, flushAll, seal } from './store.js';
 import * as A from './auth.js';
-import { getChat, resumeAll, DEF_SETTINGS, MAX_STEPS, toolCatalog, setTools } from './agent.js';
+import { getChat, resumeAll, DEF_SETTINGS, MAX_STEPS, toolCatalog, setTools, hooks } from './agent.js';
+import * as SA from './subagent.js';
 import { apiFetch, cfBlock, cfMessage } from './net.js';
 import * as QW from './qwen.js';
 import * as DS from './deepseek.js';
@@ -158,6 +159,8 @@ function stream(req, res, u, url) {
   send('snap', { ...chat.snapshot(c), user: A.publicUser(u), build: U.buildId() });
   const on = {
     log: (e, id) => id === c && send('log', e), delta: (d, id) => id === c && send('delta', { d }), run: r => send('run', r), ctx: n => send('ctx', { ctx: n }),
+    /* субагент работает (start → step… → end | error): питомец и индикатор — как и ход работы, во всех чатах */
+    subagent: d => send('subagent', d),
     queue: (q, id) => id === c && send('queue', { queue: q }), reset: id => id === c && send('snap', chat.snapshot(c)),
     chats: () => send('chats', {}), gone: id => id === c && send('gone', { c }),
   };
@@ -226,6 +229,18 @@ function putSettings(c, b) {
   /* уровень размышления (Coarena): '' — как решит модель */
   if (b.effort !== undefined) { const e = String(b.effort || ''); if (e && !CO.EFFORTS.includes(e) && !KR.EFFORTS.includes(e) && !AG.EFFORTS.includes(e)) throw new HttpErr(400, 'Неизвестный уровень размышления'); s.effort = e; }
   if (steps !== undefined) s.maxSteps = steps;
+  /* субагент по умолчанию: '' — как у главного агента (провайдер и модель), лимит шагов — от 1 до MAX_SUB_STEPS */
+  if (b.subProvider !== undefined) {
+    const sp = normBase(b.subProvider);
+    if (sp && !/^https?:\/\/[^\s]+$/i.test(sp)) throw new HttpErr(400, 'Провайдер субагента: адрес API должен начинаться с http:// или https://');
+    s.subProvider = sp;
+  }
+  if (b.subModel !== undefined) s.subModel = String(b.subModel || '').trim().slice(0, 200);
+  if (b.subMaxSteps !== undefined) {
+    const n = Math.round(+b.subMaxSteps);
+    if (!(n >= 1 && n <= SA.MAX_SUB_STEPS)) throw new HttpErr(400, 'Лимит шагов субагента — от 1 до ' + SA.MAX_SUB_STEPS);
+    s.subMaxSteps = n;
+  }
   if (!b.clearKey) {
     P[cur] = { key: s.key || '', model: s.model || DEF_SETTINGS.model };
     const ks = Object.keys(P); while (ks.length > MAX_PROVS) delete P[ks.shift()];
@@ -325,6 +340,9 @@ async function models(c, b) {
   }
   return { models: ids.slice(0, 2000), free, needKey: !key && (isOpenRouter(base) || isOllamaCloud(base)) };
 }
+
+/* списки моделей для субагентов (list_subagent_models) — тем же путём, что в настройках */
+hooks.models = (c, base) => models(c, { base });
 
 /* ---------- Qwen: вход по email и паролю ----------
    Сервер сам входит на chat.qwen.ai, сохраняет токен и (хешем) пароль — дальше токен обновляется сам, до истечения */
@@ -673,6 +691,14 @@ async function api(req, res, url) {
       if (M === 'PUT') { putSettings(chat, await jbody(req)); return json(res, 200, pubSettings(chat)); }
       break;
     case '/api/models': if (M === 'POST') return json(res, 200, await models(chat, await jbody(req))); break;
+    /* субагенты (настройки → Модель → «Субагенты»): провайдеры, доступность и модели — то же, что видит list_subagent_models.
+       Без provider — только то, что уже известно (быстро); с provider — его модели (refresh=1 — заново) */
+    case '/api/subagent':
+      if (M === 'GET') {
+        const pv = url.searchParams.get('provider') || '';
+        return json(res, 200, await SA.listModels(chat, { provider: pv, refresh: url.searchParams.get('refresh') === '1' }, hooks.models, { fetch: !!pv }));
+      }
+      break;
     case '/api/deepseek/login':
       if (M === 'POST') return json(res, 200, await dsLogin(chat, await jbody(req)));
       break;

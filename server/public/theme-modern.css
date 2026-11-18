@@ -117,6 +117,13 @@
 :root[data-theme=modern] .bft b{color:var(--fg);text-transform:lowercase}:root[data-theme=modern] .bft b::first-letter{text-transform:uppercase}:root[data-theme=modern] .bft b.near{color:var(--warn)}
 :root[data-theme=modern] .rpb{height:4px;border-radius:999px;background:var(--s3);overflow:hidden}:root[data-theme=modern] .rpb s{background:var(--fg);border-radius:999px}
 :root[data-theme=modern] .rpb.ind s{width:40%;background:var(--fg);animation:mdind 1.2s var(--ez) infinite}
+:root[data-theme=modern] .bsa{gap:7px;margin:8px 0 0;padding:5px 9px;border-radius:8px;background:var(--s2);color:var(--fg);box-shadow:inset 0 0 0 1px var(--bd);font:500 11.5px/1.3 var(--sans)}
+:root[data-theme=modern] .bsi{width:7px;height:7px;margin-right:0;border-radius:50%;background:var(--hi);box-shadow:0 0 0 3px color-mix(in srgb,var(--hi) 22%,transparent);animation:mdsub 1.4s var(--ez) infinite}
+:root[data-theme=modern] .bsn{color:var(--mut);text-transform:none}
+:root[data-theme=modern] .bsm{font-weight:600}
+:root[data-theme=modern] .bss{color:var(--mut);font-weight:500}
+@keyframes mdsub{50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--hi) 6%,transparent)}}
+@media(max-width:719px){:root[data-theme=modern] .bsa .bsn{display:inline}}
 @keyframes mdind{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
 :root[data-theme=modern] .rtoast{padding:8px 14px;border-radius:999px;background:var(--fg);color:var(--bg);font:500 12.5px/1.3 var(--sans);box-shadow:var(--sh-m)}
 /* вкладки: на широком экране — в панели, переключатель с «бегунком»; на телефоне — нижняя панель */
@@ -425,7 +432,7 @@
 :root[data-theme=modern] .gh::before{width:17px;height:17px;background:var(--mut)}
 :root[data-theme=modern] .gh small{font:400 12px/1.4 var(--sans);color:var(--mut)}
 :root[data-theme=modern] .grp[data-i=look]{--ico:var(--m-palette)}:root[data-theme=modern] .grp[data-i=voice]{--ico:var(--m-speaker)}:root[data-theme=modern] .grp[data-i=app]{--ico:var(--m-app)}
-:root[data-theme=modern] .grp[data-i=conn]{--ico:var(--m-plug)}:root[data-theme=modern] .grp[data-i=abil]{--ico:var(--m-zap)}:root[data-theme=modern] .grp[data-i=steps]{--ico:var(--m-list)}
+:root[data-theme=modern] .grp[data-i=conn]{--ico:var(--m-plug)}:root[data-theme=modern] .grp[data-i=abil]{--ico:var(--m-zap)}:root[data-theme=modern] .grp[data-i=steps]{--ico:var(--m-list)}:root[data-theme=modern] .grp[data-i=sub]{--ico:var(--m-userplus)}
 :root[data-theme=modern] .grp>:last-child{margin-bottom:12px}
 :root[data-theme=modern] .grp>.sw:last-child{margin-bottom:0}
 /* поля */
@@ -442,9 +449,9 @@
 :root[data-theme=modern] dialog #ml{margin:6px 0 0;padding:4px;border-radius:12px;background:var(--card);font:400 13.5px/1.3 var(--sans);box-shadow:0 0 0 1px var(--bd),var(--sh-m)}
 :root[data-theme=modern] #ml div{padding:8px 10px;border-radius:8px;font-family:var(--mono);font-size:13px}
 :root[data-theme=modern] #ml div:hover,:root[data-theme=modern] #ml div:active{background:var(--s2);color:var(--fg)}
-:root[data-theme=modern] #mh,:root[data-theme=modern] #sh{margin:8px 0 0;gap:8px;font:400 12.5px/1.45 var(--sans);color:var(--mut)}
-:root[data-theme=modern] #mh::before,:root[data-theme=modern] #sh::before{width:7px;height:7px;border-radius:50%;transform:translateY(-1px)}
-:root[data-theme=modern] #mh[data-s=wait]::before{background:var(--hi);animation:mdpulse 1s var(--ez) infinite}
+:root[data-theme=modern] #mh,:root[data-theme=modern] #sh,:root[data-theme=modern] #sah{margin:8px 0 0;gap:8px;font:400 12.5px/1.45 var(--sans);color:var(--mut)}
+:root[data-theme=modern] #mh::before,:root[data-theme=modern] #sh::before,:root[data-theme=modern] #sah::before{width:7px;height:7px;border-radius:50%;transform:translateY(-1px)}
+:root[data-theme=modern] #mh[data-s=wait]::before,:root[data-theme=modern] #sah[data-s=wait]::before{background:var(--hi);animation:mdpulse 1s var(--ez) infinite}
 :root[data-theme=modern] .hint,:root[data-theme=modern] .grp .hint{display:block;margin:10px 0 0;font:400 12.5px/1.45 var(--sans);color:var(--mut)}
 :root[data-theme=modern] .hint[hidden]{display:none}
 :root[data-theme=modern] .note,:root[data-theme=modern] dialog .note{margin-top:14px;padding:10px 12px;border-radius:10px;background:var(--sb);color:var(--mut);font:400 12.5px/1.5 var(--sans);box-shadow:inset 0 0 0 1px var(--bd)}
@@ -627,7 +634,7 @@
 :root[data-theme=modern] dialog.hlp .abody{padding-top:14px}
 :root[data-theme=modern] #c-forget,:root[data-theme=modern] .wfoot #c-reset{color:var(--mut)}
 @media(hover:hover){:root[data-theme=modern] #c-forget:hover,:root[data-theme=modern] .wfoot #c-reset:hover{color:var(--err)}}
-:root[data-theme=modern] #mh[data-s=err]{color:var(--fg)}
+:root[data-theme=modern] #mh[data-s=err],:root[data-theme=modern] #sah[data-s=err]{color:var(--fg)}
 /* ползунок громкости */
 :root[data-theme=modern] .f input[type=range]{height:26px;padding:0;background:none;box-shadow:none}
 :root[data-theme=modern] .f input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:var(--s3)}

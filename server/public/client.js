@@ -159,6 +159,23 @@ dialog.dsw.nob{width:min(640px,calc(100% - 24px));height:fit-content}.dsw.nob .d
 /* действие в карточке аккаунта и под входом: «Пройти проверку», «Войти в окне DeepSeek» */
 .wa-do{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 0}.wa-do[hidden]{display:none}
 .wa-do .pbtn{width:auto;margin:2px}.wa-do .pbtn .pi{--ico:var(--j-shield)}
+/* субагент работает: строка в облачке компьютера — «эстафета» из двух пикселей (я → помощник), его модель и шаг.
+   Только токены темы (--acc, --fg, --mut, --line, --ink, --bg, шрифт --pf); «Современная» — в theme-modern.css */
+.bsa{display:flex;align-items:center;gap:7px;min-width:0;margin:9px 2px 2px;padding:4px 7px;background:var(--bg);color:var(--fg);font:6px/1.2 var(--pf);white-space:nowrap;box-shadow:0 -2px 0 0 var(--ink),0 2px 0 0 var(--ink),-2px 0 0 0 var(--ink),2px 0 0 0 var(--ink)}
+.bsa[hidden]{display:none}
+.bsi{flex:none;width:5px;height:5px;margin-right:7px;background:var(--acc);box-shadow:7px 0 0 var(--line);animation:bsa .8s steps(1) infinite}
+.bsn{flex:none;color:var(--acc);text-transform:uppercase}
+.bsm{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;font-weight:400;color:var(--fg)}
+.bss{flex:none;margin-left:auto;color:var(--mut);font-variant-numeric:tabular-nums}.bss:empty{display:none}
+@keyframes bsa{50%{background:var(--line);box-shadow:7px 0 0 var(--acc)}}
+/* телефон: подпись «Субагент» уже на экране компьютера — место отдаём имени модели */
+@media(max-width:719px){.bsa .bsn{display:none}}
+/* настройки → Модель → «Субагенты»: состояние списка моделей — как у основной модели (#mh) */
+.grp[data-i=sub]{--ico:var(--j-userplus)}
+#sah{display:flex;align-items:baseline;gap:8px;margin:10px 2px 0;font-size:8px;line-height:1.7;color:var(--mut)}#sah:empty{display:none}
+#sah::before{content:"";flex:none;width:8px;height:8px;background:var(--mut)}
+#sah[data-s=ok]::before{background:var(--ok)}#sah[data-s=err]::before{background:var(--err)}#sah[data-s=wait]::before{background:var(--acc);animation:blk .5s steps(1) infinite}
+#sah[data-s=err]{color:color-mix(in srgb,var(--err) 55%,var(--fg))}
 `;
 document.head.append(css);
 
@@ -438,6 +455,8 @@ function setRun(r, snap) {
   ctl = running ? { abort: stopNow } : null;
   sendUI(running);
   if (!snap) try { window.personalComputerRoom && personalComputerRoom.run({ ...r, running }); } catch (x) { console.error(x); }
+  /* субагент: строка в облачке — только пока он работает в этой задаче (и после переподключения) */
+  subBar(running && r.sub || null);
   /* ждёт проверку DeepSeek — не «думает», а ждёт тебя (карточка в чате) */
   const wait = running && r.wait === 'check';
   if (wait) { think(false); setSt('жду проверку «я не робот»', 'on'); } else if (waitCk && running) setSt(READY, 'on');
@@ -504,6 +523,50 @@ qbox.addEventListener('click', async e => {
   } catch (x) { if (x.status === 401) check(); else if (x.status !== 404) add('e', esc(x.message)); b.disabled = false; }
 });
 
+/* ---------- субагент: строка в облачке компьютера и его реплики ----------
+   Сервер шлёт subagent: start → step… → end | error. Пока помощник работает, в облачке — его модель и шаг
+   (цвета — токены темы, см. .bsa), на экране компьютера — программа «субагент»; закончил — строка сразу прячется,
+   а компьютер коротко реагирует. Ошибка, а потом новый вызов (главный агент перезапустил помощника) — «пробую ещё раз» */
+const SUB_PH = {
+  sub: ['Позвал на помощь субагента {m}, ждём отчёт…', 'Зову подмогу: {m} уже бежит!', 'Поручил это субагенту {m} — жду отчёт~', 'Делегирую! {m}, выручай!'],
+  again: ['Пробую ещё раз — теперь {m}', 'Новая попытка: зову {m}', 'Ещё заход! {m}, твой выход~'],
+  end: ['Субагент вернулся с отчётом!', 'Отчёт от помощника получен!', 'Помощник справился — читаю отчёт~'],
+  error: ['Субагент споткнулся… разбираюсь', 'Ой, у помощника ошибка — думаю, что дальше', 'Субагент не справился… попробую иначе'],
+  timeout: ['Субагент не успел вовремя…', 'Помощник слишком долго — остановил его'],
+  max_steps_exceeded: ['Субагенту не хватило шагов…', 'Помощник выдохся — смотрю, что успел'] };
+const pickPh = a => a[Math.floor(Math.random() * a.length)];
+const subName = m => { m = String(m || '').split('/').pop().replace(/:free$/i, ''); return m.length > 24 ? m.slice(0, 23) + '…' : m; };
+const bsa = document.createElement('span');
+bsa.className = 'bsa'; bsa.id = 'rbsa'; bsa.hidden = true;
+bsa.innerHTML = '<i class="bsi" aria-hidden="true"></i><span class="bsn">Субагент</span><b class="bsm"></b><span class="bss"></span>';
+$('#rbubf')?.before(bsa);
+let subErrAt = 0;
+const toRoom = d => { try { window.personalComputerRoom && personalComputerRoom.sub(d); } catch (x) { console.error(x); } };
+/* s — { model, step, max, name, provider } или null; экран компьютера получает то же */
+function subBar(s) {
+  if (!s) { bsa.hidden = true; toRoom(null); return null; }
+  const x = { m: subName(s.model), step: s.step || 0, max: s.max || 0 };
+  bsa.hidden = false; bsa.children[2].textContent = x.m || '—'; bsa.children[3].textContent = x.max ? x.step + '/' + x.max : '';
+  bsa.title = 'Субагент: ' + (s.name || s.provider || '') + ' · ' + (s.model || '');
+  toRoom(x);
+  return x;
+}
+function onSub(d) {
+  if (d.phase === 'start' || d.phase === 'step') {
+    /* агент работает в другом чате — компьютер этого чата не отвлекается (как и ход работы) */
+    if (!running) return;
+    const x = subBar(d);
+    if (d.phase === 'start') { const again = subErrAt && Date.now() - subErrAt < 180e3; subErrAt = 0; toRoom({ ...x, phase: 'start', say: pickPh(again ? SUB_PH.again : SUB_PH.sub).replace('{m}', x.m || 'помощник') }); }
+    return;
+  }
+  subBar(null);
+  /* остановили («Стоп», «Прочитать сейчас») — без реплик: об этом скажет сама остановка */
+  if (!running || d.type === 'cancelled' || d.status === 'cancelled') return;
+  const ok = d.status === 'completed';
+  if (!ok) subErrAt = Date.now();
+  toRoom({ phase: ok ? 'end' : 'error', say: pickPh(SUB_PH[ok ? 'end' : d.status] || SUB_PH.error) });
+}
+
 /* ---------- поток событий ---------- */
 function connect() {
   if (es || !me) return;
@@ -515,6 +578,8 @@ function connect() {
   /* контекст агента вырос за шаг — цвет экрана и жалобы компьютера */
   es.addEventListener('ctx', e => { try { window.personalComputerRoom && personalComputerRoom.ctx(JSON.parse(e.data).ctx); } catch (x) {} });
   es.addEventListener('queue', e => onQueue(JSON.parse(e.data).queue));
+  /* субагент работает: компьютер зовёт помощника, в облачке — его модель и шаг (его кухня в чат не попадает) */
+  es.addEventListener('subagent', e => onSub(JSON.parse(e.data)));
   es.addEventListener('chats', () => hist.changed());
   /* этот чат удалили (в другой вкладке или в Telegram) — переходим в новый */
   es.addEventListener('gone', () => hist.fresh(true));
@@ -649,7 +714,69 @@ openSet = function (p) {
     openSet0(p || (srvSet && srvSet.hasKey ? 'me' : 'ai'));
     $('#c-key').value = '';
     refreshPane();
+    saLoad();
   })();
+};
+
+/* ---------- субагенты (Настройки → Модель → «Субагенты») ----------
+   Провайдер и модель субагента по умолчанию и его лимит шагов. Сохраняются сразу, без «Сохранить», и действуют со следующего
+   вызова spawn_subagent. Провайдеры и модели — с сервера (api/subagent): ровно то, что видит агент в list_subagent_models */
+const saG = document.createElement('div');
+saG.className = 'grp'; saG.dataset.i = 'sub';
+saG.innerHTML = `<h3 class="gh">Субагенты</h3>
+<label class="f">Провайдер по умолчанию<select id="sa-prov"></select></label>
+<label class="f">Модель по умолчанию<select id="sa-model"></select></label><small id="sah" role="status"></small>
+<button class="wl" id="sa-ref" type="button">Обновить список моделей</button>
+<label class="f">Шагов у субагента, не больше<input id="sa-steps" type="number" min="1" max="500" step="1" inputmode="numeric"></label>`;
+$('#p-ai .grp[data-i=steps]').after(saG);
+let saT = 0;
+const saH = (t, st) => { const h = $('#sah'); h.textContent = t || ''; if (st) h.dataset.s = st; else delete h.dataset.s; };
+const saKeep = r => { if (srvSet && r) Object.assign(srvSet, { subProvider: r.subProvider || '', subModel: r.subModel || '', subMaxSteps: r.subMaxSteps }); };
+async function saLoad() {
+  let r;
+  try { r = await api('api/subagent'); } catch (e) { if (e.status === 401) return check(); saH('Не загрузилось: ' + e.message, 'err'); return; }
+  const S = srvSet || {}, sel = $('#sa-prov'), main = r.providers.find(p => p.main), cur = S.subProvider || '';
+  sel.textContent = '';
+  sel.add(new Option('Как у главного агента' + (main ? ' (' + main.name + ')' : ''), ''));
+  /* не настроенного провайдера выбрать нельзя: без ключа субагент не запустится */
+  for (const p of r.providers) { const o = new Option(p.name + (p.available ? ' ✓' : ' — не настроен'), p.base); o.disabled = !p.available && p.base !== cur; sel.add(o); }
+  sel.value = cur;
+  if (sel.value !== cur) { sel.add(new Option(cur, cur)); sel.value = cur; }
+  $('#sa-steps').value = S.subMaxSteps || r.default_max_steps || 30;
+  saModels();
+}
+/* модели выбранного провайдера («как у главного» — модели главного) */
+async function saModels(refresh) {
+  const S = srvSet || {}, base = $('#sa-prov').value, sel = $('#sa-model'), cur = S.subModel || '', t = ++saT;
+  sel.textContent = '';
+  sel.add(new Option(base ? 'По умолчанию у провайдера' : 'Как у главного агента' + (S.model ? ' (' + S.model + ')' : ''), ''));
+  if (cur) sel.add(new Option(cur, cur));
+  sel.value = cur;
+  saH('Загружаю модели…', 'wait');
+  let r;
+  try { r = await api('api/subagent?provider=' + encodeURIComponent(base || S.base || '') + (refresh ? '&refresh=1' : '')); }
+  catch (e) { if (t === saT) saH('Модели не загрузились: ' + e.message, 'err'); return; }
+  if (t !== saT) return;
+  const p = r.providers && r.providers[0];
+  if (!p) { saH(r.error || 'Провайдер не найден', 'err'); return; }
+  if (base && p.saved_model) sel.options[0].text = 'По умолчанию у провайдера (' + p.saved_model + ')';
+  for (const m of p.models) if (m.id !== cur) sel.add(new Option(m.name && m.name !== m.id ? m.name + ' · ' + m.id : m.id, m.id));
+  sel.value = cur;
+  if (!p.available) saH(p.name + ': ' + p.reason, 'err');
+  else if (p.models_error) saH('Список моделей не пришёл: ' + p.models_error, 'err');
+  else saH(plural(p.models_total || p.models.length, 'модель', 'модели', 'моделей') + ' · субагент возьмёт настройки со следующего вызова', 'ok');
+}
+async function saSave(body) {
+  try { saKeep(await api('api/settings', { method: 'PUT', json: body })); saH('Сохранено · действует со следующего вызова субагента', 'ok'); return true; }
+  catch (e) { if (e.status === 401) check(); else saH('Не сохранилось: ' + e.message, 'err'); return false; }
+}
+$('#sa-prov').onchange = async () => { if (await saSave({ subProvider: $('#sa-prov').value, subModel: '' })) saModels(); };
+$('#sa-model').onchange = () => saSave({ subModel: $('#sa-model').value });
+$('#sa-ref').onclick = () => saModels(true);
+$('#sa-steps').onchange = () => {
+  const n = Math.round(+$('#sa-steps').value);
+  if (!(n >= 1 && n <= 500)) { saH('Шагов у субагента — от 1 до 500', 'err'); return; }
+  saSave({ subMaxSteps: n });
 };
 $('#c-reset').onclick = async () => {
   if (!await ask('Сброс', 'Вернуть настройки как было с завода? Ключи API всех сохранённых провайдеров тоже сотрутся. Применится после «Сохранить».', null, 'Сбросить')) return;
@@ -1954,7 +2081,8 @@ css.textContent += `
 `;
 const TL_NAMES = { run_command: 'Команды на сервере', send_file: 'Отправка файлов',
   telegram_connect: 'Подключение бота', telegram_status: 'Состояние бота', telegram_send: 'Сообщения в Telegram', telegram_notify_mode: 'Режим уведомлений', telegram_disconnect: 'Отключение бота',
-  mcp_manage: 'Подключать MCP-серверы', skills_manage: 'Ставить и создавать навыки' };
+  mcp_manage: 'Подключать MCP-серверы', skills_manage: 'Ставить и создавать навыки',
+  spawn_subagent: 'Вызывать субагентов', list_subagent_models: 'Смотреть модели для субагентов' };
 const tok = n => '≈' + n + ' ток.';
 const sum = (a, f) => a.reduce((x, y) => x + f(y), 0);
 function swRow(title, sub, on, fn) {
