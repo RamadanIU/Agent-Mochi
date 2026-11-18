@@ -707,7 +707,7 @@ export function fail(status, j, t, model) {
    Части: текст (onText — по мере прихода), thought: true — размышления (блоки Claude закрывает подпись), functionCall —
    вызов (у Gemini с подписью рядом). Ответ без SSE (массив JSON целиком) тоже разбираем */
 async function readStream(r, { onText, poke }) {
-  let text = '', think = '', used = 0, finish = '', tsig = '', tb = null, raw = '', lines = 0;
+  let text = '', think = '', used = 0, cache = null, finish = '', tsig = '', tb = null, raw = '', lines = 0;
   const th = [], calls = [], dec = new TextDecoder();
   const sp = thinkSplit(d => { text += d; onText?.(d); }, d => { think += d; });
   const onData = x => {
@@ -717,6 +717,8 @@ async function readStream(r, { onText, poke }) {
     const R = x.response || x, cand = R.candidates?.[0] || {}, parts = Array.isArray(cand.content?.parts) ? cand.content.parts : [];
     const u = R.usageMetadata;
     if (u) used = (+u.promptTokenCount || 0) + (+u.candidatesTokenCount || 0) + (+u.thoughtsTokenCount || 0) || used;
+    /* из кэша Google: cachedContentTokenCount (входит в promptTokenCount); нет поля — Google о кэше не сообщил */
+    if (u && +u.promptTokenCount > 0 && u.cachedContentTokenCount != null) cache = { in: +u.promptTokenCount, hit: Math.max(0, Math.min(+u.cachedContentTokenCount || 0, +u.promptTokenCount)) };
     for (const p of parts) {
       if (!isObj(p)) continue;
       if (p.thought === true) {
@@ -747,7 +749,7 @@ async function readStream(r, { onText, poke }) {
   if (!lines && raw.trim()) { const j = jparse(raw.trim()); if (j) onData(j); }
   sp.end();
   if (tb) th.push(tb);
-  return { text, think: think.trim(), calls, used, finish, th: th.filter(x => x.s), tsig };
+  return { text, think: think.trim(), calls, used, cache, finish, th: th.filter(x => x.s), tsig };
 }
 
 /* один ответ модели: { text, calls, used, think, rs } — как у остальных провайдеров. rs.ag — размышления с подписями
@@ -785,7 +787,7 @@ export async function turn({ token, auth, model, sys, tools = [], msgs = [], eff
       });
       const ag = { ...(res.th.length ? { th: res.th.map(x => ({ t: x.t, s: x.s })) } : {}), ...(res.tsig ? { ts: res.tsig } : {}),
         ...(res.calls.some(c => c.sig) ? { cs: Object.fromEntries(res.calls.filter(c => c.sig).map(c => [c.id, c.sig])) } : {}) };
-      return { text: res.text, calls, used: res.used, ...(res.think ? { think: res.think } : {}), ...(Object.keys(ag).length ? { rs: { ag } } : {}) };
+      return { text: res.text, calls, used: res.used, ...(res.cache ? { cache: res.cache } : {}), ...(res.think ? { think: res.think } : {}), ...(Object.keys(ag).length ? { rs: { ag } } : {}) };
     } catch (e) {
       if (signal?.aborted) throw e;
       /* пока пользователь ничего не увидел, можно поправить запрос и повторить */

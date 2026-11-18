@@ -2568,9 +2568,11 @@ function setState(name,o={}){
 function want(name,o={}){const need=(MIN[cur]||600)/1000-(T-stT);
  if(need<=0||o.now){pend=null;setState(name,o);return}pend={name,o};pendT=T+need}
 let nextChat=12,patT=0;
-function setCtx(n,quiet){n=Math.max(0,+n||0);if(!Number.isFinite(n))return;const was=CTX.lvl;CTX.n=n;
+/* c — кэш провайдера в последнем запросе {in, hit} (null — провайдер о нём не сообщил) */
+function setCtx(n,quiet,c){n=Math.max(0,+n||0);if(!Number.isFinite(n))return;const was=CTX.lvl;CTX.n=n;
  CTX.lvl=CTX.STEPS.filter(x=>n>=x).length;CTX.theme=CTX.THEMES[CTX.lvl];
- cv.title='Контекст: '+(n>=1000?Math.round(n/1000)+'k':n)+' токенов';
+ const K=x=>x>=1000?Math.round(x/1000)+'k':String(x);
+ cv.title='Контекст: '+K(n)+' токенов'+(c&&c.in>0?'\nИз кэша провайдера: '+K(c.hit||0)+' из '+K(c.in)+' ('+Math.round(100*(c.hit||0)/c.in)+'%)':'');
  if(quiet||!CTX.on){CTX.on=true;CTX.next=T+(CTX.GAP[CTX.lvl]||0)*rand(.4,1);return}
  if(CTX.lvl>was){speak(bag(PH['full'+CTX.lvl]));CTX.next=T+CTX.GAP[CTX.lvl]*rand(.6,1.2);if(CTX.lvl===3)SND.play('crash')}
  else if(CTX.lvl<was&&!CTX.lvl)speak(bag(PH.fresh))}
@@ -2604,7 +2606,7 @@ const room=window.personalComputerRoom={
   /* сообщение из очереди дошло до модели (или вернулось в переписку при «Стопе») — фраза была, когда оно встало в очередь */
   if(e.mid||work.running)return;
   work.err=false;work.stopped=false;want('listening',{say:bag(PH.got),now:1});heart(3)},
- run(r){const was=work.running;work.running=!!r.running;work.steps=r.steps||0;if(r.t)work.t=r.t;J.run(r);hudRun();if(r.ctx!=null)setCtx(r.ctx);
+ run(r){const was=work.running;work.running=!!r.running;work.steps=r.steps||0;if(r.t)work.t=r.t;J.run(r);hudRun();if(r.ctx!=null)setCtx(r.ctx,0,r.cache||null);
   if(work.running&&!was){work.fails=0;work.ans='';work.thinkT=T;toolRes.clear();if(cur!=='listening')want('thinking',{say:bag(PH.think)})}
   if(!work.running&&was){work.tool=null;const ans=work.ans;work.ans='';lastActive=T;
    if(work.stopped)want('stopped',{say:bag(PH.stop),kind:'evt'});
@@ -2635,14 +2637,14 @@ const room=window.personalComputerRoom={
  note(e,rp){J.note(e);if(rp)return;if(/^Остановлено/.test(e.text||'')){work.stopped=true;if(!work.running)want('stopped',{say:bag(PH.stop),kind:'evt'})}else speak(e.text,{kind:'evt'})},
  queue(q){const n=Array.isArray(q)?q.length:0;if(n>(room._q||0)&&work.running)speak(bag(PH.queued));room._q=n},
  reset(){J.reset();work.seen.clear();work.tool=null;toolRes.clear();hudRun()},
- snap(s){/* после перерисовки истории: показать, чем компьютер занят сейчас */work.running=!!s.running;work.steps=s.steps||0;if(s.t)work.t=s.t;if(s.ctx!=null)setCtx(s.ctx,1);
+ snap(s){/* после перерисовки истории: показать, чем компьютер занят сейчас */work.running=!!s.running;work.steps=s.steps||0;if(s.t)work.t=s.t;if(s.ctx!=null)setCtx(s.ctx,1,s.cache||null);
   const last=J.cur(),run=last&&J.steps(last).filter(x=>x.state==='run').pop();work.tool=work.running&&run?{seq:run.seq,name:run.name}:null;
   if(work.tool){if(run.name==='run_command')live.cmd=String(run.hint||run.label||'');work.seen.add(run.seq)}
   hudRun();J.render();
   /* задача кончилась, пока связи не было, — не застревать в «думаю» */
   if(work.running){resume();if(work.tool)speak(run.label||run.name,{kind:'act',tool:run.name,seq:run.seq,now:1});else if(!say.text)speak(bag(PH.think))}
   else if(['thinking','waiting','answer','shell','searching','browsing','reading','coding','writing','drawing','memory','processing','uploading','update','sending','delegating','planning'].includes(cur))setState('idle',{quiet:1})},
- ctx(n){setCtx(n)},
+ ctx(n,c){setCtx(n,0,c||null)},
  /* субагент (client.js): d — {m, step, max} для экрана, phase — реакция, say — реплика; null — помощник ушёл */
  sub(d){live.sub=d&&d.m?{m:d.m,n:d.step||0,max:d.max||0}:null;if(!d||!d.phase||!work.running)return;if(d.say)speak(d.say,{kind:'evt'});
   if(d.phase==='start')want('delegating',{force:true,quiet:1});else if(d.phase==='error')want('confused',{quiet:1});else if(d.phase==='end')heart(2)},
