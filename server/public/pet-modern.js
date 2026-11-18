@@ -283,6 +283,13 @@ const APPS={
   for(let i=0;i<26;i++){const v=Math.abs(Math.sin(o.T*6+i*.7)*Math.sin(o.T*2.3+i*.31))*26+Math.abs(Math.sin(o.T*11+i))*4+1.8;box(42+i*4.3,57-v/2,2.6,v,1.3,rgba(a,.45+v/50))}},
  wait(t,o){win(o,'#0c0d11',1);for(let i=0;i<12;i++){const a=i/12*TAU-Math.PI/2,k=((i/12-o.T*1.1)%1+1)%1;g.globalAlpha=.15+.85*(1-k);ln(80+Math.cos(a)*7,50+Math.sin(a)*7,80+Math.cos(a)*13,50+Math.sin(a)*13,'#e9eaee',2.6)}
   g.globalAlpha=1;tx('Жду ответ модели'+'.'.repeat(1+Math.floor(o.T*2)%3),80,80,7.2,'#8d9099',500,'center')},
+ /* субагент: «я» слева и помощник справа, между ними бегут пакеты задачи; внизу — его модель и шаг */
+ delegate(t,o){win(o,'#0c0d11',1);const S=(o.live||{}).sub||{},a=CO.acc;
+  [[14,'я'],[114,'помощник']].forEach(([x,l],k)=>{rr(g,x,25,32,22,4);g.fillStyle='#1b1d22';g.fill();g.strokeStyle='#3a3d45';g.lineWidth=1;g.stroke();box(x+12,47,8,3,1.2,'#3a3d45');
+   dot(x+11,34,1.8,k?CO.eye2:a);dot(x+21,34,1.8,k?CO.eye2:a);g.strokeStyle=k?CO.eye2:a;g.lineWidth=1.3;g.lineCap='round';g.beginPath();g.arc(x+16,38,3.4,.15*Math.PI,.85*Math.PI);g.stroke();tx(l,x+16,57,6,'#8d9099',500,'center')});
+  for(let i=0;i<4;i++){const k=((o.T*.6+i/4)%1+1)%1;g.globalAlpha=Math.sin(k*Math.PI);dot(52+k*56,36,2.1,a)}g.globalAlpha=1;
+  tx(fit(String(S.m||'субагент'),7.4,600,144),80,73,7.4,'#e8eaf0',600,'center');
+  tx(S.max?'шаг '+S.n+' из '+S.max:'жду отчёт'+'.'.repeat(1+Math.floor(o.T*2)%3),80,85,6.6,'#8d9099',500,'center')},
  plan(t,o){win(o,'#101216',1);PLAN.forEach((s,i)=>{const y=26+i*14.6,done=t>.8*(i+1),cur=Math.floor(t/.8)===i,k=clamp((t-.8*(i+1))/.3,0,1);
   if(cur)box(4,y-6.2,152,12.4,6.2,rgba(CO.acc,.14));
   if(done){dot(13,y,4.3,CO.acc);ckm(13,y,2.2,'#0b0c10',1.3,ease(k))}else{g.beginPath();g.arc(13,y,3.8,0,TAU);g.strokeStyle=cur?CO.acc:'#4a4d55';g.lineWidth=1.3;g.stroke();if(cur)dot(13,y,1.5+Math.sin(o.T*6)*.5,CO.acc)}
