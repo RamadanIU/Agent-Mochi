@@ -114,8 +114,10 @@ export function callParser(onText) {
 
 /* ---------- что отправить в чат сайта ---------- */
 export const sha = s => crypto.createHash('sha256').update(s).digest('hex').slice(0, 16);
-/* версия инструкции: без строки с текущим временем — иначе она «менялась» бы каждую минуту */
-export const sysHash = (sys, tools, salt = '') => sha(String(sys).replace(/\nСегодня [^\n]*?время сервера \d\d:\d\d\./, '') + '\n' + JSON.stringify(tools.map(t => [t.function.name, t.function.description, t.function.parameters])) + salt);
+/* версия инструкции: без строки «Сегодня …» (дата, часовой пояс; в старых версиях — и время сервера) — смена дня
+   не повод начинать новый чат на сайте: новую дату модели сообщает dayOf. Строка вырезается целиком, поэтому
+   хэш тот же, что и у прежних версий подсказки, — начатые чаты на сайте продолжаются */
+export const sysHash = (sys, tools, salt = '') => sha(String(sys).replace(/\nСегодня [^\n]*/, '') + '\n' + JSON.stringify(tools.map(t => [t.function.name, t.function.description, t.function.parameters])) + salt);
 export const textOf = c => typeof c === 'string' ? c : Array.isArray(c) ? c.filter(p => p && p.type === 'text').map(p => p.text).join('\n') : c == null ? '' : String(c);
 export const clip = (s, n) => s.length <= n ? s : s.slice(0, Math.floor(n * 0.6)) + '\n…[пропущено ' + (s.length - n) + ' символов]…\n' + s.slice(s.length - Math.floor(n * 0.4));
 export function names(H) { const n = new Map(); for (const m of H) for (const c of m.tool_calls || []) n.set(c.id, c.function?.name || 'tool'); return n; }

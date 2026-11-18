@@ -132,6 +132,49 @@ const rsKey = S => String(S.base || '').trim().replace(/\/+$/, '') + '|' + S.mod
 const argsOk = s => { try { const a = JSON.parse(s); return !!a && typeof a === 'object' && !Array.isArray(a); } catch { return false; } };
 const sleep = (ms, sig) => new Promise(ok => { const t = setTimeout(ok, ms); sig?.addEventListener('abort', () => { clearTimeout(t); ok(); }, { once: true }); });
 const abortErr = () => Object.assign(new Error('остановлено'), { name: 'AbortError' });
+/* часовой пояс сервера для подсказки: «Europe/Moscow (UTC+3)» */
+export function tzName(d = new Date()) {
+  const off = -d.getTimezoneOffset(), a = Math.abs(off);
+  const utc = 'UTC' + (off ? (off > 0 ? '+' : '-') + Math.floor(a / 60) + (a % 60 ? ':' + String(a % 60).padStart(2, '0') : '') : '');
+  let z = ''; try { z = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch {}
+  return z && !/^(Etc\/)?(UTC|GMT|Universal|Zulu)$/i.test(z) ? z + ' (' + utc + ')' : utc;
+}
+
+/* ---------- кэш провайдера ----------
+   Провайдер (OpenAI, DeepSeek, Qwen, Gemini, Claude…) берёт из кэша — дешевле и быстрее — только начало запроса,
+   совпадающее с прошлым запросом байт в байт. Поэтому начало держим неизменным: в подсказке нет часов и минут,
+   а старая переписка из окна уходит не по одному сообщению, а сразу порцией.
+   Окно — последние 40–59 сообщений пользователя: начало сдвигается на 20 раз в 20 сообщений, а не на каждом */
+export const WIN = 40, WIN_STEP = 20, HIST_MAX = 80;
+export const winStart = n => n > WIN ? Math.floor((n - WIN) / WIN_STEP) * WIN_STEP : 0;
+/* сколько входа провайдер взял из кэша: { in, hit } или null, если он об этом не сообщает.
+   OpenAI, OpenRouter, Qwen (DashScope) — prompt_tokens_details.cached_tokens, DeepSeek API — prompt_cache_hit_tokens, Kimi — cached_tokens */
+export function cacheOf(u) {
+  if (!u || typeof u !== 'object') return null;
+  const inp = +u.prompt_tokens || +u.input_tokens || 0, d = u.prompt_tokens_details || u.input_tokens_details || {};
+  const v = [d.cached_tokens, u.prompt_cache_hit_tokens, u.cached_tokens].find(x => x != null && x !== '' && Number.isFinite(+x));
+  return v == null || !(inp > 0) ? null : { in: inp, hit: Math.max(0, Math.min(+v, inp)) };
+}
+const hostOf = base => { try { return new URL(base).hostname.toLowerCase(); } catch { return ''; } };
+/* подсказки кэшу в теле запроса (только тем, кто их понимает — чужое поле другой шлюз может и не принять):
+   OpenAI — prompt_cache_key: запросы одного чата попадают на машину, где лежит его кэш;
+   OpenRouter — session_id: запросы чата идут к тому же провайдеру модели (кэш у каждого свой); Claude без метки
+   cache_control не кэширует вовсе — верхнеуровневая метка, OpenRouter сам ставит её на конец запроса и двигает дальше;
+   Qwen на OpenRouter кэширует только помеченное — метка на системной подсказке (она с инструментами — самая большая
+   неизменная часть). OpenAI, DeepSeek API и DashScope присылают в потоке usage (и с ним — сколько взято из кэша)
+   только по stream_options.include_usage. key — случайный идентификатор чата, без имени и id пользователя */
+const USAGE = { stream_options: { include_usage: true } };
+export function cacheHints(base, model, key) {
+  const h = hostOf(base), m = String(model || '').toLowerCase().replace(/^~/, '');
+  if (h === 'api.deepseek.com' || /^dashscope(-intl|-us)?\.aliyuncs\.com$/.test(h)) return { body: USAGE, sysMark: false };
+  if (!key) return { body: h === 'api.openai.com' ? USAGE : {}, sysMark: false };
+  if (h === 'api.openai.com') return { body: { prompt_cache_key: key, ...USAGE }, sysMark: false };
+  if (h === 'openrouter.ai' || h.endsWith('.openrouter.ai')) {
+    const claude = m.startsWith('anthropic/'), qwen = m.startsWith('qwen/');
+    return { body: { session_id: key, ...(claude ? { cache_control: { type: 'ephemeral' } } : {}) }, sysMark: qwen };
+  }
+  return { body: {}, sysMark: false };
+}
 /* ждём операцию, но не дольше, чем до «Стопа»: агент останавливается сразу, а сама операция доделывается в фоне.
    Команду исполнитель добивает сам (SIGTERM, через 3 с — SIGKILL), запросы к модели и MCP получают тот же сигнал;
    а подключение к MCP или поиску (до 10–30 с) и упрямый процесс больше не держат «Стоп» */
@@ -417,7 +460,7 @@ export class Chat extends EventEmitter {
   /* rc — в каком чате работает агент (rt — его название), ctx — сколько токенов занимает его разговор (цвет экрана компьютера) */
   runState() {
     const r = this.doc.v.run;
-    return { running: this.running, rc: this.cid, rt: this.meta()?.title || '', ctx: this.ctxSize(), ...(r ? { origin: r.origin, t: r.t, steps: r.steps } : {}), ...(this.chk ? { wait: 'check', at: this.chk.at } : {}), ...(this.subNow && this.running ? { sub: this.subNow } : {}) };
+    return { running: this.running, rc: this.cid, rt: this.meta()?.title || '', ctx: this.ctxSize(), ...(this.doc.v.cache ? { cache: this.doc.v.cache } : {}), ...(r ? { origin: r.origin, t: r.t, steps: r.steps } : {}), ...(this.chk ? { wait: 'check', at: this.chk.at } : {}), ...(this.subNow && this.running ? { sub: this.subNow } : {}) };
   }
   /* заполненность контекста: что модель видела в последнем запросе (по её usage или по оценке), а у чата без запросов — оценка истории */
   ctxSize() {
@@ -475,7 +518,7 @@ export class Chat extends EventEmitter {
   wire() {
     const S = this.settings(), H = this.doc.v.hist, lvl = S.vis === false ? 2 : this.noVis, co = CO.isCoarena(S.base), ag = AG.isAntigravity(S.base), key = rsKey(S);
     const rec = new Set(H.map((m, i) => m._pf ? i : -1).filter(i => i >= 0).slice(-3));
-    const us = H.map((m, i) => m.role === 'user' ? i : -1).filter(i => i >= 0), from = us.length > 40 ? us[us.length - 40] : 0;
+    const us = H.map((m, i) => m.role === 'user' ? i : -1).filter(i => i >= 0), k = winStart(us.length), from = k ? us[k] : 0;
     const out = [];
     for (let i = from; i < H.length; i++) {
       const { _pf, _vi, _mid, _qw, _ds, _fl, _rs, ...m } = H[i];
@@ -492,11 +535,14 @@ export class Chat extends EventEmitter {
     }
     return out;
   }
+  /* ключ кэша для провайдера (см. cacheHints): случайный id переписки, у старых чатов без него — хэш, не раскрывающий id */
+  cacheKey() { return 'pc-' + (this.doc.v.sess || crypto.createHash('sha256').update(String(this.u?.id) + ':' + this.cid).digest('hex').slice(0, 16)); }
   hasPdf() { return this.wire().some(m => Array.isArray(m.content) && m.content.some(p => p.type === 'file')); }
 
   trimHist() {
     const H = this.doc.v.hist, us = H.map((m, i) => m.role === 'user' ? i : -1).filter(i => i >= 0);
-    if (us.length > 80) { const cut = us[us.length - 60]; this.dropParts(H.slice(0, cut)); H.splice(0, cut); }
+    /* режем кратно порции окна (см. winStart) и с запасом в порцию до его начала: начало запроса к модели не сдвигается */
+    if (us.length > HIST_MAX) { const cut = us[winStart(us.length) - WIN_STEP]; this.dropParts(H.slice(0, cut)); H.splice(0, cut); }
   }
 
   /* незакрытые вызовы инструментов получают ответ, иначе модель не примет историю */
@@ -600,6 +646,7 @@ export class Chat extends EventEmitter {
     this.dropParts(this.doc.v.hist);
     this.dropParts((this.doc.v.queue || []).map(q => q.msg));
     Object.assign(this.doc.v, { hist: [], log: [], th: [], run: null, sess: rid(16), act: [], queue: [], ctx: 0 });
+    delete this.doc.v.cache;
     this.doc.save();
     this.emit('reset', this.cid);
     this.emit('run', this.runState());
@@ -639,7 +686,10 @@ export class Chat extends EventEmitter {
     fin();
   }
 
-  /* подсказка собирается только из того, что сейчас включено: выключенный инструмент не занимает память */
+  /* подсказка собирается только из того, что сейчас включено: выключенный инструмент не занимает память.
+     Дата — без часов и минут: подсказка идёт первой в каждом запросе, а провайдер берёт из кэша только неизменное
+     начало запроса — время с минутами сбрасывало бы кэш всей переписки каждую минуту, дата меняется раз в сутки.
+     Точное время модель узнаёт командой date */
   async system(names, extra = '', offB = []) {
     const S = this.settings(), has = n => names.has(n), dir = userDir(this.u), now = new Date();
     const run = has('run_command'), I = run ? await agentInfo() : null;
@@ -653,7 +703,7 @@ export class Chat extends EventEmitter {
     return S.sys
       + '\n' + FMT
       + '\nВ поле action у инструментов коротко (2–6 слов) и по-человечески пиши, что делаешь сейчас, — пользователь видит это, пока идёт шаг.'
-      + `\nСегодня ${now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}, время сервера ${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}.`
+      + `\nСегодня ${now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}, часовой пояс сервера ${tzName(now)}.` + (run ? ' Точное время — команда date.' : '')
       + (run ? `\nСервер: ${I.os}, ядро ${I.kernel}, ${I.arch}, ${I.cpus || '?'} CPU, ${I.mem || '?'} МБ RAM. Ты работаешь как пользователь ${I.user}. ${pkg} Установлено: ${(I.tools || []).join(', ') || '—'}, node.` + agentNote() : '')
       + `\nРабочая папка пользователя: ${dir} (inbox/ — файлы от пользователя, outbox/ — для файлов пользователю). Задачи выполняются на сервере в фоне: пользователь может закрыть браузер, работа продолжится, а результат он увидит в чате.`
       + ' У пользователя есть вкладка «Файлы» — проводник по серверу с твоими же правами: там он сам открывает, смотрит и правит файлы, поэтому, сделав файл, достаточно назвать путь. Пути в `обратных кавычках` в его сообщении — файлы, выбранные там.'
@@ -707,7 +757,7 @@ export class Chat extends EventEmitter {
     const { tools, said } = withAction([...builtins().filter(on), ...X.defs]), names = new Set(tools.map(t => t.function.name));
     const ctx = { X, names };
     const sys = await until(this.system(names, X.prompt, offB), sig); chk();
-    const { text, calls, used, qw, ds, rs, think } = await until(this.callModel(sys, tools, sig), sig); chk();
+    const { text, calls, used, cache, qw, ds, rs, think } = await until(this.callModel(sys, tools, sig), sig); chk();
     /* субагент после лимита шагов: только отчёт — вызовы инструментов не выполняем */
     if (this.noTools) calls.splice(0);
     /* _qw / _ds — скрытая метка чата Qwen / DeepSeek под ответом: следующий шаг продолжит тот же чат (см. webchat.js);
@@ -715,7 +765,9 @@ export class Chat extends EventEmitter {
     H.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}), ...(qw ? { _qw: qw } : {}), ...(ds ? { _ds: ds } : {}), ...(rs ? { _rs: { b: rsKey(S), f: rs } } : {}) });
     /* контекст: модель назвала usage — верим ей, нет — оценка по запросу и ответу */
     this.doc.v.ctx = used || tokens([sys, tools, this.wire(), H.at(-1)]);
-    this.emit('ctx', this.doc.v.ctx);
+    /* кэш: сколько входа провайдер взял из кэша в этом запросе (если он об этом сообщает) */
+    if (cache) this.doc.v.cache = cache; else delete this.doc.v.cache;
+    this.emit('ctx', this.doc.v.ctx, this.doc.v.cache || null);
     this.partial = '';
     /* размышления в чат не попадают: чат — только разговор, а что делает модель, и так видно по облачку компьютера.
        Они лежат отдельно (th) — их открывает долгое нажатие на компьютер */
@@ -983,6 +1035,7 @@ export class Chat extends EventEmitter {
     let effort = S.effort, emptied = 0;
     for (let attempt = 0; ; attempt++) {
       const msgs = this.wire(), hasM = msgs.some(m => Array.isArray(m.content));
+      const ch = cacheHints(S.base, S.model, this.cacheKey());
       const h = { 'Content-Type': 'application/json' };
       if (S.key) h.Authorization = 'Bearer ' + S.key;
       /* «тишина» дольше 3 минут — модель зависла */
@@ -993,7 +1046,7 @@ export class Chat extends EventEmitter {
       try {
         const url = (co ? CO.apiBase(S.base) : S.base.replace(/\/+$/, '')) + '/chat/completions';
         const r = await apiFetch(url, { method: 'POST', headers: h, signal,
-          body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: sys }, ...msgs], ...(tools.length ? { tools } : {}), stream: true, ...(co ? CO.extra({ model: S.model, effort }) : {}) }) });
+          body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: ch.sysMark ? [{ type: 'text', text: sys, cache_control: { type: 'ephemeral' } }] : sys }, ...msgs], ...(tools.length ? { tools } : {}), stream: true, ...ch.body, ...(co ? CO.extra({ model: S.model, effort }) : {}) }) });
         if (!r.ok) {
           const full = await r.text().catch(() => ''), et = full.slice(0, 300);
           /* Coarena объясняет ошибку кодом: условия не приняты, лимит на сегодня, ключ истёк — повторять бесполезно,
@@ -1285,7 +1338,8 @@ export class Chat extends EventEmitter {
     if (!text && !calls.length) return { empty: true, finish, reasoning: !!think, text: '', calls: [] };
     const used = (+usage?.prompt_tokens || 0) + (+usage?.completion_tokens || 0);
     const rd = rdet.filter(Boolean), rs = rkey || rd.length ? { ...(rkey ? { [rkey]: think } : {}), ...(rd.length ? { reasoning_details: rd } : {}) } : null;
-    return { text, calls, used: used > 0 ? used : 0, ...(think.trim() ? { think: think.trim() } : {}), ...(rs ? { rs } : {}) };
+    const cache = cacheOf(usage);
+    return { text, calls, used: used > 0 ? used : 0, ...(cache ? { cache } : {}), ...(think.trim() ? { think: think.trim() } : {}), ...(rs ? { rs } : {}) };
   }
 
   /* убрать секрет (токен бота) из истории и журнала — он уже сохранён в защищённом месте */

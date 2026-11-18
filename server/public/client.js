@@ -576,7 +576,7 @@ function connect() {
   es.addEventListener('delta', e => onDelta(JSON.parse(e.data).d));
   es.addEventListener('run', e => setRun(JSON.parse(e.data)));
   /* контекст агента вырос за шаг — цвет экрана и жалобы компьютера */
-  es.addEventListener('ctx', e => { try { window.personalComputerRoom && personalComputerRoom.ctx(JSON.parse(e.data).ctx); } catch (x) {} });
+  es.addEventListener('ctx', e => { try { window.personalComputerRoom && const d = JSON.parse(e.data); personalComputerRoom.ctx(d.ctx, d.cache || null); } catch (x) {} });
   es.addEventListener('queue', e => onQueue(JSON.parse(e.data).queue));
   /* субагент работает: компьютер зовёт помощника, в облачке — его модель и шаг (его кухня в чат не попадает) */
   es.addEventListener('subagent', e => onSub(JSON.parse(e.data)));
