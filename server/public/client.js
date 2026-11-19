@@ -1493,6 +1493,7 @@ async function refreshPane() {
     api('api/update').then(updState).catch(() => {});
     api('api/access').then(i => { accState(i); if (accBusy(i)) accTick(); }).catch(() => {});
     pxLoad();
+    akLoad();
     $('#s-acct').textContent = a.user.name + (a.user.admin ? ' · администратор' : '') + ' · сессий: ' + a.sessions;
     foldMeta(fAcct, a.user.name + (a.user.admin ? ' · админ' : ''));
     $('#s-inv').hidden = !a.user.admin;
@@ -2047,6 +2048,214 @@ function pxRender(i) {
   /* запускается — заглянем ещё раз */
   if (i.on && st.state === 'starting') setTimeout(() => { if ($('#dlg').open) pxLoad(); }, 1500);
 }
+
+/* ---------- настройки → Сервер → «API для других проектов» ----------
+   OpenAI-совместимый адрес /v1 и ключи sk-pc-…: любая программа, которая умеет OpenAI API (SDK openai, LangChain,
+   Open WebUI, Cursor, n8n…), получает все провайдеры пользователя. Модель — «провайдер/модель» (список — GET /v1/models).
+   Ключ показывается один раз, при создании; на сервере хранится только его хеш */
+const fApi = fold('api', 'API для других проектов');
+fTg.after(fApi);
+css.textContent += `
+#dlg .fold[data-k=api]>summary::before{content:"";flex:none;width:20px;height:20px;background:var(--acc);-webkit-mask:var(--j-key) center/contain no-repeat;mask:var(--j-key) center/contain no-repeat}
+#p-srv .akm{font:12px/1.5 ui-monospace,Menlo,Consolas,"Courier New",monospace;letter-spacing:0;text-transform:none;overflow-wrap:anywhere;user-select:all}
+#p-srv .ake{display:flex;align-items:center;gap:10px;margin:14px 2px 0;padding:10px 12px;background:var(--bg);box-shadow:var(--sh2)}
+#p-srv .ake .akm{flex:1;min-width:0;color:var(--acc)}
+#p-srv .ake .pbtn{flex:none;margin:0}
+#p-srv .aknew{margin:16px 2px 0;padding:12px;background:color-mix(in srgb,var(--ok) 9%,var(--bg));box-shadow:var(--sh2)}
+#p-srv .aknew b{display:block;font:8px/1.7 var(--pf);color:var(--ok);font-weight:normal}
+#p-srv .aknew .ake{margin:10px 0 0}
+#p-srv .akd{display:block;margin:10px 2px 0;font:7px/1.8 var(--pf);color:var(--mut);overflow-wrap:anywhere}
+#p-srv .akd.bad{color:var(--err)}#p-srv .akd.ok{color:var(--ok)}
+#p-srv .akp{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;text-transform:none}
+#p-srv .akp label{display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--bg);box-shadow:var(--sh2);font:7px/1.4 var(--pf);color:var(--fg);cursor:pointer}
+#p-srv .akp label.off{color:var(--mut)}
+#p-srv .akp input{margin:0}
+#p-srv .akc{position:relative;margin:10px 0 0}
+#p-srv .akc pre{margin:0;padding:10px 12px;background:var(--tbg);color:var(--tfg);font:11px/1.55 ui-monospace,Menlo,Consolas,"Courier New",monospace;white-space:pre-wrap;overflow-wrap:anywhere;text-shadow:none}
+#p-srv .akh{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:6px}#p-srv .akh .akd{margin:0}#p-srv .akh .pbtn{flex:none;margin:0}
+#p-srv .akr{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+#p-srv .akr span{font:7px/1.6 var(--pf);color:var(--mut);overflow-wrap:anywhere}#p-srv .akr span.bad{color:var(--err)}
+#p-srv .akml{display:flex;flex-direction:column;gap:2px;margin-top:8px;max-height:320px;overflow-y:auto}
+#p-srv .akml button{display:block;width:100%;padding:6px 8px;text-align:left;background:none;color:var(--fg);cursor:copy}
+#p-srv .akml button:hover,#p-srv .akml button:focus-visible{background:color-mix(in srgb,var(--acc) 9%,var(--bg))}
+#p-srv .akml small{display:block;margin-top:2px;font:7px/1.5 var(--pf);color:var(--mut)}
+#p-srv .akml b{display:block;margin:10px 0 2px;font:8px/1.6 var(--pf);color:var(--acc);font-weight:normal}
+`;
+let akI = null, akNew = null, akModels = null, akMsgT = ['', ''];
+const akSay = (t, s) => { akMsgT = [t || '', s || '']; const m = $('#s-akm'); if (!m) return; m.textContent = akMsgT[0]; if (akMsgT[1]) m.dataset.s = akMsgT[1]; else delete m.dataset.s; };
+const akCopy = async (text, what) => {
+  try { await navigator.clipboard.writeText(text); akSay((what || 'Скопировано') + ' ✓', 'ok'); }
+  catch (e) { akSay('Не скопировалось — выдели и скопируй вручную'); }
+};
+const akBtn = (txt, fn, cls = 'pbtn sm') => { const b = el('button', cls); b.type = 'button'; b.append(el('span', null, txt)); b.onclick = async () => { b.disabled = true; try { await fn(b); } catch (e) { akSay(e.message); } finally { b.disabled = false; } }; return b; };
+const akEp = () => (akI && akI.endpoint) || location.origin + '/v1';
+const akNum = n => n >= 1e6 ? (n / 1e6).toFixed(1) + ' млн' : n >= 1e4 ? Math.round(n / 1e3) + ' тыс.' : String(n);
+const akDefModel = k => (k && k.model) || (akI && akI.main.model ? akI.main.provider + '/' + akI.main.model : 'provider/model');
+/* примеры: curl, Python, JavaScript — с адресом, ключом и моделью */
+function akSnippets(key, model) {
+  const ep = akEp(), K = key || 'sk-pc-…';
+  return [
+    ['curl', `curl ${ep}/chat/completions \\\n  -H "Authorization: Bearer ${K}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model": "${model}", "messages": [{"role": "user", "content": "Привет!"}]}'`],
+    ['Python (pip install openai)', `from openai import OpenAI\n\nclient = OpenAI(base_url="${ep}", api_key="${K}")\nr = client.chat.completions.create(\n    model="${model}",\n    messages=[{"role": "user", "content": "Привет!"}],\n)\nprint(r.choices[0].message.content)`],
+    ['JavaScript (npm i openai)', `import OpenAI from "openai";\n\nconst client = new OpenAI({ baseURL: "${ep}", apiKey: "${K}" });\nconst r = await client.chat.completions.create({\n  model: "${model}",\n  messages: [{ role: "user", content: "Привет!" }],\n});\nconsole.log(r.choices[0].message.content);`],
+    ['Переменные окружения (большинство программ)', `OPENAI_BASE_URL=${ep}\nOPENAI_API_KEY=${K}`],
+  ];
+}
+function akCode(title, text) {
+  const w = el('div', 'akc'), h = el('div', 'akh'), pre = el('pre');
+  pre.textContent = text;
+  h.append(el('span', 'akd', title), akBtn('Копировать', () => akCopy(text, title.split(' (')[0] + ' — скопировано')));
+  w.append(h, pre);
+  return w;
+}
+/* выбор провайдеров: ничего не отмечено — можно все */
+function akProvs(sel) {
+  const box = el('div', 'akp'), set = new Set(sel || []);
+  for (const p of akI.providers) {
+    if (!p.available && !set.has(p.id)) continue;
+    const l = el('label', p.available ? null : 'off'), c = el('input');
+    c.type = 'checkbox'; c.value = p.id; c.checked = set.has(p.id);
+    l.title = p.available ? p.id : p.id + ' — не настроен';
+    l.append(c, p.name); box.append(l);
+  }
+  if (!box.childNodes.length) box.append(el('span', 'akd', 'Нет настроенных провайдеров — настрой их на вкладке «Модель».'));
+  box.value = () => [...box.querySelectorAll('input:checked')].map(c => c.value);
+  return box;
+}
+/* модель по умолчанию: поле с подсказками из списка моделей */
+function akModelInput(v) {
+  const i = inp('как у агента: ' + akDefModel(null)); i.value = v || ''; i.setAttribute('list', 'ak-models');
+  return i;
+}
+function akDatalist() {
+  let d = $('#ak-models');
+  if (!d) { d = el('datalist'); d.id = 'ak-models'; document.body.append(d); }
+  d.innerHTML = '';
+  for (const x of akModels || []) { const o = el('option'); o.value = x.id; o.label = x.provider + ' · ' + x.name; d.append(o); }
+}
+async function akLoadModels(refresh) {
+  akModels = (await api('api/keys/models' + (refresh ? '?refresh=1' : ''))).data;
+  akDatalist();
+  return akModels;
+}
+function akSw(title, sub, on, fn) {
+  const l = el('label', 'sw'), s = el('span', null, title), i = el('input');
+  if (sub) s.append(el('small', null, sub));
+  i.type = 'checkbox'; i.setAttribute('role', 'switch'); i.checked = on;
+  i.onchange = async () => { i.disabled = true; try { await fn(i.checked); } catch (e) { i.checked = !i.checked; akSay(e.message); } finally { i.disabled = false; } };
+  l.append(s, i); return l;
+}
+const akField = (label, input) => { const l = el('label', 'f', label); l.append(input); return l; };
+
+async function akLoad() { try { akRender(await api('api/keys')); } catch (e) { if (e.status === 401) check(); } }
+function akRender(i) {
+  if (!i || !i.keys) return;
+  akI = i;
+  const b = fApi.body, y = $('#dlg .sbody').scrollTop;
+  b.innerHTML = '';
+  const box = el('span', 'tgs');
+  box.append('Любая программа, которая умеет OpenAI API (SDK openai, LangChain, Open WebUI, Cursor, n8n…), получает через этот адрес все твои провайдеры. Модель указывается как «провайдер/модель» — например ' + akDefModel(null) + '.');
+  b.append(box);
+  if (!i.enabled) b.append(el('span', 'akd bad', 'API выключен на сервере (PERSONALCOMPUTER_API=0 в /etc/personalcomputer/personalcomputer.env) — ключи создаются, но запросы не принимаются.'));
+  const ep = el('div', 'ake'), epv = el('span', 'akm', akEp());
+  ep.append(epv, akBtn('Копировать', () => akCopy(akEp(), 'Адрес скопирован')));
+  b.append(el('span', 'akd', 'Адрес API (base URL)'), ep);
+
+  /* только что созданный ключ: виден, пока не скрыли или не ушли со страницы */
+  if (akNew) {
+    const n = el('div', 'aknew');
+    n.append(el('b', null, 'Ключ «' + akNew.name + '» создан. Скопируй его сейчас — потом он не будет виден.'));
+    const kv = el('div', 'ake'); kv.append(el('span', 'akm', akNew.key), akBtn('Копировать', () => akCopy(akNew.key, 'Ключ скопирован')));
+    n.append(kv);
+    const ex = fold('api:new-ex', 'Примеры с этим ключом');
+    for (const [t, s] of akSnippets(akNew.key, akNew.model)) ex.body.append(akCode(t, s));
+    n.append(ex, akBtn('Я сохранил ключ — скрыть', () => { akNew = null; akRender(akI); }, 'pbtn sm'));
+    b.append(n);
+  }
+
+  /* ключи */
+  for (const k of i.keys) {
+    const bad = k.off || k.expired;
+    const F = fold('api:' + k.id, k.name, (k.off ? 'выкл. · ' : k.expired ? 'истёк · ' : '') + (k.stats.req ? plural(k.stats.req, 'запрос', 'запроса', 'запросов') : 'не использовался'), bad);
+    F.body.append(el('span', 'akd', k.hint + ' · создан ' + dday(k.created) + (k.last ? ' · последний запрос ' + ago(k.last) : '') + (k.exp ? ' · ' + (k.expired ? 'истёк ' : 'действует до ') + dday(k.exp) : ' · бессрочный')));
+    if (k.stats.req) F.body.append(el('span', 'akd', 'Запросов ' + k.stats.req + (k.stats.err ? ' (ошибок ' + k.stats.err + ')' : '') + ' · токенов ≈' + akNum(k.stats.in) + ' на входе, ≈' + akNum(k.stats.out) + ' на выходе'));
+    F.body.append(akSw('Ключ включён', 'Выключенный ключ не принимается, но его можно включить обратно', !k.off, async v => { akRender((await api('api/keys/' + k.id, { method: 'PATCH', json: { off: !v } }))); akSay(v ? 'Ключ «' + k.name + '» включён' : 'Ключ «' + k.name + '» выключен', 'ok'); }));
+    const nm = inp('название'); nm.value = k.name;
+    const md = akModelInput(k.model);
+    const pv = akProvs(k.providers);
+    const rpm = inp('0 — без лимита'); rpm.type = 'number'; rpm.min = '0'; rpm.value = k.rpm || '';
+    F.body.append(akField('Название', nm), akField('Модель по умолчанию (для model: «default» или без model)', md), akField('Провайдеры — ничего не отмечено: все', pv), akField('Лимит запросов в минуту', rpm));
+    const row = el('div', 'row2');
+    row.append(akBtn('Сохранить', async () => {
+      akRender(await api('api/keys/' + k.id, { method: 'PATCH', json: { name: nm.value, model: md.value, providers: pv.value(), rpm: +rpm.value || 0 } }));
+      akSay('Ключ «' + nm.value.trim() + '» сохранён', 'ok');
+    }, 'pbtn'));
+    row.append(akBtn('Удалить', async () => {
+      if (!await ask('API', 'Удалить ключ «' + k.name + '»? Программы, которые им пользуются, сразу перестанут работать. Это не отменить.', null, 'Удалить')) return;
+      akRender(await api('api/keys/' + k.id, { method: 'DELETE' })); akSay('Ключ «' + k.name + '» удалён', 'ok');
+    }, 'pbtn'));
+    F.body.append(row);
+    if (k.recent.length) {
+      const R = fold('api:' + k.id + ':log', 'Последние запросы', String(k.recent.length)), lst = el('div', 'akr');
+      for (const x of k.recent) lst.append(el('span', x.status >= 400 ? 'bad' : null, hhmmOf(x.t) + ' · ' + (x.p || '') + (x.model ? ' · ' + x.model : '') + ' · ' + x.status + ' · ' + (x.ms >= 1000 ? (x.ms / 1000).toFixed(1) + ' с' : x.ms + ' мс') + (x.in || x.out ? ' · ' + x.in + '→' + x.out + ' ток.' : '') + (x.stream ? ' · поток' : '') + (x.err ? ' · ' + x.err : '')));
+      R.body.append(lst);
+      R.body.append(akBtn('Сбросить статистику', async () => { akRender(await api('api/keys/' + k.id, { method: 'PATCH', json: { resetStats: true } })); }, 'pbtn sm'));
+      F.body.append(R);
+    }
+    const ex = fold('api:' + k.id + ':ex', 'Примеры');
+    for (const [t, s] of akSnippets('', akDefModel(k))) ex.body.append(akCode(t, s));
+    ex.body.append(el('span', 'akd', 'Вместо sk-pc-… подставь свой ключ: он показывался один раз, при создании.'));
+    F.body.append(ex);
+    b.append(F);
+  }
+
+  /* новый ключ */
+  if (i.keys.length < i.max) {
+    const N = fold('api+', 'Новый ключ'), nm = inp('например: мой бот'), md = akModelInput(''), pv = akProvs([]);
+    const rpm = inp('0 — без лимита'); rpm.type = 'number'; rpm.min = '0';
+    const days = inp('0 — бессрочно'); days.type = 'number'; days.min = '0';
+    N.body.append(akField('Название', nm), akField('Модель по умолчанию (необязательно)', md), akField('Провайдеры — ничего не отмечено: все', pv), akField('Лимит запросов в минуту', rpm), akField('Срок действия, дней', days));
+    N.body.append(akBtn('Создать ключ', async () => {
+      const r = await post('api/keys', { name: nm.value, model: md.value, providers: pv.value(), rpm: +rpm.value || 0, days: +days.value || 0 });
+      akNew = { key: r.key, name: r.row.name, model: akDefModel(r.row) };
+      opened['api+'] = false; opened['api:new-ex'] = true;
+      akRender(r); akSay('');
+    }, 'pbtn xgo'));
+    b.append(N);
+  }
+
+  /* модели: подгружаем, когда папку открыли; нажатие — скопировать id */
+  const MF = fold('api:models', 'Доступные модели', akModels ? String(akModels.length) : '');
+  const ml = el('div', 'akml');
+  const fill = list => {
+    ml.innerHTML = '';
+    if (!list.length) { ml.append(el('span', 'akd', 'Моделей нет — настрой провайдеров на вкладке «Модель».')); return; }
+    let prov = '';
+    for (const x of list) {
+      if (x.provider !== prov) { prov = x.provider; ml.append(el('b', null, prov)); }
+      const bt = el('button'); bt.type = 'button';
+      const sub = [x.name !== x.id.split('/').slice(1).join('/') ? x.name : '', x.context_length ? Math.round(x.context_length / 1000) + 'K контекст' : '', ...(x.tags || []).filter(t => t !== 'main-agent')].filter(Boolean).join(' · ');
+      bt.append(el('span', 'akm', x.id)); if (sub) bt.append(el('small', null, sub));
+      bt.onclick = () => akCopy(x.id, x.id + ' скопировано');
+      ml.append(bt);
+    }
+  };
+  const load = async refresh => { ml.innerHTML = ''; ml.append(el('span', 'akd', 'Спрашиваю провайдеров…')); try { const l = await akLoadModels(refresh); fill(l); foldMeta(MF, String(l.length)); } catch (e) { ml.innerHTML = ''; ml.append(el('span', 'akd bad', 'Не загрузилось: ' + e.message)); } };
+  if (akModels) fill(akModels);
+  MF.addEventListener('toggle', () => { if (MF.open && !akModels) load(false); });
+  if (MF.open && !akModels) load(false);
+  MF.body.append(ml, akBtn('Обновить список', () => load(true), 'pbtn sm'), el('span', 'akd', 'Нажми на модель — её id скопируется. Суффикс «:thinking» включает размышления; reasoning_effort в запросе — тоже.'));
+  b.append(MF);
+
+  const msg = el('small', 'xmsg'); msg.id = 's-akm'; msg.setAttribute('role', 'status'); b.append(msg); akSay(...akMsgT);
+  b.append(el('small', 'note', 'Ключ хранится на сервере только в виде хеша — потерянный ключ не восстановить, создай новый. Через ключ работают твои провайдеры, их ключи и входы наружу не уходят. Есть /v1/models, /v1/chat/completions (поток, инструменты, картинки), /v1/completions и /v1/embeddings.'));
+  const on = i.keys.filter(k => !k.off && !k.expired).length;
+  foldMeta(fApi, !i.keys.length ? 'нет ключей' : on === i.keys.length ? plural(on, 'ключ', 'ключа', 'ключей') : on + ' из ' + i.keys.length + ' вкл.');
+  /* подсказки моделей для полей — заранее, без ожидания */
+  if (!akModels) akLoadModels(false).then(() => { if (akModels) foldMeta(MF, String(akModels.length)); }).catch(() => {});
+  $('#dlg .sbody').scrollTop = y;
+}
+fApi.addEventListener('toggle', () => { if (fApi.open) akLoad(); });
 
 /* при входе и при возвращении на вкладку (если давно не смотрели): есть новая версия — предлагаем */
 async function updBoot(auto) {

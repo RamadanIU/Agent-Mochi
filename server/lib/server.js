@@ -29,6 +29,8 @@ import * as U from './update.js';
 import * as AC from './access.js';
 import * as PX from './proxy.js';
 import { fsCmd, fsGet, fsUpload, agentInfo, runCmd } from './runner-client.js';
+import * as AK from './apikeys.js';
+import { handleGateway, modelList } from './gateway.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const VERSION = JSON.parse(fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8')).version;
@@ -636,6 +638,15 @@ async function fsApi(req, res, u, url) {
   throw new HttpErr(404, 'нет такого метода');
 }
 
+/* ---------- API для других проектов: что показать в настройках ----------
+   Адрес — публичный адрес сервера (или тот, по которому открыта страница) + /v1; провайдеры — для ограничения ключа */
+function keysInfo(chat, req) {
+  const S = chat.settings(), origin = CFG.publicUrl || (req.headers.host ? (CFG.secureCookie ? 'https://' : 'http://') + req.headers.host : '');
+  return { keys: AK.listKeys(chat.u.id), endpoint: origin ? origin + '/v1' : null, enabled: CFG.api, max: AK.MAX_KEYS,
+    main: { provider: SA.provOf(S.base).id, model: S.model },
+    providers: SA.allProviders(S).map(p => ({ id: p.id, name: p.name, available: SA.availability(S, p.base).available })) };
+}
+
 /* ---------- маршруты ---------- */
 async function api(req, res, url) {
   const p = url.pathname, M = req.method;
@@ -858,6 +869,18 @@ async function api(req, res, url) {
       const r = await PX.test(typeof b.id === 'string' ? b.id : '', { base: S.base, key: S.key });
       return json(res, 200, { result: r, state: await PX.state(u) });
     }
+    /* API для других проектов: ключи sk-pc-… (настройки → Сервер → «API для других проектов») */
+    case '/api/keys':
+      if (M === 'GET') return json(res, 200, keysInfo(chat, req));
+      if (M === 'POST') {
+        let r; try { r = AK.createKey(u.id, await jbody(req)); } catch (e) { throw new HttpErr(e.status || 400, e.message); }
+        return json(res, 200, { ...r, ...keysInfo(chat, req) });
+      }
+      break;
+    /* модели, которые увидит ключ без ограничений: для выбора модели по умолчанию и подсказки */
+    case '/api/keys/models':
+      if (M === 'GET') return json(res, 200, { data: await modelList(chat, { providers: [] }, { refresh: url.searchParams.get('refresh') === '1' }) });
+      break;
     case '/api/account':
       if (M === 'GET') return json(res, 200, { user: A.publicUser(u), sessions: A.sessionCount(u.id), work: userDir(u), invites: u.admin ? A.inviteCount() : undefined, users: u.admin ? A.listUsers().map(A.publicUser) : undefined });
       break;
@@ -879,6 +902,11 @@ async function api(req, res, url) {
       return json(res, 200, { ok: true, err });
     }
     if (M === 'DELETE') { X.mcpDel(u, mm[1]); return json(res, 200, { ok: true }); }
+  }
+  const km = p.match(/^\/api\/keys\/([0-9a-f]{12})$/);
+  if (km) {
+    if (M === 'PATCH') { const r = AK.updateKey(u.id, km[1], await jbody(req)); if (!r) throw new HttpErr(404, 'Такого ключа нет'); return json(res, 200, { key: r, ...keysInfo(chat, req) }); }
+    if (M === 'DELETE') { if (!AK.deleteKey(u.id, km[1])) throw new HttpErr(404, 'Такого ключа нет'); return json(res, 200, keysInfo(chat, req)); }
   }
   const sm = p.match(/^\/api\/skills\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})$/);
   if (sm) {
@@ -918,6 +946,8 @@ async function handle(req, res) {
   const p = url.pathname;
   try {
     if (p.startsWith('/api/')) return await api(req, res, url);
+    /* OpenAI-совместимый API для других проектов: свой вход (ключ sk-pc-…), свои ошибки и CORS */
+    if (p === '/v1' || p.startsWith('/v1/')) return await handleGateway(req, res, url);
     if (p === TERM_PREFIX || p.startsWith(TERM_PREFIX + '/')) {
       const u = userOf(req);
       if (!u) { res.writeHead(401, { ...SEC, 'content-type': 'text/plain; charset=utf-8' }); return res.end('Нужен вход в Personal Computer'); }
@@ -966,7 +996,7 @@ async function admin(cmd) {
     case 'admin': { const u = A.userByName(a[0]); if (!u) throw new Error('нет такого пользователя'); u.admin = a[1] !== 'off'; return { ok: true, admin: u.admin }; }
     case 'deluser': {
       const u = A.userByName(a[0]); if (!u) throw new Error('нет такого пользователя');
-      getChat(u).clear(); TG.disconnect(u); X.dropExt(u); A.deleteUser(u.id);
+      getChat(u).clear(); TG.disconnect(u); X.dropExt(u); AK.dropUser(u.id); A.deleteUser(u.id);
       await fsp.rm(path.join(CFG.data, 'users', u.id), { recursive: true, force: true });
       return { ok: true, note: 'рабочая папка ' + path.join(CFG.work, u.name) + ' оставлена' };
     }

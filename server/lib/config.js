@@ -41,6 +41,8 @@ export const CFG = {
   /* загрузка файла в проводник (вкладка «Файлы») */
   maxUpload: (+env.PERSONALCOMPUTER_MAX_UPLOAD_MB || 4096) * 2 ** 20,
   allowRegister: env.PERSONALCOMPUTER_OPEN_REGISTRATION === '1', /* по умолчанию — только по приглашению */
+  /* OpenAI-совместимый API для других проектов (/v1, ключи sk-pc-… в настройках → Сервер); 0 — выключить */
+  api: env.PERSONALCOMPUTER_API !== '0',
   searchMcp: env.PERSONALCOMPUTER_SEARCH_MCP ?? 'https://search.parallel.ai/mcp',
   /* ядро Xray для прокси vless/vmess/trojan/ss/hysteria2 (ставит установщик; пусто — ищем в /opt/personalcomputer/bin и PATH) */
   xray: env.PERSONALCOMPUTER_XRAY || '',
