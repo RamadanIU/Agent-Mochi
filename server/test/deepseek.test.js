@@ -366,3 +366,32 @@ test('разбор ответа: открытый блок вызова виде
   assert.equal(P.open(), false);
   assert.equal(JSON.parse(P.end().calls[0].function.arguments).content, 'обрезано');
 });
+
+/* API для других проектов (/v1): беседа клиента продолжает тот же чат DeepSeek, хотя клиент каждый раз шлёт историю целиком */
+test('API /v1: тот же чат DeepSeek для беседы клиента, только новое; deepseek-reasoner — с размышлениями', async () => {
+  const c = await registered(m, 'dsapi');
+  await c.json('/api/settings', { base: DEEPSEEK, key: TOKEN, model: 'deepseek' }, 'PUT');
+  const key = (await c.json('/api/keys', { name: 'api' })).j.key;
+  D.script = call => ({ text: 'Ответ ' + D.calls.length, ...(call.think ? { think: 'размышляю' } : {}) });
+  const ask = body => fetch(m.base + '/v1/chat/completions', { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(async r => ({ status: r.status, j: await r.json() }));
+  const n0 = D.calls.length, news0 = D.news;
+  const msgs = [{ role: 'system', content: 'Ты краткий.' }, { role: 'user', content: 'Первый вопрос' }];
+  let r = await ask({ model: 'deepseek/deepseek', messages: msgs });
+  assert.equal(r.status, 200, JSON.stringify(r.j));
+  const a1 = r.j.choices[0].message.content;
+  assert.match(a1, /^Ответ \d+$/);
+  r = await ask({ model: 'deepseek/deepseek', messages: [...msgs, { role: 'assistant', content: a1 }, { role: 'user', content: 'Второй вопрос' }] });
+  assert.equal(r.status, 200, JSON.stringify(r.j));
+  const calls = D.calls.slice(n0);
+  assert.equal(calls.length, 2);
+  assert.equal(D.news, news0 + 1, 'один чат на сайте на всю беседу');
+  assert.equal(calls[1].chat, calls[0].chat);
+  assert.equal(calls[1].parent, calls[0].resp);
+  assert.match(calls[0].prompt, /Ты краткий\.[\s\S]*Первый вопрос$/);
+  assert.equal(calls[1].prompt, 'Второй вопрос', 'во второй раз — только новое');
+  /* привычное имя модели DeepSeek API: reasoner — с размышлениями, они приходят в reasoning_content */
+  r = await ask({ model: 'deepseek-reasoner', messages: [{ role: 'user', content: 'Подумай' }] });
+  assert.equal(r.status, 200, JSON.stringify(r.j));
+  assert.equal(D.calls.at(-1).think, true);
+  assert.equal(r.j.model, 'deepseek-reasoner');
+});
