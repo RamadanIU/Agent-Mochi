@@ -24,6 +24,7 @@ import { isQwen } from './qwen.js';
 import { isDeepSeek } from './deepseek.js';
 import * as KR from './kiro.js';
 import * as AG from './antigravity.js';
+import * as ZC from './zcode.js';
 import * as CO from './coarena.js';
 import { tokens } from './ext.js';
 
@@ -318,9 +319,15 @@ function sseWriter(res, h) {
 
 /* ---------- обычный провайдер: тело как есть, подставляем модель и ключ ---------- */
 async function passthrough(res, X, { chat, prov, model, path, body }) {
-  const S = chat.settings(), base = prov.base, key = SA.keyOf(S, base), co = CO.isCoarena(base);
-  const url = (co ? CO.apiBase(base) : base) + path;
+  const S = chat.settings(), base = prov.base, key = SA.keyOf(S, base), co = CO.isCoarena(base), zc = ZC.isZcode(base);
+  const url = (co ? CO.apiBase(base) : zc ? ZC.apiBase(S.zcAuth) : base) + path;
   const out = { ...body, model };
+  /* Z Code: reasoning_effort клиента → размышление GLM (включено или нет) */
+  if (zc && path === '/chat/completions' && out.thinking == null) {
+    const re = String(body.reasoning_effort ?? body.reasoning?.effort ?? '').toLowerCase();
+    if (re) out.thinking = { type: re === 'none' ? 'disabled' : 'enabled' };
+    delete out.reasoning_effort; delete out.reasoning;
+  }
   /* Coarena: потолок ответа у каждой модели свой — если клиент не указал, ставим как у агента */
   if (co && path === '/chat/completions' && out.max_tokens == null && out.max_completion_tokens == null) {
     await CO.catalog().catch(() => null);

@@ -20,6 +20,7 @@ import * as DS from './deepseek.js';
 import * as CO from './coarena.js';
 import * as KR from './kiro.js';
 import * as AG from './antigravity.js';
+import * as ZC from './zcode.js';
 import * as DC from './webcheck.js';
 import * as X from './ext.js';
 import { putInbox, storeCopy, getFile, userDir, safeName } from './files.js';
@@ -186,11 +187,13 @@ function provsOf(S) {
 }
 const pubSettings = c => {
   /* qwAuth — вход в Qwen (email и хеш пароля), dsAuth — вход в DeepSeek (логин и зашифрованный пароль),
-     krAuth — вход в Kiro, agAuth — вход в Antigravity (refresh-токен зашифрованным): наружу только кто и как вошёл */
-  const S = c.settings(), { key, provs, qwAuth, dsAuth, krAuth, agAuth, ...s } = S;
+     krAuth — вход в Kiro, agAuth — вход в Antigravity (refresh-токен зашифрованным), zcAuth — вход в Z Code:
+     наружу только кто и как вошёл */
+  const S = c.settings(), { key, provs, qwAuth, dsAuth, krAuth, agAuth, zcAuth, ...s } = S;
   return { ...s, hasKey: !!key, maxStepsDef: DEF_SETTINGS.maxSteps, qwEmail: qwAuth?.email || '', dsLogin: dsAuth?.login || '',
     krLogin: krAuth ? { how: krAuth.how || '', email: krAuth.email || '' } : null,
     agLogin: agAuth ? { how: agAuth.how || '', email: agAuth.email || '' } : null,
+    zcLogin: zcAuth ? { how: zcAuth.how || '', email: zcAuth.email || '', site: zcAuth.site || '' } : null,
     provs: Object.entries(provsOf(S)).map(([base, p]) => ({ base, model: p.model || '', hasKey: !!p.key })) };
 };
 function putSettings(c, b) {
@@ -206,6 +209,7 @@ function putSettings(c, b) {
     if (DS.isDeepSeek(f)) { delete s.dsAuth; c.ds.v.ck = {}; delete c.ds.v.calm; c.ds.save(); DC.forgetProfile(c.u); }
     if (KR.isKiro(f)) { delete s.krAuth; KR.loginStop(c.u.id); }
     if (AG.isAntigravity(f)) { delete s.agAuth; AG.loginStop(c.u.id); }
+    if (ZC.isZcode(f)) { delete s.zcAuth; ZC.loginStop(c.u.id); }
     return c.set.save();
   }
   if (steps !== undefined && !(steps >= 1 && steps <= MAX_STEPS)) throw new HttpErr(400, 'Лимит шагов — от 1 до ' + MAX_STEPS);
@@ -216,9 +220,9 @@ function putSettings(c, b) {
   }
   const cur = s.base || DEF_SETTINGS.base, moved = cur !== prev;
   /* «Сбросить всё» стирает ключи всех провайдеров */
-  if (b.clearKey) { s.key = ''; for (const k in P) delete P[k]; delete s.qwAuth; delete s.dsAuth; delete s.krAuth; delete s.agAuth; }
-  /* Kiro и Antigravity: доступ приходит только входом (kiroLogin / agLogin, «Токен вручную») — вписанное в поле ключа не берём */
-  else if (KR.isKiro(cur) || AG.isAntigravity(cur)) { if (moved) s.key = P[cur]?.key || ''; }
+  if (b.clearKey) { s.key = ''; for (const k in P) delete P[k]; delete s.qwAuth; delete s.dsAuth; delete s.krAuth; delete s.agAuth; delete s.zcAuth; }
+  /* Kiro, Antigravity и Z Code: доступ приходит только входом (kiroLogin / agLogin / zcLogin, «Токен вручную») — вписанное в поле ключа не берём */
+  else if (KR.isKiro(cur) || AG.isAntigravity(cur) || ZC.isZcode(cur)) { if (moved) s.key = P[cur]?.key || ''; }
   /* токен Qwen и DeepSeek вставляют как попало (Bearer, cookie, JSON из localStorage) — храним только сам токен; JWT бывает длинным */
   else if (typeof b.key === 'string' && b.key.trim()) s.key = QW.isQwen(cur) ? QW.parseToken(b.key).slice(0, 8000) : DS.isDeepSeek(cur) ? DS.parseToken(b.key).slice(0, 8000) : CO.isCoarena(cur) ? CO.parseKey(b.key) : b.key.trim().slice(0, 500);
   else if (moved) s.key = P[cur]?.key || '';
@@ -299,6 +303,11 @@ async function models(c, b) {
       throw new HttpErr(e.status === 401 || e.auth || e.relogin ? 401 : e.verify || e.banned ? 403 : 502, e.human || e.message,
         { human: true, ...(e.needKey ? { needKey: true } : {}), ...(e.relogin || e.auth ? { relogin: true } : {}), ...(typeof e.verify === 'string' ? { verify: e.verify } : {}) });
     }
+  }
+  /* Z Code: модели плана (каталог самого Z Code), чей аккаунт, план и лимиты Coding Plan */
+  if (ZC.isZcode(base)) {
+    try { return await ZC.check(provsOf(S)[ZC.ZC_BASE]?.key || (ZC.isZcode(S.base) ? S.key : ''), S.zcAuth); }
+    catch (e) { throw new HttpErr(e.status === 401 || e.relogin ? 401 : 502, e.human || e.message, { human: true, ...(e.needKey ? { needKey: true } : {}), ...(e.relogin ? { relogin: true } : {}) }); }
   }
   /* Coarena: модели с уровнями размышления — из открытого каталога, ключ и остаток дневного лимита — по /limits */
   if (CO.isCoarena(base)) {
@@ -438,6 +447,22 @@ async function agImport(c, b) {
   const auth = { ...r.auth, ...Object.fromEntries(Object.entries(info).filter(([, v]) => v)) };
   c.setAgAuth(auth, r.token);
   return { ok: true, login: auth.email || '' };
+}
+
+/* ---------- Z Code: вход окном Z.ai (или BigModel) ----------
+   Приложение открывает страницу входа в браузере пользователя, а сервер сам спрашивает zcode.z.ai «готово?» —
+   ничего не вставляют. Дальше сервер сам берёт ключ проекта и смотрит подписку (zcode.js → loginStart, connect) */
+async function zcLogin(c, b) {
+  try { return await ZC.loginStart(c.u.id, String(b.site || ''), async t => { const r = await ZC.connect(t); c.setZcAuth(r.auth, r.key); return r.auth.email || r.auth.name; }); }
+  catch (e) { throw new HttpErr(502, e.human || e.message, { human: true }); }
+}
+/* «Ключ вручную»: API-ключ z.ai / BigModel — проверяем сразу (чей сайт, есть ли Coding Plan) */
+async function zcImport(c, b) {
+  let r;
+  try { r = await ZC.importKey(String(b.text || '').slice(0, 20000), String(b.site || '')); }
+  catch (e) { throw new HttpErr(e.status === 400 ? 400 : 502, e.human || e.message, { human: true }); }
+  c.setZcAuth(r.auth, r.key);
+  return { ok: true, plan: r.auth.plan, site: r.auth.site };
 }
 
 /* вход, который ждёт окна входа (сайт не узнал устройство): 15 минут */
@@ -743,6 +768,13 @@ async function api(req, res, url) {
       if (M === 'DELETE') { AG.loginStop(u.id); return json(res, 200, { ok: true }); }
       break;
     case '/api/antigravity/import': if (M === 'POST') return json(res, 200, await agImport(chat, await jbody(req))); break;
+    /* Z Code: вход окном Z.ai/BigModel (начать, как идёт, отменить) и API-ключ вручную */
+    case '/api/zcode/login':
+      if (M === 'POST') return json(res, 200, await zcLogin(chat, await jbody(req)));
+      if (M === 'GET') return json(res, 200, ZC.loginOf(u.id));
+      if (M === 'DELETE') { ZC.loginStop(u.id); return json(res, 200, { ok: true }); }
+      break;
+    case '/api/zcode/import': if (M === 'POST') return json(res, 200, await zcImport(chat, await jbody(req))); break;
     case '/api/qwen/login':
       if (M === 'POST') return json(res, 200, await qwenLogin(chat, await jbody(req)));
       if (M === 'DELETE') { delete chat.set.v.qwAuth; chat.set.save(); return json(res, 200, pubSettings(chat)); }
