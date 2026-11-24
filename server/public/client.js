@@ -911,7 +911,7 @@ $('#c-qmail').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); $(
 $('#wa-out').onclick = async () => {
   const base = $('#c-base').value.trim().replace(/\/+$/, ''), w = webOf(base); if (!w) return;
   const act = base === String(srvSet?.base || '').replace(/\/+$/, '');
-  if (!await ask(w.name, 'Отключить аккаунт ' + w.name + '? ' + (w.kiro || w.ag ? 'Доступ и ключ его обновления' : 'Токен' + (w === WEB.ds ? ', логин, пароль и cookies сайта' : w.pw ? ', email и хеш пароля' : '')) + ' сотрутся с сервера.' + (act ? ' Сейчас Personal Computer работает через него — без аккаунта модель отвечать не будет.' : ''), null, 'Отключить')) return;
+  if (!await ask(w.name, 'Отключить аккаунт ' + w.name + '? ' + (w.zc ? 'Вход и API-ключ' : w.kiro || w.ag ? 'Доступ и ключ его обновления' : 'Токен' + (w === WEB.ds ? ', логин, пароль и cookies сайта' : w.pw ? ', email и хеш пароля' : '')) + ' сотрутся с сервера.' + (act ? ' Сейчас Personal Computer работает через него — без аккаунта модель отвечать не будет.' : ''), null, 'Отключить')) return;
   try {
     srvSet = await api('api/settings', { method: 'PUT', json: { forget: base } });
     provSaved = Object.fromEntries((srvSet.provs || []).map(p => [p.base, p])); provOpts();
@@ -1032,14 +1032,15 @@ async function krStart(how) {
   /* окно — сразу, в обработчике нажатия (иначе браузер заблокирует его как всплывающее), адрес — когда сервер его получит.
      opener обнуляем: странице входа незачем доступ к приложению */
   let win = null;
-  try { win = window.open('', 'kiro-login', 'popup,width=540,height=780'); if (win) { win.opener = null; try { win.document.title = 'Вход в Kiro…'; win.document.body.style.cssText = 'font:16px system-ui;padding:24px;color:#555'; win.document.body.textContent = 'Открываю вход в Kiro…'; } catch (e) {} } } catch (e) { win = null; }
+  try { win = window.open('', 'kiro-login', 'popup,width=540,height=780'); if (win) { try { win.document.title = 'Вход в Kiro…'; win.document.body.style.cssText = 'font:16px system-ui;padding:24px;color:#555'; win.document.body.textContent = 'Открываю вход в Kiro…'; } catch (e) {} } } catch (e) { win = null; }
   kst(how === 'email' ? 'Открываю вход в Kiro по email…' : 'Открываю вход через ' + KR_WAYS[how] + '…', 'wait');
   let r;
   try { r = await post('api/kiro/login', { how }); }
   catch (e) { try { win && win.close(); } catch (x) {} if (g === krGen) { btns.forEach(b => { b.disabled = false; }); kst(e.message, 'err'); } return; }
   if (g !== krGen) { try { win && win.close(); } catch (x) {} return; }
   let opened = false;
-  try { if (win && !win.closed) { win.location.replace(r.url); opened = true; } } catch (e) {}
+  /* сначала адрес, потом отвязка: окно без opener браузер уже не даст перевести на другой сайт */
+  try { if (win && !win.closed) { win.location.replace(r.url); opened = true; try { win.opener = null; } catch (x) {} } } catch (e) {}
   krShow(r, opened);
   krT = setTimeout(() => krPoll(g), 1500);
 }
@@ -1146,14 +1147,15 @@ async function agStart() {
   b.disabled = true;
   /* окно — сразу, в обработчике нажатия (иначе браузер заблокирует его как всплывающее), адрес — когда сервер его выдаст */
   let win = null;
-  try { win = window.open('', 'ag-login', 'popup,width=520,height=720'); if (win) { win.opener = null; try { win.document.title = 'Вход в Google…'; win.document.body.style.cssText = 'font:16px system-ui;padding:24px;color:#555'; win.document.body.textContent = 'Открываю вход Google…'; } catch (e) {} } } catch (e) { win = null; }
+  try { win = window.open('', 'ag-login', 'popup,width=520,height=720'); if (win) { try { win.document.title = 'Вход в Google…'; win.document.body.style.cssText = 'font:16px system-ui;padding:24px;color:#555'; win.document.body.textContent = 'Открываю вход Google…'; } catch (e) {} } } catch (e) { win = null; }
   ast('Открываю вход Google…', 'wait');
   let r;
   try { r = await post('api/antigravity/login', {}); }
   catch (e) { try { win && win.close(); } catch (x) {} if (g === agGen) { b.disabled = false; ast(e.message, 'err'); } return; }
   if (g !== agGen) { try { win && win.close(); } catch (x) {} return; }
   let opened = false;
-  try { if (win && !win.closed) { win.location.replace(r.url); opened = true; } } catch (e) {}
+  /* сначала адрес, потом отвязка: окно без opener браузер уже не даст перевести на другой сайт */
+  try { if (win && !win.closed) { win.location.replace(r.url); opened = true; try { win.opener = null; } catch (x) {} } } catch (e) {}
   agWin = opened ? win : null;
   agShow(r, opened);
   agT = setTimeout(() => agPoll(g), 1500);
@@ -1282,6 +1284,148 @@ window.agHelp = function (k) {
     return{t:'Глубина размышления',h:'<p>Модели Antigravity сначала думают, потом отвечают. Чем глубже, тем лучше решают сложное — и тем дольше отвечают и быстрее тратят лимит.</p>'
       +(m&&m.efforts&&m.efforts.length?'<p>У '+esc(m.name||m.id)+' глубина: '+m.efforts.map(e=>esc(({minimal:'минимальная',low:'низкая',medium:'средняя',high:'высокая',xhigh:'очень высокая',max:'максимальная'})[e]||e)).join(', ')+'.</p>':'')
       +'<p>У моделей, где уровень записан в названии (например, «High» или «Low»), глубину выбирает сам Google — выбери другую модель из списка.</p><p>В чате размышлений не видно — зажми компьютер, и откроется окно с размышлениями по шагам.</p>'}}
+  return null};
+
+/* ---------- Z Code (z.ai): вход окном Z.ai в своём браузере ----------
+   Адрес провайдера и карточка аккаунта — здесь, а не в index.html: страница и так большая (webOf там спрашивает isZc). */
+window.isZc = b => { try { return new URL(String(b || '').trim()).hostname === 'zcode.z.ai'; } catch (e) { return false; } };
+WEB.zc = { k: 'zc', name: 'Z Code', site: 'z.ai', url: 'https://z.ai', pw: false, zc: true };
+/*
+   Сервер просит у zcode.z.ai адрес страницы входа (как Z Code CLI), здесь она открывается окошком в ТВОЁМ браузере:
+   входишь как обычно (Google, GitHub, почта) и нажимаешь «Разрешить». Z.ai возвращает окно на сервер самого Z Code,
+   а наш сервер сам спрашивает его «готово?» — вставлять ничего не нужно. Дальше сервер сам берёт API-ключ проекта и
+   смотрит подписку GLM Coding Plan; здесь — только следим и показываем аккаунт, план и лимиты */
+$('#wa-ag').insertAdjacentHTML('afterend', `<div class="wa-kr" id="wa-zc" hidden>
+  <div class="wa-g"><button class="pbtn gbtn" data-zc="zai" type="button"><i class="pi" aria-hidden="true"></i><span>Войти через Z.ai</span></button><button class="qm" type="button" data-help="zcin" aria-label="Как это работает">?</button></div>
+  <div class="wa-kb"><button class="pbtn gbtn" data-zc="bigmodel" type="button"><i class="pi" aria-hidden="true"></i><span>BigModel (Китай)</span></button></div>
+  <div class="wa-kw" id="wa-zw" role="status" hidden>
+    <ol class="wa-gs"><li id="wa-z1"></li><li id="wa-z2"></li></ol>
+    <div class="wa-ka"><a class="pbtn sm" id="wa-zopen" href="#" target="_blank" rel="noopener noreferrer"><i class="pi"></i><span>Открыть окно входа</span></a><button class="wl" id="wa-zx" type="button">Отмена</button></div>
+  </div>
+  <small class="wst" id="c-zst"></small>
+</div>`);
+$('#ag-imp').insertAdjacentHTML('afterend', `<div class="kr-imp" id="zc-imp" hidden><label class="f">API-ключ z.ai или BigModel<textarea id="c-zimpt" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="0123456789abcdef0123456789abcdef.AbCdEfGhIjKlMnOp"></textarea></label><button class="pbtn" id="c-zimp" type="button"><i class="pi"></i><span>Подключить</span></button><small class="wst" id="c-zist"></small></div>`);
+let zcP = false;
+const keyHint1 = keyHint;
+keyHint = function () {
+  keyHint1(); const zc = isZc($('#c-base').value); $('#wa-zc').hidden = !zc; $('#zc-imp').hidden = !zc;
+  if (zc !== zcP) { zcP = zc; zcReset(); }
+};
+const zst = (t, s) => { const h = $('#c-zst'); h.textContent = t || ''; if (s) h.dataset.s = s; else delete h.dataset.s; };
+const ZC_SITE = { zai: 'Z.ai', bigmodel: 'BigModel' };
+let zcT = 0, zcGen = 0;
+window.zcReset = () => { clearTimeout(zcT); zcGen++; $('#wa-zw').hidden = true; zst(''); document.querySelectorAll('[data-zc]').forEach(b => { b.disabled = false; }); };
+async function zcStart(site) {
+  zcReset();
+  const g = zcGen;
+  document.querySelectorAll('[data-zc]').forEach(b => { b.disabled = true; });
+  /* окно — сразу, в обработчике нажатия (иначе браузер заблокирует его как всплывающее), адрес — когда сервер его выдаст */
+  let win = null;
+  try { win = window.open('', 'zc-login', 'popup,width=520,height=760'); if (win) { try { win.document.title = 'Вход в ' + ZC_SITE[site] + '…'; win.document.body.style.cssText = 'font:16px system-ui;padding:24px;color:#555'; win.document.body.textContent = 'Открываю вход ' + ZC_SITE[site] + '…'; } catch (e) {} } } catch (e) { win = null; }
+  zst('Открываю вход ' + ZC_SITE[site] + '…', 'wait');
+  let r;
+  try { r = await post('api/zcode/login', { site }); }
+  catch (e) { try { win && win.close(); } catch (x) {} if (g === zcGen) { zcReset(); zst(e.message, 'err'); } return; }
+  if (g !== zcGen) { try { win && win.close(); } catch (x) {} return; }
+  let opened = false;
+  /* сначала адрес, потом отвязка: окно без opener браузер уже не даст перевести на другой сайт */
+  try { if (win && !win.closed) { win.location.replace(r.url); opened = true; try { win.opener = null; } catch (x) {} } } catch (e) {}
+  zcShow(r, opened);
+  zcT = setTimeout(() => zcPoll(g), 1500);
+}
+function zcShow(r, opened) {
+  const n = ZC_SITE[r.site] || 'Z.ai';
+  $('#wa-zw').hidden = false; zst('Жду, когда ' + n + ' пустит…', 'wait');
+  $('#wa-z1').textContent = (opened ? 'В открывшемся окне' : 'Открой окно входа и в нём') + ' войди в ' + n + ' (Google, GitHub или почта) и нажми «Разрешить» (Authorize).';
+  $('#wa-z2').textContent = 'Больше ничего не нужно: как только разрешишь, вход завершится сам, а окно можно закрыть.';
+  const a = $('#wa-zopen'); a.href = r.url; a.lastChild.textContent = opened ? 'Открыть окно входа снова' : 'Открыть окно входа';
+}
+async function zcPoll(g) {
+  if (g !== zcGen) return;
+  let r;
+  try { r = await api('api/zcode/login'); } catch (e) { zcT = setTimeout(() => zcPoll(g), 3000); return; }
+  if (g !== zcGen) return;
+  if (r.state === 'wait' || r.state === 'save') {
+    if (r.state === 'save') zst('Подключаю аккаунт: ключ, подписка и модели…', 'wait');
+    zcT = setTimeout(() => zcPoll(g), r.state === 'save' ? 700 : 1500);
+    return;
+  }
+  zcReset();
+  if (r.state === 'ok') {
+    const msg = r.msg || 'Z Code подключён.';
+    zst(msg, 'ok'); window.sfx && sfx('recv');
+    loggedIn().then(() => zst(msg, 'ok'));
+  } else zst(r.msg || 'Вход не состоялся — нажми «Войти через Z.ai» ещё раз.', 'err');
+}
+document.querySelectorAll('[data-zc]').forEach(b => { b.onclick = () => zcStart(b.dataset.zc); });
+$('#wa-zx').onclick = () => { zcReset(); api('api/zcode/login', { method: 'DELETE' }).catch(() => {}); };
+/* закрыли настройки — следить перестаём (сервер доведёт вход сам); открыли снова, а вход ещё идёт — показываем шаги */
+$('#dlg').addEventListener('close', () => zcReset());
+async function zcResume(on) {
+  const g = zcGen;
+  let r; try { r = await api('api/zcode/login'); } catch (e) { return; }
+  if (g !== zcGen || !(r.state === 'wait' || r.state === 'save') || !isZc($('#c-base').value)) return;
+  if (on) { $('#wa').classList.add('swap'); $('#wa-swap').setAttribute('aria-expanded', 'true'); }
+  document.querySelectorAll('[data-zc]').forEach(b => { b.disabled = true; });
+  zcShow(r, true); zcT = setTimeout(() => zcPoll(g), 300);
+}
+/* «Ключ вручную»: API-ключ z.ai или BigModel — сервер сам узнает, чей он и есть ли GLM Coding Plan */
+$('#c-zimp').onclick = async () => {
+  const t = $('#c-zimpt').value.trim(), st = $('#c-zist'), b = $('#c-zimp');
+  const say = (x, s) => { st.textContent = x; if (s) st.dataset.s = s; else delete st.dataset.s; };
+  if (!t) { say('Вставь API-ключ z.ai (z.ai → API Keys) или BigModel', 'err'); return; }
+  b.disabled = true; say('Проверяю ключ…', 'wait');
+  try { const r = await post('api/zcode/import', { text: t }); $('#c-zimpt').value = ''; $('#wa-tok').open = false; say(''); await loggedIn(); zst('Z Code подключён' + (r.plan ? ': ' + r.plan : ' (без Coding Plan)') + '.', 'ok'); }
+  catch (e) { say(e.message, 'err'); }
+  finally { b.disabled = false; }
+};
+/* проверка: аккаунт, план и лимиты Coding Plan — в карточке, модели GLM — с умениями */
+const loadModels1 = loadModels;
+loadModels = async function () {
+  const base = $('#c-base').value.trim().replace(/\/+$/, ''), h = $('#mh');
+  if (!isZc(base)) return loadModels1();
+  const t = ++mt;
+  qwInfo = {}; waState('wait'); h.textContent = ''; delete h.dataset.s;
+  try {
+    const r = await post('api/models', { base }); if (t !== mt) return;
+    mdl = r.models.slice(); qwInfo = Object.fromEntries((r.info || []).map(m => [m.id, m]));
+    const act = isZc(srvSet && srvSet.base), paas = r.api === 'paas';
+    waState('ok', { who: r.login || 'Аккаунт ' + (ZC_SITE[r.site] || 'Z.ai'), sub: [paas ? 'без GLM Coding Plan — бесплатные Flash и по балансу' : r.plan ? r.plan + (r.team ? ' (команда)' : '') : '', ZC_SITE[r.site] || '', r.how === 'key' ? 'ключ вручную' : '', act ? '' : 'нажми «Сохранить», чтобы работать через Z Code'].filter(Boolean).join(' · '),
+      msg: paas && r.why ? 'Подписки GLM Coding Plan нет: ' + r.why + '.' : '' });
+    agQuota(r.quota);
+    if (r.quota && r.quota.length) $('#wa-ql').textContent = 'Лимиты Coding Plan';
+    const cur = mi().value.trim(); if (mdl.length && (!cur || !mdl.includes(cur))) mi().value = r.def || mdl[0];
+    provNew = false; qwThink(); zcHint();
+    zcResume(true);
+  } catch (e) {
+    if (t !== mt) return; mdl = []; agQuota(null);
+    if (e.j && e.j.needKey) { waState('none'); zcResume(false); return; }
+    waState('bad', { msg: e.message });
+    zcResume(false);
+  }
+};
+const mdlLabel1 = mdlLabel;
+window.mdlLabel = x => { if (!isZc($('#c-base').value)) return mdlLabel1(x); const m = qwInfo[x]; return m ? m.name + (m.free ? ' · бесплатно' : '') : ''; };
+/* под полем модели: имя, картинки, размышление, контекст */
+function zcHint() {
+  const m = qwInfoOf(), h = $('#mh');
+  if (!isZc($('#c-base').value) || h.dataset.s === 'err') return;
+  if (!m) { if (mdl.length) { h.textContent = 'Такой модели нет у твоего плана Z Code — выбери из списка'; h.dataset.s = 'err'; } return; }
+  const ctx = m.ctx ? 'контекст ' + (m.ctx >= 1e6 ? (Math.round(m.ctx / 1e5) / 10).toLocaleString('ru-RU') + ' млн' : Math.round(m.ctx / 1000) + ' тыс.') + ' токенов' : '';
+  h.textContent = [m.name, m.free ? 'бесплатно' : '', m.img ? 'видит картинки' : 'без картинок', ctx].filter(Boolean).join(' · ');
+  h.dataset.s = 'ok';
+}
+mi().addEventListener('input', () => { if (isZc($('#c-base').value)) { delete $('#mh').dataset.s; zcHint(); } });
+/* справка Z Code под «?» */
+window.zcHelp = function (k) {
+  if(k==='wa')return{t:'Аккаунт Z Code',h:(waNote?'<p class="hbad">'+esc(waNote)+'</p>':'')
+    +'<p>Z Code — среда разработки от Z.ai (создатели моделей GLM). С подпиской <b>GLM Coding Plan</b> модели GLM работают по лимитам подписки: окно 5 часов и неделя — сколько осталось, видно в карточке. Без подписки работают бесплатные модели Flash и платные — по балансу z.ai.</p>'
+    +'<p>Personal Computer входит в твой аккаунт так же, как сам Z Code, — прямо со своего сервера, без сторонних шлюзов. Инструменты (команды, файлы, MCP) модель вызывает по-настоящему, а свои размышления GLM помнит между шагами.</p>'
+    +'<p class="hnote">Это неофициальный способ пользоваться подпиской: Z.ai вправе ограничить аккаунт, который работает не из своих приложений. Для важного аккаунта взвесь это заранее.</p>'};
+  if(k==='zcin')return{t:'Вход через Z.ai',h:'<ol><li>Нажми «Войти через Z.ai» (или «BigModel», если аккаунт на bigmodel.cn) — откроется окно входа в твоём браузере.</li><li>Войди как обычно — Google, GitHub или почта — и нажми «Разрешить» (Authorize).</li><li>Всё. Вставлять ничего не нужно: сервер сам узнаёт у Z Code, что ты разрешил, берёт API-ключ твоего проекта (тот же «zcode-api-key», что создаёт Z Code) и проверяет подписку.</li></ol>'
+    +'<p>Пароль вводится только на странице Z.ai — Personal Computer его не видит. API-ключ не истекает; войти снова понадобится, только если удалишь его в кабинете z.ai.</p>'
+    +'<p class="hnote">С телефона окно откроется новой вкладкой: войди, нажми «Разрешить» и вернись сюда — вход уже завершится сам.</p>'};
+  if(k==='tok')return{t:'Ключ вручную',h:'<p>Есть API-ключ z.ai или BigModel (вида <code>длинный_id.секрет</code>)? Вставь его — Personal Computer сам поймёт, чей он, и есть ли на аккаунте GLM Coding Plan. Подойдёт и строка <code>ZAI_API_KEY=…</code> или файл настроек целиком.</p><p>Ключ берут на z.ai → API Keys (или bigmodel.cn → API 密钥).</p>'};
   return null};
 
 /* ---------- окно проверки DeepSeek ----------

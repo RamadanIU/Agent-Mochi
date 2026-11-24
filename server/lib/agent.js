@@ -17,6 +17,7 @@ import { unseal } from './store.js';
 import * as CO from './coarena.js';
 import * as KR from './kiro.js';
 import * as AG from './antigravity.js';
+import * as ZC from './zcode.js';
 import { deviceId as dsDeviceId } from './webcheck.js';
 /* веб-чаты по токену аккаунта (Qwen, DeepSeek): свой протокол, история живёт на сайте, файлы уходят туда целиком */
 const isWeb = base => isQwen(base) || isDeepSeek(base);
@@ -440,12 +441,12 @@ export class Chat extends EventEmitter {
         if (t && !m.named && !m.del) { Object.assign(m, { title: t, named: 1 }); this.metaChanged(); }
         return;
       }
-      const h = { 'Content-Type': 'application/json' }, co = CO.isCoarena(S.base);
+      const h = { 'Content-Type': 'application/json' }, co = CO.isCoarena(S.base), zc = ZC.isZcode(S.base);
       if (S.key) h.Authorization = 'Bearer ' + S.key;
       /* Coarena: название — на самом низком уровне размышления, иначе думающая модель тратит на него весь ответ */
       if (co) await CO.catalog().catch(() => null);
-      const r = await apiFetch((co ? CO.apiBase(S.base) : S.base.replace(/\/+$/, '')) + '/chat/completions', { method: 'POST', headers: h, signal: AbortSignal.timeout(60000),
-        body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: TITLE_SYS }, { role: 'user', content: text }], stream: false, ...(co ? CO.extra({ model: S.model, effort: 'none', stream: false }) : {}) }) });
+      const r = await apiFetch((co ? CO.apiBase(S.base) : zc ? ZC.apiBase(S.zcAuth) : S.base.replace(/\/+$/, '')) + '/chat/completions', { method: 'POST', headers: h, signal: AbortSignal.timeout(60000),
+        body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: TITLE_SYS }, { role: 'user', content: text }], stream: false, ...(co ? CO.extra({ model: S.model, effort: 'none', stream: false }) : zc ? ZC.extra({ model: S.model, think: false }) : {}) }) });
       if (!r.ok) return;
       const t = cleanTitle((await r.json().catch(() => null))?.choices?.[0]?.message?.content);
       /* пока модель думала, чат переименовали или удалили — их выбор главнее */
@@ -516,13 +517,13 @@ export class Chat extends EventEmitter {
 
   /* в запрос уходят вложения трёх последних сообщений с файлами; уровень отката: 1 — без PDF, 2 — без всего */
   wire() {
-    const S = this.settings(), H = this.doc.v.hist, lvl = S.vis === false ? 2 : this.noVis, co = CO.isCoarena(S.base), ag = AG.isAntigravity(S.base), key = rsKey(S);
+    const S = this.settings(), H = this.doc.v.hist, lvl = S.vis === false ? 2 : this.noVis, co = CO.isCoarena(S.base), ag = AG.isAntigravity(S.base) || ZC.isZcode(S.base), key = rsKey(S);
     const rec = new Set(H.map((m, i) => m._pf ? i : -1).filter(i => i >= 0).slice(-3));
     const us = H.map((m, i) => m.role === 'user' ? i : -1).filter(i => i >= 0), k = winStart(us.length), from = k ? us[k] : 0;
     const out = [];
     for (let i = from; i < H.length; i++) {
       const { _pf, _vi, _mid, _qw, _ds, _fl, _rs, ...m } = H[i];
-      /* размышления модели (Coarena, Antigravity): возвращаем их той же модели того же провайдера — без них
+      /* размышления модели (Coarena, Antigravity, Z Code): возвращаем их той же модели того же провайдера — без них
          думающая модель теряет нить между вызовами инструментов, а чужой модели они ни к чему */
       if (_rs && (co || ag) && _rs.b === key) Object.assign(m, _rs.f);
       /* Ollama не принимает историю, где аргументы вызова — не JSON-объект (обрезаны или пустые): шлём {} — модель и так получила ошибку */
@@ -825,6 +826,7 @@ export class Chat extends EventEmitter {
     if (FILE_TOOLS.has(nm)) return await this.fileTool(nm, a, sig);
     if (nm === 'view_image') {
       if (KR.isKiro(this.settings().base) && KR.modelInfo(this.settings().model)?.img === false) return 'Ошибка: эта модель Kiro не видит картинки — смотреть нечем. Опиши файл по метаданным (run_command: file, identify) или скажи пользователю, что для картинок нужна модель Claude.';
+      if (ZC.isZcode(this.settings().base) && ZC.modelInfo(this.settings().model)?.img === false) return 'Ошибка: эта модель GLM не видит картинки — смотреть нечем. Опиши файл по метаданным (run_command: file, identify) или скажи пользователю, что для картинок нужна модель GLM с «V» в названии (например, GLM-4.6V).';
       if (AG.isAntigravity(this.settings().base) && AG.modelInfo(this.settings().model)?.img === false) return 'Ошибка: эта модель Antigravity не видит картинки — смотреть нечем. Опиши файл по метаданным (run_command: file, identify) или скажи пользователю, что для картинок нужна модель Gemini или Claude.';
       if (!isWeb(this.settings().base) && (this.settings().vis === false || this.noVis >= 2)) return 'Ошибка: эта модель не видит картинки (или зрение выключено в настройках) — смотреть нечем. Опиши файл по метаданным (run_command: file, identify) или скажи пользователю, что нужна модель со зрением.';
       if (!String(a.path || '').trim()) return 'Ошибка: нет параметра path';
@@ -1032,6 +1034,10 @@ export class Chat extends EventEmitter {
     /* Coarena: каталог моделей нужен до запроса — уровни размышления и потолок ответа у каждой модели свои */
     const co = CO.isCoarena(S.base);
     if (co) await CO.catalog().catch(e => console.warn('coarena:', e.message));
+    /* Z Code (z.ai): обычный OpenAI-совместимый запрос, но адрес — по плану аккаунта (Coding Plan или обычный API),
+       а ключ — тот, что сервер сам взял в кабинете при входе */
+    const zc = ZC.isZcode(S.base);
+    if (zc && !S.key) throw Object.assign(new Error('нет входа в Z Code'), { human: 'Сначала войди в Z Code: настройки → Модель → «Z Code (z.ai)» → «Войти через Z.ai».', detail: '' });
     let effort = S.effort, emptied = 0;
     for (let attempt = 0; ; attempt++) {
       const msgs = this.wire(), hasM = msgs.some(m => Array.isArray(m.content));
@@ -1044,9 +1050,9 @@ export class Chat extends EventEmitter {
       const poke = () => { clearTimeout(it); it = setTimeout(() => idle.abort(), 180000); };
       const signal = AbortSignal.any([sig, idle.signal]);
       try {
-        const url = (co ? CO.apiBase(S.base) : S.base.replace(/\/+$/, '')) + '/chat/completions';
+        const url = (co ? CO.apiBase(S.base) : zc ? ZC.apiBase(S.zcAuth) : S.base.replace(/\/+$/, '')) + '/chat/completions';
         const r = await apiFetch(url, { method: 'POST', headers: h, signal,
-          body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: ch.sysMark ? [{ type: 'text', text: sys, cache_control: { type: 'ephemeral' } }] : sys }, ...msgs], ...(tools.length ? { tools } : {}), stream: true, ...ch.body, ...(co ? CO.extra({ model: S.model, effort }) : {}) }) });
+          body: JSON.stringify({ model: S.model, messages: [{ role: 'system', content: ch.sysMark ? [{ type: 'text', text: sys, cache_control: { type: 'ephemeral' } }] : sys }, ...msgs], ...(tools.length ? { tools } : {}), stream: true, ...ch.body, ...(co ? CO.extra({ model: S.model, effort }) : zc ? ZC.extra({ model: S.model, think: S.think }) : {}) }) });
         if (!r.ok) {
           const full = await r.text().catch(() => ''), et = full.slice(0, 300);
           /* Coarena объясняет ошибку кодом: условия не приняты, лимит на сегодня, ключ истёк — повторять бесполезно,
@@ -1058,6 +1064,13 @@ export class Chat extends EventEmitter {
               const ra = +r.headers.get('retry-after'); await sleep(ra > 0 && ra < 120 ? ra * 1000 : [5000, 10000, 20000, 30000, 60000][attempt], sig); if (sig.aborted) throw abortErr(); continue;
             }
             if (hm && ![500, 502, 503, 504].includes(r.status)) throw Object.assign(new Error(hm), { status: r.status, human: hm, detail: code ? 'Coarena: ' + code : et });
+          }
+          /* Z Code: лимит Coding Plan, нет подписки, ключ удалён — повторять бесполезно; перегрузка и «слишком часто» — ждём */
+          if (zc) {
+            let j = null; try { j = JSON.parse(full); } catch {}
+            const hm = ZC.human(r.status, j);
+            if (hm?.retry && attempt < 4) { const ra = +r.headers.get('retry-after'); await sleep(ra > 0 && ra < 120 ? ra * 1000 : [3000, 8000, 20000, 40000][attempt], sig); if (sig.aborted) throw abortErr(); continue; }
+            if (hm && !hm.retry) throw Object.assign(new Error(hm.text), { status: r.status, human: hm.text, ...(hm.relogin ? { relogin: true } : {}), detail: et });
           }
           /* страница блокировки Cloudflare: ключ ни при чём, повторять бесполезно */
           const cf = cfBlock(r.status, full, r.headers);
@@ -1164,6 +1177,17 @@ export class Chat extends EventEmitter {
     if (token !== undefined) {
       if (AG.isAntigravity(s.base)) s.key = token;
       P[AG.AG_BASE] = { ...(P[AG.AG_BASE] || {}), key: token, model: P[AG.AG_BASE]?.model || (AG.isAntigravity(s.base) ? s.model : '') || '' };
+    }
+    this.set.save();
+  }
+
+  /* вход в Z Code: auth — сайт, план, адрес API (zcAuth), key — API-ключ, который сервер взял в кабинете (не истекает) */
+  setZcAuth(auth, key) {
+    const s = this.set.v, P = s.provs ||= {};
+    if (auth) s.zcAuth = auth;
+    if (key !== undefined) {
+      if (ZC.isZcode(s.base)) s.key = key;
+      P[ZC.ZC_BASE] = { ...(P[ZC.ZC_BASE] || {}), key, model: P[ZC.ZC_BASE]?.model || (ZC.isZcode(s.base) ? s.model : '') || '' };
     }
     this.set.save();
   }

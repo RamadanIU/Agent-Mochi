@@ -12,6 +12,7 @@ import { isQwen, QWEN_BASE } from './qwen.js';
 import { isDeepSeek, DS_BASE } from './deepseek.js';
 import * as KR from './kiro.js';
 import * as AG from './antigravity.js';
+import * as ZC from './zcode.js';
 import * as CO from './coarena.js';
 
 export const MAX_DEPTH = 1;
@@ -66,6 +67,7 @@ export const PROVIDERS = [
   { id: 'deepseek', name: 'DeepSeek (chat.deepseek.com)', base: DS_BASE },
   { id: 'kiro', name: 'Kiro (kiro.dev)', base: KR.KR_BASE },
   { id: 'antigravity', name: 'Antigravity (Google)', base: AG.AG_BASE },
+  { id: 'zcode', name: 'Z Code (z.ai)', base: ZC.ZC_BASE },
   { id: 'openrouter', name: 'OpenRouter', base: 'https://openrouter.ai/api/v1' },
   { id: 'ollama-cloud', name: 'Ollama Cloud', base: 'https://ollama.com/v1' },
   { id: 'justwoker', name: 'JustWoker', base: 'https://api.justwoker.icu/v1' },
@@ -77,7 +79,7 @@ const hostOf = b => { try { return new URL(b).hostname.toLowerCase(); } catch { 
 const isLocal = b => /^(localhost|127\.\d+\.\d+\.\d+|\[?::1\]?|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|[\w-]+\.local|host\.docker\.internal)$/.test(hostOf(b));
 const provsOf = S => S.provs && typeof S.provs === 'object' && !Array.isArray(S.provs) ? S.provs : {};
 const known = base => PROVIDERS.find(p => p.base === base) || PROVIDERS.find(p => p.id === 'qwen' && isQwen(base)) || PROVIDERS.find(p => p.id === 'deepseek' && isDeepSeek(base))
-  || PROVIDERS.find(p => p.id === 'kiro' && KR.isKiro(base)) || PROVIDERS.find(p => p.id === 'antigravity' && AG.isAntigravity(base)) || PROVIDERS.find(p => p.id === 'coarena' && CO.isCoarena(base));
+  || PROVIDERS.find(p => p.id === 'kiro' && KR.isKiro(base)) || PROVIDERS.find(p => p.id === 'antigravity' && AG.isAntigravity(base)) || PROVIDERS.find(p => p.id === 'zcode' && ZC.isZcode(base)) || PROVIDERS.find(p => p.id === 'coarena' && CO.isCoarena(base));
 /* провайдер по адресу: известный — со своим id и именем, свой — «custom:хост» */
 export function provOf(base) {
   base = normBase(base);
@@ -112,6 +114,7 @@ export function availability(S, base) {
   const P = provsOf(S), saved = !!P[base] || base === normBase(S.base), key = keyOf(S, base);
   if (KR.isKiro(base)) return key ? { available: true } : { available: false, reason: 'нет входа в Kiro — пользователь входит в настройках → Модель → Kiro' };
   if (AG.isAntigravity(base)) return key ? { available: true } : { available: false, reason: 'нет входа в Antigravity — пользователь входит в настройках → Модель → Antigravity' };
+  if (ZC.isZcode(base)) return key ? { available: true } : { available: false, reason: 'нет входа в Z Code — пользователь входит в настройках → Модель → Z Code' };
   if (isQwen(base)) return key || S.qwAuth ? { available: true } : { available: false, reason: 'нет токена Qwen — пользователь подключает аккаунт в настройках → Модель' };
   if (isDeepSeek(base)) return key || S.dsAuth ? { available: true } : { available: false, reason: 'нет токена DeepSeek — пользователь подключает аккаунт в настройках → Модель' };
   if (key) return { available: true };
@@ -134,7 +137,7 @@ function modelRow(id, info, base, S) {
   if (i.q === 0) tags.push('limit-exhausted');
   if (normBase(base) === normBase(S.base) && id === S.model) tags.push('main-agent');
   /* свои адаптеры (Kiro, Antigravity, Qwen, DeepSeek, Coarena) сами переводят инструменты; OpenRouter отдаёт только модели с tools */
-  const tc = typeof i.tools === 'boolean' ? i.tools : KR.isKiro(base) || AG.isAntigravity(base) || isQwen(base) || isDeepSeek(base) || CO.isCoarena(base) || /openrouter\.ai/.test(base) ? true : null;
+  const tc = typeof i.tools === 'boolean' ? i.tools : KR.isKiro(base) || AG.isAntigravity(base) || ZC.isZcode(base) || isQwen(base) || isDeepSeek(base) || CO.isCoarena(base) || /openrouter\.ai/.test(base) ? true : null;
   return { id, name: String(i.name || id).slice(0, 80), tool_calling: tc, context: +i.ctx || +i.context || null, ...(tags.length ? { tags } : {}) };
 }
 async function fetchModels(chat, base, modelsFn) {
