@@ -130,8 +130,22 @@ const STATIC = {
   '/srv/client.js': [path.join('server', 'public', 'client.js'), 'text/javascript; charset=utf-8'],
   '/theme-modern.css': [path.join('server', 'public', 'theme-modern.css'), 'text/css; charset=utf-8'],
   '/pet-modern.js': [path.join('server', 'public', 'pet-modern.js'), 'text/javascript; charset=utf-8'],
+  '/srv/pdf-reader.mjs': [path.join('server', 'public', 'pdf-reader.mjs'), 'text/javascript; charset=utf-8'],
+  '/srv/pdf-reader.css': [path.join('server', 'public', 'pdf-reader.css'), 'text/css; charset=utf-8'],
 };
 for (const f of ['icon-192.png', 'icon-512.png', 'maskable-192.png', 'maskable-512.png', 'apple-touch-icon.png']) STATIC['/icons/' + f] = [path.join('icons', f), 'image/png'];
+/* читалка PDF в проводнике: pdf.js со своим воркером, таблицами кодировок (cmaps) и стандартными шрифтами.
+   Отдаём только файлы, что лежат в server/public/pdfjs, — список составляется при запуске */
+const PDFJS_TYPES = { mjs: 'text/javascript; charset=utf-8', bcmap: 'application/octet-stream', pfb: 'application/octet-stream', ttf: 'font/ttf' };
+(function addPdfjs(dir, rel) {
+  let list = [];
+  try { list = fs.readdirSync(path.join(CFG.web, dir), { withFileTypes: true }); } catch { return; }
+  for (const d of list) {
+    if (d.isDirectory()) { addPdfjs(path.join(dir, d.name), rel + d.name + '/'); continue; }
+    const type = PDFJS_TYPES[d.name.split('.').pop().toLowerCase()];
+    if (d.isFile() && type) STATIC['/srv/pdfjs/' + rel + d.name] = [path.join(dir, d.name), type];
+  }
+})(path.join('server', 'public', 'pdfjs'), '');
 const statCache = new Map();
 async function serveStatic(req, res, p) {
   const [file, type] = STATIC[p];
@@ -141,7 +155,9 @@ async function serveStatic(req, res, p) {
     c = { raw, gz: /javascript|json|manifest|css/.test(type) ? zlib.gzipSync(raw) : null, etag: '"' + crypto.createHash('sha1').update(raw).digest('hex').slice(0, 20) + '"' };
     statCache.set(p, c);
   }
-  sendBuf(req, res, c, { 'content-type': type, 'cache-control': p.startsWith('/icons/') ? 'public, max-age=86400' : 'no-cache', ...(p === '/sw.js' ? { 'service-worker-allowed': '/' } : {}) });
+  /* значки, таблицы кодировок и шрифты для PDF не меняются — их можно держать в кэше; код — сверяем по etag */
+  const long = p.startsWith('/icons/') || (p.startsWith('/srv/pdfjs/') && !p.endsWith('.mjs'));
+  sendBuf(req, res, c, { 'content-type': type, 'cache-control': long ? 'public, max-age=86400' : 'no-cache', ...(p === '/sw.js' ? { 'service-worker-allowed': '/' } : {}) });
 }
 function sendBuf(req, res, c, h) {
   if (req.headers['if-none-match'] === c.etag) { res.writeHead(304, { ...SEC, etag: c.etag }); return res.end(); }
