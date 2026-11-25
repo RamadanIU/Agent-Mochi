@@ -6481,11 +6481,12 @@ function renderPrev(e,pv){
     try{const s=await B.stat(p);const n=prep({n:base(p),t:s.t,s:s.s,m:s.m,p:s.p,lk:s.lk,lt:s.lt},parent(p)||'/');if(isDir(n)){S.dirty=false;await close();go(p)}else open(n,null)}catch(x){toast(errMsg(x),'err')}})}
 
 /* ---------- PDF, шрифт, HEX, «что это за файл» ---------- */
+/* PDF: читалка server/public/pdf-reader.mjs; не загрузилась — просмотрщик браузера */
 async function vPdf(e,tok){
-  const url=await srcOf(e);if(!alive(tok))return;
-  tools([['tab','В новой вкладке','fwd',0,()=>window.open(url,'_blank','noopener')],['ask','Спросить','chat',0,()=>{close();askPersonalComputer([e])}]]);
-  if(navigator.pdfViewerEnabled===false){vb.innerHTML='';vb.append(msgBox(e,'Этот браузер не показывает PDF внутри страницы','Открой его в новой вкладке или скачай',[['Открыть',()=>window.open(url,'_blank','noopener')],['Скачать',()=>download([e])]]));return}
-  vb.innerHTML='<iframe class="fx-pdf" title="'+ea(e.n)+'"></iframe>';vb.firstChild.src=url}
+  const url=await srcOf(e);let R;try{R=await import('./srv/pdf-reader.mjs')}catch(x){}
+  if(!alive(tok))return;
+  const nat=()=>{vb.innerHTML='<iframe class="fx-pdf"></iframe>';vb.firstChild.src=url};
+  R?R.open({e,url,tok,S,vb,vt,alive,tools,status,loading,msgBox,open,nat,fi,ea,fsz,kindText,errMsg,cfg,save,showDlg,closeDlg,download,done:f=>dlgDone=f,ask:()=>{close();askPersonalComputer([e])}}):nat()}
 let fontN=0;
 async function vFont(e,tok){
   if(e.s>20*2**20)return vInfo(e,tok);
@@ -6543,6 +6544,7 @@ function key(ev){
   if(mod&&k.toLowerCase()==='s'){ev.preventDefault();S.save&&S.save();return}
   if(field)return;
   if(ev.altKey&&(k==='ArrowLeft'||k==='ArrowRight')){ev.preventDefault();nav(k==='ArrowLeft'?-1:1);return}
+  if(S.key&&S.key(ev))return;
   const m=S.media&&S.media.m;
   if(S.mode==='img'&&S.img){
     if(k==='ArrowLeft'||k==='ArrowRight'){ev.preventDefault();nav(k==='ArrowLeft'?-1:1)}

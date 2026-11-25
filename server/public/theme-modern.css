@@ -62,11 +62,11 @@
 :root[data-theme=modern] .pi{transition:transform .25s var(--ez)}
 :root[data-theme=modern] *{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--fg) 22%,transparent) transparent}
 @media(pointer:fine){
-  :root[data-theme=modern] ::-webkit-scrollbar,:root[data-theme=modern] #msgs::-webkit-scrollbar,:root[data-theme=modern] #dlg .sbody::-webkit-scrollbar,:root[data-theme=modern] .fx-main::-webkit-scrollbar,:root[data-theme=modern] .fx-vb::-webkit-scrollbar,:root[data-theme=modern] .fx-side::-webkit-scrollbar{width:12px;height:12px}
-  :root[data-theme=modern] ::-webkit-scrollbar-track,:root[data-theme=modern] #msgs::-webkit-scrollbar-track,:root[data-theme=modern] #dlg .sbody::-webkit-scrollbar-track,:root[data-theme=modern] .fx-main::-webkit-scrollbar-track,:root[data-theme=modern] .fx-vb::-webkit-scrollbar-track,:root[data-theme=modern] .fx-side::-webkit-scrollbar-track{background:transparent;box-shadow:none}
-  :root[data-theme=modern] ::-webkit-scrollbar-thumb,:root[data-theme=modern] #msgs::-webkit-scrollbar-thumb,:root[data-theme=modern] #dlg .sbody::-webkit-scrollbar-thumb,:root[data-theme=modern] .fx-main::-webkit-scrollbar-thumb,:root[data-theme=modern] .fx-vb::-webkit-scrollbar-thumb,:root[data-theme=modern] .fx-side::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--fg) 20%,transparent);border:3px solid transparent;border-radius:999px;background-clip:padding-box;box-shadow:none}
+  :root[data-theme=modern] ::-webkit-scrollbar,:root[data-theme=modern] #msgs::-webkit-scrollbar,:root[data-theme=modern] #dlg .sbody::-webkit-scrollbar,:root[data-theme=modern] .fx-main::-webkit-scrollbar,:root[data-theme=modern] .fx-vb::-webkit-scrollbar,:root[data-theme=modern] .fx-pv::-webkit-scrollbar,:root[data-theme=modern] .fx-side::-webkit-scrollbar{width:12px;height:12px}
+  :root[data-theme=modern] ::-webkit-scrollbar-track,:root[data-theme=modern] #msgs::-webkit-scrollbar-track,:root[data-theme=modern] #dlg .sbody::-webkit-scrollbar-track,:root[data-theme=modern] .fx-main::-webkit-scrollbar-track,:root[data-theme=modern] .fx-vb::-webkit-scrollbar-track,:root[data-theme=modern] .fx-pv::-webkit-scrollbar-track,:root[data-theme=modern] .fx-side::-webkit-scrollbar-track{background:transparent;box-shadow:none}
+  :root[data-theme=modern] ::-webkit-scrollbar-thumb,:root[data-theme=modern] #msgs::-webkit-scrollbar-thumb,:root[data-theme=modern] #dlg .sbody::-webkit-scrollbar-thumb,:root[data-theme=modern] .fx-main::-webkit-scrollbar-thumb,:root[data-theme=modern] .fx-vb::-webkit-scrollbar-thumb,:root[data-theme=modern] .fx-pv::-webkit-scrollbar-thumb,:root[data-theme=modern] .fx-side::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--fg) 20%,transparent);border:3px solid transparent;border-radius:999px;background-clip:padding-box;box-shadow:none}
   :root[data-theme=modern] ::-webkit-scrollbar-thumb:hover,:root[data-theme=modern] #msgs::-webkit-scrollbar-thumb:hover,:root[data-theme=modern] #dlg .sbody::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--fg) 34%,transparent);background-clip:padding-box;box-shadow:none}
-  :root[data-theme=modern] ::-webkit-scrollbar-corner,:root[data-theme=modern] .fx-main::-webkit-scrollbar-corner,:root[data-theme=modern] .fx-vb::-webkit-scrollbar-corner{background:transparent}
+  :root[data-theme=modern] ::-webkit-scrollbar-corner,:root[data-theme=modern] .fx-main::-webkit-scrollbar-corner,:root[data-theme=modern] .fx-vb::-webkit-scrollbar-corner,:root[data-theme=modern] .fx-pv::-webkit-scrollbar-corner{background:transparent}
 }
 
 /* ---------- верхняя панель ---------- */
@@ -897,6 +897,13 @@
 :root[data-theme=modern] .fx-iv{background:repeating-conic-gradient(var(--s2) 0 25%,var(--card) 0 50%) 0 0/20px 20px}
 :root[data-theme=modern] .fx-iv img{border-radius:2px;box-shadow:0 0 0 1px var(--bd),var(--sh-m)}
 :root[data-theme=modern] .fx-iv .ld{font:400 13px var(--sans)}
+:root[data-theme=modern] .fx-pv{background:var(--s2)}
+:root[data-theme=modern] .fx-pg{border-radius:2px;box-shadow:0 0 0 1px var(--bd),var(--sh-m)}
+:root[data-theme=modern] .fx-pgs{gap:6px;margin:0 2px;font:500 12.5px/1 var(--sans);font-variant-numeric:tabular-nums}
+:root[data-theme=modern] .fx-psel{height:32px;min-width:58px;padding:0 26px 0 11px;border-radius:9px;background-color:var(--s2);background-size:12px 12px;font:500 12.5px/1 var(--sans);font-variant-numeric:tabular-nums;box-shadow:none}
+@media(hover:hover){:root[data-theme=modern] .fx-psel:hover:not(:disabled){background-color:var(--s3)}}
+:root[data-theme=modern] .fx-psel:focus-visible{box-shadow:0 0 0 2px var(--acc)}
+:root[data-theme=modern] .fx-tsep{width:1px;height:18px;margin:0 6px;background:var(--bd)}
 :root[data-theme=modern] .fx-nav{width:40px;height:40px;margin-top:-20px;border-radius:50%;background:color-mix(in srgb,var(--card) 88%,transparent);color:var(--fg);box-shadow:0 0 0 1px var(--bd),var(--sh-m);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 :root[data-theme=modern] .crtfx::after{content:none}
 :root[data-theme=modern] .fx-big{width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;background:color-mix(in srgb,var(--card) 90%,transparent);color:var(--fg);box-shadow:var(--sh-l)}
