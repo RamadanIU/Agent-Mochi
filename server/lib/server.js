@@ -25,6 +25,7 @@ import * as DC from './webcheck.js';
 import * as X from './ext.js';
 import { putInbox, storeCopy, getFile, userDir, safeName } from './files.js';
 import * as TG from './telegram.js';
+import * as SITE from './site.js';
 import { TERM_PREFIX, proxyHttp, proxyUpgrade } from './term.js';
 import * as U from './update.js';
 import * as AC from './access.js';
@@ -993,6 +994,8 @@ async function handle(req, res) {
   const url = new URL(req.url, 'http://x');
   const p = url.pathname;
   try {
+    /* сайт Islamic Universities присылает пакеты заданий: свой ключ, без cookie и CSRF-заголовка */
+    if (p.startsWith('/api/site/')) return await SITE.handleSite(req, res, url, { json, jbody });
     if (p.startsWith('/api/')) return await api(req, res, url);
     /* OpenAI-совместимый API для других проектов: свой вход (ключ sk-pc-…), свои ошибки и CORS */
     if (p === '/v1' || p.startsWith('/v1/')) return await handleGateway(req, res, url);

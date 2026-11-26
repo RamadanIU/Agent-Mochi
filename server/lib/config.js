@@ -49,4 +49,9 @@ export const CFG = {
   /* «Проверить» в настройках прокси: откуда узнаём адрес и страну выхода (ответ вида ip=…, loc=…) */
   proxyTrace: env.PERSONALCOMPUTER_PROXY_TRACE || 'https://www.cloudflare.com/cdn-cgi/trace',
   tgApi: (env.PERSONALCOMPUTER_TG_API || 'https://api.telegram.org').replace(/\/+$/, ''),
+  /* Сайт Islamic Universities: присылает пакеты заданий (site.js). Пусто — приём выключен */
+  siteUrl: (env.PERSONALCOMPUTER_SITE_URL || '').replace(/\/+$/, ''),
+  siteKey: env.PERSONALCOMPUTER_SITE_KEY || '',
+  siteUser: env.PERSONALCOMPUTER_SITE_USER || '',
+  siteTimeoutMin: Math.max(1, +env.PERSONALCOMPUTER_SITE_TIMEOUT_MIN || 40),
 };
